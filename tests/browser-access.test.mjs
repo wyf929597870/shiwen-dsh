@@ -17,11 +17,11 @@ test('浏览器入口复用 Host 地址；只有显式请求登录地址时返�
  assert.equal(browserAccess(ctx,{login:true}).loginUrl,status.url+'?token=test-only');
  assert.equal(browserAccess(context({host:'::1',port:23456,protocol:'https:'})).url,'https://[::1]:23456/');
 });
-test('无监听端口或非回环部署不生成本机登录凭据',()=>{
- for(const server of [undefined,{host:'127.0.0.1',port:0},{host:'127.0.0.1'}, {host:'192.0.2.1',port:3080,protocol:'http:'}]){
+test('无有效监听地址不生成登录凭据',()=>{
+ for(const server of [undefined,{host:'127.0.0.1',port:0},{host:'127.0.0.1'}, {host:'0.0.0.0',port:3080,protocol:'http:'}]){
   const ctx=context(null);ctx.get=name=>name==='webServer'?server:undefined;
   assert.equal(browserAccess(ctx).available,false);
-  assert.throws(()=>browserAccess(ctx,{login:true}),/No local browser endpoint/);
+  assert.throws(()=>browserAccess(ctx,{login:true}),/No browser endpoint/);
  }
 });
 
@@ -55,4 +55,9 @@ test('登录地址仅发给 DSH 浏览器 Peer，拒绝 API Peer 与伪造身份
  }
  const status=await invoke('browserStatus');assert.equal(status.response.status,200);
  assert.equal('loginUrl' in status.body.result,false);assert.equal(issued,1);
+});
+
+test('局域网入口使用服务配置，不读取请求头',()=>{
+ const status=browserAccess(context({host:'192.168.1.5',port:3080,protocol:'http:'}));
+ assert.equal(status.url,'http://192.168.1.5:3080/');assert.equal(status.local,false);assert.equal(status.available,true);
 });

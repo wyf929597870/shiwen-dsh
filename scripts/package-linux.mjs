@@ -15,7 +15,7 @@ const descriptor=await json(join(target,'dsh/desktop-runtime.json'));
 const {verifyDesktopRuntime}=await import(join(desktop,'lib/types/runtime-tree.js'));
 await verifyDesktopRuntime(join(target,'dsh'),descriptor.release.version,{platform:'linux',arch:'x64'});
 await rm(stage,{recursive:true,force:true});await mkdir(app,{recursive:true});
-execFileSync(process.execPath,[join(root,'scripts/build.mjs')],{cwd:root,stdio:'inherit'});
+execFileSync(process.execPath,[join(root,'scripts/build.mjs'),'--out-dir',join(stage,'built-plugins')],{cwd:root,stdio:'inherit'});
 
 // Materialize only production dependencies. Resolve each dependency from its owning
 // package, retaining nested versions when the flat destination already has another.
@@ -65,14 +65,26 @@ await writeFile(join(app,'package.json'),JSON.stringify({name:'shiwen-dsh',versi
 await cp(join(root,'LICENSE'),join(app,'LICENSE'));
 await mkdir(join(shiwen,'assets'),{recursive:true});
 await cp(join(root,'assets/shiwen-icon-rounded.png'),join(shiwen,'assets/shiwen-icon-rounded.png'));
-await cp(join(root,'scripts/profile.mjs'),join(shiwen,'profile.mjs'));
+await mkdir(join(shiwen,'scripts'),{recursive:true});
+for(const file of ['profile.mjs','server-worker.mjs','server-control.mjs','server-config.mjs','server.mjs'])await cp(join(root,'scripts',file),join(shiwen,'scripts',file));
+// The client imports only the control library; the detached worker and Node live outside asar.
+await mkdir(join(app,'scripts'),{recursive:true});
+for(const file of ['server-control.mjs','server-config.mjs'])await cp(join(root,'scripts',file),join(app,'scripts',file));
+await mkdir(join(shiwen,'plugins/library/src'),{recursive:true});
+await cp(join(root,'plugins/library/src/ownership.mjs'),join(shiwen,'plugins/library/src/ownership.mjs'));
+
 for(const name of ['library','agent-tools','theme','workbench','personal-context','external']){
  const dest=join(shiwen,'plugins',name);await mkdir(dest,{recursive:true});
- await cp(join(root,'plugins',name,'package.json'),join(dest,'package.json'));
- await cp(join(root,'plugins',name,'lib'),join(dest,'lib'),{recursive:true});
+ await cp(join(stage,'built-plugins',name,'package.json'),join(dest,'package.json'));
+ await cp(join(stage,'built-plugins',name,'lib'),join(dest,'lib'),{recursive:true});
 }
 await cp(join(root,'integration'),join(shiwen,'integration'),{recursive:true});
 await cp(join(root,'skills'),join(shiwen,'skills'),{recursive:true});
+await writeFile(join(shiwen,'shiwen-server'),`#!/bin/sh
+SHIWEN_SERVICE_RESOURCES="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+export SHIWEN_SERVICE_RESOURCES
+exec "$SHIWEN_SERVICE_RESOURCES/../runtime/primary-runtime/dependencies/node/bin/node" "$SHIWEN_SERVICE_RESOURCES/scripts/server.mjs" "$@"
+`,{mode:0o755});
 await collect(['diff','js-yaml','markdown-it','@modelcontextprotocol/server','zod'],join(root,'package.json'),join(shiwen,'node_modules'));
 // hicolor themes discover standard size directories; the design source is 1254px.
 const icons=join(stage,'icons');await mkdir(icons,{recursive:true});

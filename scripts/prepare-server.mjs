@@ -1,0 +1,13 @@
+import {spawnSync} from 'node:child_process';
+import {mkdir,mkdtemp,cp,symlink,writeFile,rename} from 'node:fs/promises';
+import {join,resolve} from 'node:path';
+const root=resolve(import.meta.dirname,'..'),base=join(root,'.runtime/server');
+await mkdir(base,{recursive:true});
+const runtime=await mkdtemp(join(base,'build-'));
+const built=spawnSync(process.execPath,[join(root,'scripts/build.mjs'),'--out-dir',join(runtime,'plugins')],{cwd:root,stdio:'inherit'});
+if(built.error)throw built.error;if(built.status!==0)process.exit(built.status??1);
+for(const name of ['integration','skills'])await cp(join(root,name),join(runtime,name),{recursive:true});
+await symlink(join(root,'node_modules'),join(runtime,'node_modules'),process.platform==='win32'?'junction':'dir');
+const temp=join(base,`current.${process.pid}.json`);
+await writeFile(temp,JSON.stringify({runtime})+'\n');await rename(temp,join(base,'current.json'));
+console.log('Independent server runtime prepared:',runtime);
