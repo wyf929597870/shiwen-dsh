@@ -2,106 +2,133 @@
 
 # Shiwen DSH
 
-**An agent-centered workspace for personal notes, collected materials and writing.**
+**Keep everyday thoughts and useful material, and gradually make something of them.**
+
+Shiwen is a personal AI workspace built on [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness). Write a journal, capture an idea, collect something worth reading, or discuss it with an agent. Return to those records to reflect, develop your thinking and write articles. The library is stored on your own computer.
 
 [中文](README.md) | English
 
-Shiwen uses [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) for native conversations, sessions and agent execution. Shiwen plugins add journaling, a material library, writing and activity reviews. This repository maintains only the DSH edition; the earlier standalone application is no longer maintained here.
+[Why Shiwen](#why-shiwen) · [What it does](#what-it-does) · [Getting started](#getting-started) · [Data and privacy](#data-and-privacy) · [Contributing](#contributing)
 
-Current version: **0.1.4**, [MIT license](LICENSE). Linux x64 desktop builds have been tested locally. Windows, macOS and standalone installation of the Shiwen plugin suite into stock DSH have not been validated. This repository provides the source code; local build versions in the changelog do not imply that matching GitHub Releases exist.
+Current version: **[0.1.4 · Linux Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.4)**, under active development and licensed under [MIT](LICENSE). Desktop checks have passed locally on Linux x64. Windows, macOS and standalone installation into stock DSH have not been validated.
 
-## Features
+## Why Shiwen
 
-- One native DSH conversation interface, with discussion links from library records.
-- Journals, ideas, collected web text and references stored as Markdown and rendered for reading.
-- Authorship tracked separately from the client or agent saving the content.
-- Articles linked to source materials and advisory pre-publication checks.
-- Daily, 7/14/30-day and calendar-month reviews.
-- Agent tools for search, reading, saving, updates, deletion/restoration and reviews. Lists and searches use descending content dates, with unknown dates last.
-- Editable Pipi persona and communication style; proposed long-term memories require confirmation.
-- External MCP, HTTP and CLI access with individual credentials, scoped permissions, revocation and retry deduplication.
-- Preview and import of an earlier Shiwen database into an empty library, preserving dates and provenance.
+Shiwen began with a personal wish: a more comfortable place to keep my notes.
 
-Pre-publication checks are advisory. Disabling a memory affects subsequent context assembly, but previous conversations and summaries may retain earlier information.
+Many note-taking and knowledge-management tools offer a lot of functionality, but learning and maintaining them takes effort. I wanted recording things to feel simpler: write down a thought, save an interesting article, or talk a question through with AI, without first having to design an entire system of categories, templates and workflows.
 
-## Linux installation
+There was another reason. Some things feel better kept on my own computer. Journals, unfinished thoughts and notes from work can be deeply personal. I wanted control over where they live, without having to host the whole library in the cloud just to organize it.
 
-After obtaining a locally built `.deb`, fully quit Shiwen and install or upgrade:
+That became Shiwen. Built on DSH, it brings conversation, note-taking, organizing and writing into one workspace. I want the agent to help capture ideas, find earlier records, make sense of collected material and, when useful, develop those fragments into an article.
+
+The name 拾文 reflects that wish: gathering the fragments of daily life worth keeping, and letting them become something I can return to and build on.
+
+> Shiwen stores its library locally. When you use a cloud AI model, conversations and relevant material included in requests are still sent to the configured provider. Local storage does not mean all AI processing happens offline.
+
+## What it does
+
+| What you want to do | How Shiwen helps |
+| --- | --- |
+| Capture a moment | Save journals, ideas, freewriting and references, with Markdown editing and a readable preview |
+| Think with AI | Use native DSH conversations; discuss a selected record and save AI responses as material |
+| Organize your library | Filter by type and search text; ask the agent to update type, authorship, dates or content, and delete or restore records |
+| Look back | Review a day, the last 7/14/30 days or a calendar month; ask the agent to search and read records from that period |
+| Develop an article | Create an article, link its source material and review pre-publication prompts |
+| Connect another agent | Save, query and manage material through MCP, HTTP, CLI and a companion Skill |
+
+Lists and searches use descending content dates, then creation times within each day, with unknown dates last. Personal writing, external sources and AI content have separate attribution. An agent saving your words does not automatically make them AI-authored.
+
+The built-in Pipi persona is editable. You can change its identity and communication style, and proposed long-term memories require confirmation before use.
+
+## Ways to use it
+
+You can write directly in the material library or, after configuring a model, ask the agent for help. For example:
+
+> “Save what I just said verbatim as today's journal entry, attributed to me.”
+
+> “Find last month's journals and ideas, read them, and help me look back on what happened. Tell me which records you used.”
+
+> “Find existing material for this topic. Discuss an outline with me first, then help turn it into a draft.”
+
+These are example requests; results depend on your material, model and tool configuration. Pre-publication checks are advisory. Facts, citations and private information still need human review.
+
+## Getting started
+
+### Linux desktop
+
+Download the **[Linux x64 installer (.deb)](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.4/shiwen-dsh_0.1.4_amd64.deb)**. This preview is intended for users willing to report issues; Windows builds are not published yet. See the [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.4) for checksums and known limitations.
+
+Fully quit Shiwen, then install or upgrade from your download directory:
 
 ```bash
 sudo apt install ./shiwen-dsh_0.1.4_amd64.deb
 ```
 
-Open 拾文 from the application menu or run `shiwen-dsh`. The package includes Electron, Node, DSH and Shiwen plugins; a source checkout or system Node is not required. Current desktop validation covers Ubuntu 26.04 x64. Other distributions still need validation.
+Open 拾文 from the application menu or run `shiwen-dsh`. The package includes Electron, Node, DSH and Shiwen plugins; no separate Node installation or source checkout is required. Desktop validation currently covers Ubuntu 26.04 x64. Other distributions still need testing.
 
-Personal materials, conversations and model credentials are not bundled. There is no automatic update channel. Uninstalling or reinstalling does not automatically erase user data.
+Start by creating a record in Materials. For AI conversations, configure a model and credentials through DSH first. The installer does not include a model-service account or API key.
 
-### Data and migration
+### Bring an earlier Shiwen library
 
-The default root is `${XDG_DATA_HOME:-~/.local/share}/shiwen-dsh`:
+Open **Materials → Import previous library**, select the old Shiwen database and preview it before importing. The destination must be empty. The source is read only, and old messages remain archives rather than being converted into native DSH sessions.
+
+This repository maintains the DSH edition only. The earlier standalone client is no longer updated here.
+
+### Connect an external agent
+
+Open **External access** (under **More** if the sidebar is crowded), create a client credential, select permissions and copy the generated MCP configuration into your agent. Only creation is allowed by default. Permissions can be granted separately and credentials revoked. Keep Shiwen running; the service listens only on loopback.
+
+[Integration guide](docs/external-access.en.md) · [中文说明](docs/external-access.md) · [Companion Skill](skills/shiwen-library/SKILL.md)
+
+## Data and privacy
+
+The default data root is `${XDG_DATA_HOME:-~/.local/share}/shiwen-dsh`:
 
 | Directory | Contents |
 | --- | --- |
-| `library/` | Shiwen material database |
+| `library/` | Shiwen records, content and provenance in a local database |
 | `dsh/` | DSH sessions, configuration and skills |
 | `desktop/` | Desktop preferences |
 | `workspaces/` | Working files |
 
-Set `SHIWEN_ROOT_DIR` to use a separate data root. Development and installed builds otherwise share the default root; tests must use temporary directories.
+Markdown content lives in the local library database; each record is not a separate `.md` file. Personal material, sessions and credentials are not bundled. Uninstalling or reinstalling does not automatically erase user data.
 
-Use **Materials → Import previous library** to select and preview the old database. The destination must be empty. The source is read only; old conversations remain archives rather than being recreated as native DSH sessions.
+Set `SHIWEN_ROOT_DIR` to choose another data directory. Development and installed builds otherwise share the default root, so development tests should use a separate temporary directory.
 
-### External agents
+External data transfer depends on the models and tools you use. Cloud models receive the conversation context and relevant tool results included in requests. External MCP servers or other services receive the arguments sent when calling them. Choose configurations appropriate to your material. Disabling a memory changes subsequent context assembly; earlier conversations and summaries may still contain it.
 
-In **External access** (also available under **More**), create a client credential, select permissions and copy the generated MCP configuration into your agent. Creation is the only permission selected by default. Keep Shiwen running; the service listens only on loopback.
+## Current status
 
-[Integration guide](docs/external-access.en.md) · [中文说明](docs/external-access.md) · [Companion Skill](skills/shiwen-library/SKILL.md)
+| Status | Scope |
+| --- | --- |
+| Verified locally | Linux startup, library operations/filtering/date order, deletion/restoration, restart persistence, external MCP/HTTP/CLI and credential revocation |
+| Still needs validation | Full desktop builds and system-level installation/upgrades on a fresh machine, Windows/macOS, real-model end-to-end flows and individual provider/external-agent configurations |
+| Still to implement | An independently installable DSH bundle, automatic updates, close-window behavior settings, article export and version-history UI |
 
-## Development
+Shiwen plugins are currently assembled by the desktop launcher. The `dsh-plugin` repository topic is a classification, not a claim that the suite can already be installed independently through stock DSH's plugin manager. See [plugin architecture and publication status](docs/plugin-status.md).
 
-Build and test the Shiwen plugins without downloading the full upstream or calling a model:
+## Contributing
+
+With Node.js >=24.9, npm and Git installed, build and test Shiwen's plugins from the cloned repository:
 
 ```bash
-# From the cloned repository; Node.js >=24.9, npm and Git are required.
 npm ci
 npm run build
 npm test
 npm run check:source
 ```
 
-Tests use temporary data and no paid models. HTTP/MCP tests need loopback networking. Source auditing checks common credential patterns and excluded artifact paths, but does not replace human review.
+Tests use temporary material and no paid models. HTTP/MCP tests need loopback networking. These commands do not launch the full desktop application.
 
-Desktop development additionally requires pinned upstream sources, patches and native runtime assets:
+Desktop development also needs the pinned DSH upstream, Linux patches and native runtime assets. See [development instructions](docs/development.md) for preparation and acceptance commands. `upstream.lock.json` records the upstream revision and patches; business modules live in `plugins/`.
 
-```bash
-npm run upstream:prepare
-npm run upstream:check
-```
+Questions, bugs and ideas are welcome in [Issues](https://github.com/wyf929597870/shiwen-dsh/issues). Read the [contribution guide](CONTRIBUTING.md) before submitting code.
 
-These commands prepare/check **sources only**, not the entire desktop runtime. See [development instructions](docs/development.md) for prerequisites and remaining validation limits. A full desktop build on a fresh machine has not yet been reproduced.
+[Changelog](CHANGELOG.md) · [Tools and Skills guide](docs/extensions.md) · [Development](docs/development.md)
 
-## Repository layout
+## Acknowledgments and license
 
-```text
-plugins/             Library, agent tools, UI, theme, memory and external-access plugins
-integration/         External MCP / HTTP / CLI contracts and bridge
-skills/              Instructions for external agents
-desktop/             DSH desktop entry point
-scripts/             Upstream setup, build, tests, migration and packaging
-patches/             Adaptations for the pinned DSH revision
-tests/               Automated tests with isolated data
-upstream.lock.json   Upstream URL, revision, version and patch checksums
-docs/                Development, integration and plugin publication status
-```
+Thanks to [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) for the native conversations, session management and agent execution that let Shiwen focus on notes, materials and writing.
 
-Upstream checkouts, dependencies, runtime caches, generated bundles, installers and user data are excluded from Git. Plugins are currently assembled by the desktop launcher, not distributed as an independently installable DSH bundle. See [plugin status](docs/plugin-status.md).
-
-## Validation limits
-
-Local Linux verification covers startup, library operations, date ordering and filters, deletion/restoration, restart persistence, MCP/HTTP/CLI and credential revocation. Fresh-machine desktop builds, Windows/macOS, real-model end-to-end flows, independent DSH bundles, automatic updates, close-window behavior settings, article export/version UI and individual provider/agent configurations remain unverified or incomplete.
-
-[Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [Extension guide (Chinese)](docs/extensions.md)
-
-## License
-
-Shiwen uses the [MIT license](LICENSE). See [third-party notices](THIRD_PARTY_NOTICES.md) for the pinned upstream and its license. This is an independent community project, distinct from DeepSeek's official distribution. Dependencies retain their own licenses.
+Shiwen is an independent community project under the [MIT license](LICENSE). Dependencies retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
