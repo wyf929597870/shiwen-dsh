@@ -2,7 +2,7 @@ import {createServer} from 'node:http';
 import {mkdir,writeFile,rename,readFile,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
-export async function startExternalServer({store,root,command,skillPath}){
+export async function startExternalServer({store,root,command,args=[],skillPath}){
  const file=join(root,'external-endpoint.json'),instance=randomUUID();
  let endpoint;
  const server=createServer(async(req,res)=>{
@@ -30,5 +30,5 @@ export async function startExternalServer({store,root,command,skillPath}){
   await mkdir(root,{recursive:true,mode:0o700});
   const temp=file+'.'+instance;await writeFile(temp,JSON.stringify({version:1,endpoint,instance})+'\n',{mode:0o600});await rename(temp,file);
  }catch(error){await close();throw error;}
- return {status:()=>({running:server.listening,endpoint,discoveryFile:file,command,skillPath,root}),close};
+ return {status:()=>({running:server.listening,endpoint,discoveryFile:file,command,args,skillPath,root}),close};
 }

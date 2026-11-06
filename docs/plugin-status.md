@@ -1,33 +1,37 @@
 # 拾文插件架构与发布状态 / Plugin status
 
-当前是一个仓库、一套业务代码，同时服务于基于 DSH 的桌面客户端和后续的独立插件分发。旧版独立 Agent/客户端不在本项目内维护。
+一个仓库、一套业务模块，供原生 DSH Web 和拾文 Linux 桌面使用。后续以官方 DSH Windows/macOS 桌面宿主兼容为目标，暂不自行发布这两个平台的安装包。
 
 | 模块 | 职责 / Responsibility |
 | --- | --- |
-| `plugins/library` | 资料存储、日期、来源、迁移 / Storage, provenance, migration |
-| `plugins/agent-tools` | 内部 Agent 的 10 个业务工具 / Internal agent tools |
-| `plugins/workbench` | 素材、创作、回顾、角色及接入界面 / Workspace UI |
-| `plugins/theme` | 拾文样式与品牌 / Theme and branding |
-| `plugins/personal-context` | 人设与已确认记忆的上下文注入 / Persona and memory |
-| `plugins/external` | 外部客户端的本机 HTTP 服务 / External access service |
-| `integration` | 8 个外部资料工具、MCP 与 CLI / External tools and bridge |
+| `plugins/library` | 资料存储、日期、来源、迁移；支持配置目录与 profile 隔离 |
+| `plugins/agent-tools` | 内部 Agent 的 10 个业务工具 |
+| `plugins/workbench` | 素材、创作、回顾、角色及接入界面 |
+| `plugins/theme` | 可选拾文样式与品牌 |
+| `plugins/personal-context` | 可选人设与已确认记忆注入 |
+| `plugins/external` | 外部客户端的本机 HTTP 服务 |
+| `integration` | 8 个外部资料工具、MCP 与 CLI |
+| `bundle` | DSH 组合包元数据、默认及可选配置、安装说明 |
 
-当前桌面端通过 `scripts/profile.mjs` 动态生成组合配置和插件路径。这是唯一维护的桌面配置来源；历史测试 profile 已移除。
+## 组合包 / Bundle
 
-## 已实现 / Implemented
+`npm run package:plugin` 从以上模块构建 `release/dsh-shiwen-0.2.0-dev.0.tgz`：
 
-- 插件模块、服务注入、桌面界面及内部工具。
-- 外部 MCP/HTTP/CLI 和通用 Skill。
-- 同一桌面安装包中离线携带插件及依赖。
+- `dsh.bundle` 声明标准配置层，支持 `dsh plugin add/remove`。
+- 六个插件的已构建服务端/浏览器代码及 manifest、图标、MCP/CLI 和 Skill 全部随包交付。
+- 普通第三方依赖显式声明；DSH 服务共享宿主提供的 peer，不捆绑第二套 DSH。
+- 相对插件入口保留各模块的浏览器元数据发现，安装不依赖源码位置。
+- 主题和皮皮默认关闭，用户可通过 profile patch 独立开启。核心业务不切换默认 Agent，也不重写模型凭据。
+- 默认资料位于 DSH home 内，以 profile 隔离；停用/卸载保留数据。
 
-## 独立插件分发尚需完成 / Independent distribution remains pending
+独立运行不再依赖 Linux 桌面补丁或 Electron。旧桌面配置仍由 `scripts/profile.mjs` 装配，`SHIWEN_DATA_DIR` 继续兼容。Web 开发入口为 `npm run start:web`，使用独立 `shiwen-web` profile。
 
-- 可由 DSH 插件管理器安装的 `dsh.bundle` 入口与显式依赖声明。
-- 将桌面启动器提供的数据路径、桥接器路径转换为独立插件配置。
-- 补齐可独立分发的资源与构建产物，解决跨目录导入。
-- 让主题和人设作为可选启用项，验证干净原生 DSH 上的安装、升级与卸载。
-- 发布兼容版本信息和安装文档，再进行插件索引接入。
+## 验证与分发 / Validation and distribution
 
-现有插件 package.json 的 `private: true` 保留，避免误发布尚未整理好的 npm 包。此项目可以添加 `dsh-plugin` GitHub 话题，但话题分类不等于可安装组合包或官方收录。
+原生 DSH Web 的安装、重启、接口权限、MCP、主题可选加载、卸载与重装保留资料由 `scripts/check-web-plugin.mjs` 在隔离环境验收。浏览器视觉与完整点击流程尚未完成验证；官方 Windows/macOS 桌面宿主尚未验收。
 
-The modules currently run through Shiwen's desktop profile. Standalone installation into stock DSH is not yet supported or validated. Publishing an independent bundle requires portable configuration, complete dependencies/assets, optional theme/persona activation and clean-install verification. Packages remain private to prevent accidental npm publication. A GitHub topic is a discovery label, not an installation contract or endorsement.
+当前组合包仅在本地构建，未发布 npm 或新的 GitHub Release，未宣称官方收录。`bundle/` 是打包配方，不能直接当作 Git 安装目标；使用预构建 tgz。六个内部 workspace 包继续保留 `private: true`，不单独发布。
+
+[Web 安装与开发说明](web-plugin.md) · [组合包配置](../bundle/README.md)
+
+The same business modules now form a prebuilt DSH bundle for stock Web and remain shared with the existing Linux desktop. The bundle uses the host runtime, preserves native chat and credentials, scopes default storage by profile, and makes appearance/persona opt-in. Install/remove via DSH's plugin CLI; use the built tarball rather than a Git checkout. No new npm/GitHub release or official catalog inclusion is claimed. Official Windows/macOS desktop hosts and browser visual/interaction checks remain unverified.

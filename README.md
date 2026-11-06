@@ -10,7 +10,7 @@
 
 [为什么做](#为什么做拾文) · [能做什么](#能做什么) · [开始使用](#开始使用) · [数据与隐私](#数据与隐私) · [参与开发](#参与开发)
 
-当前版本 **[0.1.4 · Linux 预览版](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.4)**，仍在开发中。已在 Linux x64 上完成本机桌面验收；Windows、macOS 和独立 DSH 插件安装尚未验收。项目采用 [MIT](LICENSE) 许可证。
+最新桌面发布 **[0.1.4 · Linux 预览版](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.4)**，仍在开发中。已在 Linux x64 上完成本机桌面验收；Windows、macOS 桌面宿主尚未验收。Web 插件版已可在本仓库构建，见下文。项目采用 [MIT](LICENSE) 许可证。
 
 ## 为什么做拾文
 
@@ -55,6 +55,19 @@
 
 ## 开始使用
 
+### Web 插件版（开发中）
+
+直接在本仓库运行，不需要 Electron 或 DSH 上游源码：
+
+```bash
+npm ci
+npm run start:web -- --no-open
+```
+
+打开终端打印的登录地址；默认使用独立的 `shiwen-web` profile。也可运行 `npm run package:plugin`，把预构建 tgz 安装进现有 DSH Web。模型和原生对话由 DSH 提供，拾文通过插件加入资料库、整理、回顾和创作。
+
+[Web 安装、数据目录与验收范围](docs/web-plugin.md) · [插件配置](bundle/README.md)
+
 ### Linux 桌面版
 
 下载 **[Linux x64 安装包（.deb）](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.4/shiwen-dsh_0.1.4_amd64.deb)**。这是预览版，适合愿意反馈问题的用户；Windows 版本暂未发布。校验文件与已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.4)。
@@ -83,7 +96,9 @@ sudo apt install ./shiwen-dsh_0.1.4_amd64.deb
 
 ## 数据与隐私
 
-默认数据根目录是 `${XDG_DATA_HOME:-~/.local/share}/shiwen-dsh`：
+Web 插件默认保存在 `$DSH_HOME/shiwen/<profile>/library`，DSH_HOME 默认 `~/.dsh`。数据位于运行 DSH 的电脑；不同 profile 默认隔离。
+
+现有 Linux 桌面版的数据根目录仍是 `${XDG_DATA_HOME:-~/.local/share}/shiwen-dsh`：
 
 | 子目录 | 保存内容 |
 | --- | --- |
@@ -104,9 +119,9 @@ Markdown 内容存放在本地资料数据库中，并非每条记录都是独�
 | --- | --- |
 | 已完成本机验收 | Linux 桌面启动、资料读写/筛选/排序、删除恢复、重启持久化、外部 MCP/HTTP/CLI、凭据撤销 |
 | 仍需验证 | 全新机器上的完整桌面构建与系统安装/升级、Windows/macOS、真实模型端到端流程，以及不同模型供应商和外部 Agent 配置 |
-| 尚待完成 | 独立 DSH 插件组合包、自动更新、关闭窗口行为设置、文章导出与版本界面 |
+| 尚待完成 | 组合包公开发布、自动更新、关闭窗口行为设置、文章导出与版本界面 |
 
-现在的插件由拾文桌面端统一装配。仓库中的 `dsh-plugin` 话题用于分类；它不代表目前已经能在原生 DSH 插件管理器中独立安装。详见 [插件架构与发布状态](docs/plugin-status.md)。
+现在可构建并通过 DSH CLI 安装独立组合包，已有 Linux 桌面版继续共用业务模块。组合包尚未公开发布到 npm 或 Release；`dsh-plugin` 话题也不代表官方收录。详见 [插件架构与发布状态](docs/plugin-status.md)。
 
 ## 参与开发
 

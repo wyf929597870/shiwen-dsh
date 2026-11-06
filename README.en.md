@@ -10,7 +10,7 @@ Shiwen is a personal AI workspace built on [DeepSeek Harness (DSH)](https://gith
 
 [Why Shiwen](#why-shiwen) · [What it does](#what-it-does) · [Getting started](#getting-started) · [Data and privacy](#data-and-privacy) · [Contributing](#contributing)
 
-Current version: **[0.1.4 · Linux Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.4)**, under active development and licensed under [MIT](LICENSE). Desktop checks have passed locally on Linux x64. Windows, macOS and standalone installation into stock DSH have not been validated.
+Latest desktop release: **[0.1.4 · Linux Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.4)**, under active development and licensed under [MIT](LICENSE). Desktop checks have passed locally on Linux x64. Official Windows/macOS desktop hosts have not been validated. The Web plugin can now be built from this repository.
 
 ## Why Shiwen
 
@@ -55,6 +55,19 @@ These are example requests; results depend on your material, model and tool conf
 
 ## Getting started
 
+### Web plugin (in development)
+
+Run from this repository, without Electron or an upstream checkout:
+
+```bash
+npm ci
+npm run start:web -- --no-open
+```
+
+Open the login URL printed by DSH. This uses a dedicated `shiwen-web` profile. Alternatively, run `npm run package:plugin` and install the prebuilt tarball into stock DSH Web. DSH supplies conversations and models; the plugin adds the library, organization, review and writing features.
+
+[Web setup, storage and validation](docs/web-plugin.md) · [Bundle configuration](bundle/README.md)
+
 ### Linux desktop
 
 Download the **[Linux x64 installer (.deb)](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.4/shiwen-dsh_0.1.4_amd64.deb)**. This preview is intended for users willing to report issues; Windows builds are not published yet. See the [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.4) for checksums and known limitations.
@@ -83,7 +96,9 @@ Open **External access** (under **More** if the sidebar is crowded), create a cl
 
 ## Data and privacy
 
-The default data root is `${XDG_DATA_HOME:-~/.local/share}/shiwen-dsh`:
+Web plugin data defaults to `$DSH_HOME/shiwen/<profile>/library`, with DSH_HOME defaulting to `~/.dsh`. Data lives on the DSH host; profiles are isolated by default.
+
+The existing Linux desktop keeps its data root at `${XDG_DATA_HOME:-~/.local/share}/shiwen-dsh`:
 
 | Directory | Contents |
 | --- | --- |
@@ -104,9 +119,9 @@ External data transfer depends on the models and tools you use. Cloud models rec
 | --- | --- |
 | Verified locally | Linux startup, library operations/filtering/date order, deletion/restoration, restart persistence, external MCP/HTTP/CLI and credential revocation |
 | Still needs validation | Full desktop builds and system-level installation/upgrades on a fresh machine, Windows/macOS, real-model end-to-end flows and individual provider/external-agent configurations |
-| Still to implement | An independently installable DSH bundle, automatic updates, close-window behavior settings, article export and version-history UI |
+| Still to implement | Public bundle distribution, automatic updates, close-window behavior settings, article export and version-history UI |
 
-Shiwen plugins are currently assembled by the desktop launcher. The `dsh-plugin` repository topic is a classification, not a claim that the suite can already be installed independently through stock DSH's plugin manager. See [plugin architecture and publication status](docs/plugin-status.md).
+A standalone bundle can now be built and installed through DSH's CLI, while the Linux desktop shares the same business modules. The bundle has not been published to npm or Releases; the `dsh-plugin` topic does not imply official inclusion. See [plugin architecture and publication status](docs/plugin-status.md).
 
 ## Contributing
 

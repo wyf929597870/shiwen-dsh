@@ -9,7 +9,7 @@ export function ExternalPanel({locale,rpc}){
  async function create(){setBusy(true);setError('');setNotice('');try{setIssued(await rpc('externalClientCreate',{name,scopes}));setName('');await load();}catch(e){setError(e.message);}finally{setBusy(false);}}
  async function revoke(id){setBusy(true);setError('');try{await rpc('externalClientRevoke',{id});setArmed(null);if(issued?.id===id)setIssued(null);await load();}catch(e){setError(e.message);}finally{setBusy(false);}}
  async function copy(value){try{await navigator.clipboard.writeText(value);setNotice(t('已复制','Copied'));}catch{setError(t('无法自动复制，请选中文本后复制。','Select the text and copy it manually.'));}}
- const config=state&&issued?JSON.stringify({mcpServers:{shiwen:{command:state.command,args:['mcp'],env:{SHIWEN_TOKEN:issued.token,SHIWEN_ROOT_DIR:state.root}}}},null,2):'';
+ const config=state&&issued?JSON.stringify({mcpServers:{shiwen:{command:state.command,args:[...(state.args??[]),'mcp'],env:{SHIWEN_TOKEN:issued.token,SHIWEN_ROOT_DIR:state.root}}}},null,2):'';
  return <main className="sw-view sw-external">
   <div className="sw-head"><div><span className="sw-eyebrow">SHIWEN / CONNECTIONS</span><h1>{t('外部接入','External access')}</h1></div><button onClick={load}>{t('刷新','Refresh')}</button></div>
   <p className="sw-sub">{t('让其他 Agent、插件或脚本通过 MCP、HTTP API 或 CLI 保存和管理资料。使用时保持拾文运行。','Connect other agents, plugins or scripts through MCP, HTTP API or CLI. Keep Shiwen running while connected.')}</p>

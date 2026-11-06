@@ -1,0 +1,12 @@
+# Optional Shiwen appearance/persona. Copy selected rows into your profile patch.
+- id: shiwen-theme
+  disabled: false
+- id: ui-brand-official
+  disabled: true
+- id: shiwen-personal-context
+  disabled: false
+- id: preset-shiwen
+  disabled: false
+- id: agent-preset-registry
+  config:
+    default: shiwen

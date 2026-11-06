@@ -1,0 +1,17 @@
+{
+  "name": "dsh-shiwen",
+  "version": "0.2.0-dev.0",
+  "description": "拾文：为 DSH 提供本地资料库、日记、回顾与创作工作台",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://github.com/wyf929597870/shiwen-dsh",
+  "repository": {"type": "git", "url": "git+https://github.com/wyf929597870/shiwen-dsh.git"},
+  "keywords": ["dsh-plugin", "shiwen", "journal", "knowledge-base"],
+  "files": ["plugins", "integration", "skills", "cordis.patch.yml", "appearance.patch.yml", "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md", "licenses"],
+  "exports": {"./package.json": "./package.json", "./cordis.patch.yml": "./cordis.patch.yml", "./appearance.patch.yml": "./appearance.patch.yml"},
+  "dsh": {"bundle": {"patch": "./cordis.patch.yml"}},
+  "engines": {"node": ">=24.9.0", "dsh": "0.2.2-alpha.3"},
+  "peerDependencies": {"@deepseek-ai/dsh-tools": "0.2.2-alpha.3", "@deepseek-ai/schemastery": "~3.18.6-alpha.2"},
+  "peerDependenciesMeta": {"@deepseek-ai/dsh-tools": {"optional": true}, "@deepseek-ai/schemastery": {"optional": true}},
+  "dependencies": {"@modelcontextprotocol/server": "2.2.0", "diff": "^8.0.0", "js-yaml": "^4.3.2", "markdown-it": "^15.0.3", "zod": "4.4.3"}
+}

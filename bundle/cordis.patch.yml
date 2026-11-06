@@ -1,0 +1,41 @@
+# Relative entries keep the six plugin manifests and their browser modules self-contained.
+# Install after the host's base and Web bundles. No desktop patch is required.
+- insert:
+    - id: shiwen-library
+      name: './plugins/library/lib/index.js'
+    - id: shiwen-agent-tools
+      name: './plugins/agent-tools/lib/index.js'
+    - id: shiwen-external
+      name: './plugins/external/lib/index.js'
+    - id: shiwen-workbench
+      name: './plugins/workbench/lib/index.js'
+    - id: shiwen-theme
+      name: './plugins/theme/lib/index.js'
+      disabled: true
+    - id: shiwen-personal-context
+      name: './plugins/personal-context/lib/index.js'
+      disabled: true
+    - id: preset-shiwen
+      name: '@deepseek-ai/dsh-agent-preset'
+      disabled: true
+      config:
+        id: shiwen
+        name: 拾文助手 · 皮皮
+        description: 胖橘猫伙伴，陪你记录、学习、回顾与创作
+        order: 0
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: 你是拾文的个人助理与思考伙伴。身份、性格和交流方式以 shiwen-personal-context 注入的用户设置为准。用户当前明确要求优先于角色口癖。遵守工具权限和资料来源规则。
+          - id: compaction
+            name: 'cordis:group'
+            group: true
+            isolate: {compaction: true, toolResultPruner: true}
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'

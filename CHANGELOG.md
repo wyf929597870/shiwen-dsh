@@ -3,6 +3,13 @@
 0.1.4 是本仓库首次公开的 Linux 预览版；0.1.0–0.1.3 为本地开发与打包记录。
 0.1.4 is this repository's first public Linux preview; 0.1.0–0.1.3 are local development builds.
 
+## Unreleased
+
+- 增加预构建 DSH 组合包与独立 Web 启动入口，不再依赖 Electron/桌面补丁；主题和皮皮可选。
+- 资料路径支持显式配置和 profile 隔离，保留原桌面兼容；MCP 配置支持宿主 Node 命令及参数。
+- 增加原生 Web 安装、权限、重启、卸载重装与数据保留的隔离验收。
+- Add a prebuilt stock-DSH bundle and Web launcher, optional appearance/persona, profile-scoped storage, portable MCP commands and installation/removal acceptance checks.
+
 ## 0.1.4 - 2026-11-06
 
 ### 中文

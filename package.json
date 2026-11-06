@@ -18,7 +18,9 @@
     "package:linux": "node scripts/package-linux.mjs",
     "upstream:prepare": "node scripts/setup-upstream.mjs",
     "upstream:check": "node scripts/setup-upstream.mjs --check",
-    "check:source": "node scripts/check-source.mjs"
+    "check:source": "node scripts/check-source.mjs",
+    "start:web": "node scripts/start-web.mjs",
+    "package:plugin": "node scripts/package-plugin.mjs"
   },
   "dependencies": {
     "@deepseek-ai/dsh": "0.2.2-alpha.3",
@@ -26,7 +28,8 @@
     "diff": "^8.0.0",
     "js-yaml": "^4.3.2",
     "markdown-it": "^15.0.3",
-    "zod": "4.4.3"
+    "zod": "4.4.3",
+    "@deepseek-ai/schemastery": "~3.18.6-alpha.2"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.2.0",

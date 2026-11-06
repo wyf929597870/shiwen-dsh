@@ -93,3 +93,9 @@ git status --short
 人工检查 README、图片、测试 fixture 和拟提交文件。自动检查不会识别所有敏感文本。提交集应只有程序、通用角色预设、文档、图标、测试、依赖锁和补丁；不包含个人资料库、WorkBuddy 私人配置、会话、访问令牌或备份。
 
 仓库初始化与本地整理不等于已提交或已发布。创建远端后，再核对地址、提交范围并推送；加入 `dsh-plugin` 话题也不代表已经上架 DSH 内置发现列表。
+
+## Web 插件开发 / Web plugin development
+
+Web 路线不需要上述桌面运行资源或上游补丁。在根目录运行 `npm run start:web -- --no-open`；使用 `npm run package:plugin` 生成预构建 tgz，随后 `node scripts/check-web-plugin.mjs` 验证在原生宿主中的生命周期。详细步骤及边界见 [Web 插件说明](web-plugin.md)。
+
+The Web path needs no desktop runtime or upstream patches. It shares the same six source modules and has a separate launcher/package workflow; see the linked guide for installation and data paths.

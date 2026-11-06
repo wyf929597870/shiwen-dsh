@@ -26,7 +26,7 @@ export function apply(ctx){
         result=inspectLegacy(args.path);
       }else if(method==='importLegacy'){
         if(typeof args?.path!=='string'||args.path.length>4096)throw new Error('资料库路径无效');
-        result=await importLegacyToStore({source:args.path,store:library,scratch:process.env.SHIWEN_DATA_DIR});
+        result=await importLegacyToStore({source:args.path,store:library,scratch:library.paths?.library??process.env.SHIWEN_DATA_DIR});
       }else if(method==='saveAssistantMessage'){
         const {sessionId,messageId}=args??{};
         const source=(await readSessionMessages(ctx,sessionId,request.signal)).find(m=>m.id===messageId&&m.role==='assistant');
