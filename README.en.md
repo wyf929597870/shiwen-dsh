@@ -10,9 +10,9 @@ Shiwen is a personal AI workspace built on [DeepSeek Harness (DSH)](https://gith
 
 [Why Shiwen](#why-shiwen) · [What it does](#what-it-does) · [Getting started](#getting-started) · [Data and privacy](#data-and-privacy) · [Contributing](#contributing)
 
-Published desktop release: **[0.1.5 · Linux Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.5)**, under active development and licensed under [MIT](LICENSE). Desktop checks have passed locally on Linux x64. Official Windows/macOS desktop hosts have not been validated. The Web plugin is available as a [0.2.0-dev.1 preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.1).
+Published desktop release: **[0.1.6 · Linux Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.6)**, under active development and licensed under [MIT](LICENSE). Desktop checks have passed locally on Linux x64. Official Windows/macOS desktop hosts have not been validated. The Web plugin is available as a [0.2.0-dev.1 preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.1).
 
-Current source and the local **v0.1.6** build support a standalone service, local/remote connections and password login. **These changes are not yet published on GitHub Releases.** The linked v0.1.5 installer and plugin preview do not include the new service features.
+The **v0.1.6 Linux preview** includes the standalone service, local/remote connections and password login. Older v0.1.5 installers and the separate Web plugin preview do not include these new service features.
 
 ## Why Shiwen
 
@@ -74,7 +74,7 @@ Open the login URL printed by DSH. This uses a dedicated `shiwen-web` profile. A
 
 [Web setup, storage and validation](docs/web-plugin.md) · [Bundle configuration](bundle/README.md)
 
-### Desktop client and standalone service (local v0.1.6 build)
+### Desktop client and standalone service (v0.1.6)
 
 The Linux package includes the client, standalone service and Node runtime, with no separate Node installation required. Data stays on **the computer running the service**. Local mode uses that computer's library; remote mode accesses another computer's library without copying or merging it.
 
@@ -100,7 +100,7 @@ npm run package:linux
 sudo apt install ./release/shiwen-dsh_0.1.6_amd64.deb
 ```
 
-For a service launched from source, use `npm run server:stop` with the same data root. The package also includes management commands that need no system Node; see the [standalone service guide](docs/server.md). Restart the local service after upgrading. This build has not been uploaded to GitHub; the download below still refers to the published older version.
+For a service launched from source, use `npm run server:stop` with the same data root. The package also includes management commands that need no system Node; see the [standalone service guide](docs/server.md). Restart the local service after upgrading. To use a prebuilt package, download the v0.1.6 installer below.
 
 ### Run only the service and connect from a browser
 
@@ -119,12 +119,12 @@ The service can run without a desktop window. LAN devices must be able to reach 
 
 ### Published Linux desktop
 
-Download the **[Linux x64 installer (.deb)](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.5/shiwen-dsh_0.1.5_amd64.deb)**. This preview is intended for users willing to report issues; Windows builds are not published yet. See the [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.5) for checksums and known limitations.
+Download the **[Linux x64 installer (.deb)](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.6/shiwen-dsh_0.1.6_amd64.deb)**. This preview is intended for users willing to report issues; Windows builds are not published yet. See the [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.6) for checksums and known limitations.
 
-Fully quit Shiwen, then install or upgrade from your download directory:
+Fully quit Shiwen and stop any running standalone service, then install or upgrade from your download directory:
 
 ```bash
-sudo apt install ./shiwen-dsh_0.1.5_amd64.deb
+sudo apt install ./shiwen-dsh_0.1.6_amd64.deb
 ```
 
 Open 拾文 from the application menu or run `shiwen-dsh`. The package includes Electron, Node, DSH and Shiwen plugins; no separate Node installation or source checkout is required. Desktop validation currently covers Ubuntu 26.04 x64. Other distributions still need testing.

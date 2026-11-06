@@ -10,9 +10,9 @@
 
 [为什么做](#为什么做拾文) · [能做什么](#能做什么) · [开始使用](#开始使用) · [数据与隐私](#数据与隐私) · [参与开发](#参与开发)
 
-已发布桌面版 **[0.1.5 · Linux 预览版](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.5)**，仍在开发中。已在 Linux x64 上完成本机桌面验收；Windows、macOS 桌面宿主尚未验收。Web 插件版提供 [0.2.0-dev.1 预览包](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.1)，见下文。项目采用 [MIT](LICENSE) 许可证。
+已发布桌面版 **[0.1.6 · Linux 预览版](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.6)**，仍在开发中。已在 Linux x64 上完成本机桌面验收；Windows、macOS 桌面宿主尚未验收。Web 插件版提供 [0.2.0-dev.1 预览包](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.1)，见下文。项目采用 [MIT](LICENSE) 许可证。
 
-当前源码与本地 **v0.1.6** 构建已支持独立服务、本机/远端连接和密码登录，**尚未发布到 GitHub Releases**。下方 v0.1.5 和插件预览包不包含这些新增服务能力。
+**v0.1.6 Linux 预览版**已提供独立服务、本机/远端连接和密码登录。旧版 v0.1.5 与单独的 Web 插件预览包不包含这些新增服务能力。
 
 ## 为什么做拾文
 
@@ -74,7 +74,7 @@ npm run start:web -- --no-open
 
 [Web 安装、数据目录与验收范围](docs/web-plugin.md) · [插件配置](bundle/README.md)
 
-### PC 客户端与独立服务（本地构建 v0.1.6）
+### PC 客户端与独立服务（v0.1.6）
 
 Linux 安装包同时包含客户端、独立服务与 Node 运行环境，无需额外安装 Node。资料保存在**运行服务的电脑**上：本机模式使用这台电脑的资料库，远端模式访问另一台电脑的资料库，不会自动复制或合并资料。
 
@@ -100,7 +100,7 @@ npm run package:linux
 sudo apt install ./release/shiwen-dsh_0.1.6_amd64.deb
 ```
 
-源码启动的服务可在同一数据根目录下执行 `npm run server:stop` 停止；安装包也提供无需系统 Node 的管理命令，见 [独立服务说明](docs/server.md)。升级后重新启动本机服务。构建产物尚未上传 GitHub；下方下载链接仍指向已发布的旧版。
+源码启动的服务可在同一数据根目录下执行 `npm run server:stop` 停止；安装包也提供无需系统 Node 的管理命令，见 [独立服务说明](docs/server.md)。升级后重新启动本机服务。无需自行构建时，可直接下载下方的 v0.1.6 安装包。
 
 ### 只运行独立服务，让浏览器访问
 
@@ -119,12 +119,12 @@ npm run server:url
 
 ### 已发布的 Linux 桌面版
 
-下载 **[Linux x64 安装包（.deb）](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.5/shiwen-dsh_0.1.5_amd64.deb)**。这是预览版，适合愿意反馈问题的用户；Windows 版本暂未发布。校验文件与已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.5)。
+下载 **[Linux x64 安装包（.deb）](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.6/shiwen-dsh_0.1.6_amd64.deb)**。这是预览版，适合愿意反馈问题的用户；Windows 版本暂未发布。校验文件与已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.6)。
 
-完整退出拾文，在下载目录安装或升级：
+完整退出拾文并停止仍在运行的独立服务，再在下载目录安装或升级：
 
 ```bash
-sudo apt install ./shiwen-dsh_0.1.5_amd64.deb
+sudo apt install ./shiwen-dsh_0.1.6_amd64.deb
 ```
 
 从应用菜单打开「拾文」，或运行 `shiwen-dsh`。安装包包含 Electron、Node、DSH 和拾文插件，无需另外安装 Node 或保留源码目录。当前桌面验证环境为 Ubuntu 26.04 x64，其他发行版仍需验证。

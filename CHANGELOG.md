@@ -3,20 +3,44 @@
 0.1.4 是本仓库首次公开的 Linux 预览版；0.1.0–0.1.3 为本地开发与打包记录。
 0.1.4 is this repository's first public Linux preview; 0.1.0–0.1.3 are local development builds.
 
-## 0.1.6 - 本地构建 / Local build (not published)
+## 0.1.6 - 2026-11-06
 
-- 独立服务支持密码登录、30 天记住设备、密码修改、设备撤销和退出登录；撤销同步断开实时连接。首次密码仅由本机管理入口设置，远端使用普通服务地址。
-- Standalone password login, remembered devices, password rotation, device revocation and sign-out; revocation closes live connections. First setup uses local administration, while remote devices use clean URLs.
+### 中文
 
+Linux x64 预览版，安装包同时包含桌面客户端、独立服务与 Node 运行环境。
+
+- 本机服务已运行时直接连接，未运行时自动启动；也可连接局域网其他电脑。退出时可选择保留或停止本机服务，远端退出不会停止远端服务。
+- 独立服务支持密码登录、30 天记住设备、密码修改、设备撤销和退出登录。撤销设备同步断开实时连接；首次密码仅由本机管理入口设置，远端使用普通服务地址。
+- 电脑和手机浏览器共用服务端资料、会话与配置；增加资料库进程锁，避免多个后端同时写入同一资料库。
 - 素材与创作使用可收起的窄列表，仅显示标题与日期，搜索和筛选置顶；旧资料导入入口移至设置。
-- Materials and Writing use collapsible narrow lists with titles, dates and search at the top; legacy import moves to Settings.
-- PC 安装包包含独立服务和 Node；桌面端支持本机自动启动/复用、远端连接与连接设置。
-- 本机退出提供保留服务、停止服务和取消；远端退出不会停止远端服务。
-- 远端地址与已认证本机服务匹配时自动按本机管理；其他端口或无法核实的目标不会被接管。
-- 局域网服务复用桌面资料，浏览器认证保留；增加进程占用锁、认证控制接口和启停命令。
-- 记录移动端离线资料、独立 AI 和同步方案，移动端尚未实施。
+- 更新中英文 README、独立服务使用说明与移动端方案。
 
-The desktop package bundles a Node service, supports local auto-start/reuse and remote connections, and offers local keep/stop/cancel exit behavior. LAN Web sharing retains authentication and ownership checks. The mobile offline/AI/sync design is documented only.
+**安装或升级：** 先退出客户端并停止旧独立服务，再安装；升级后重新启动服务。本机首次启动设置访问密码。安装不会预装或替换个人资料。
+
+```bash
+sha256sum -c SHA256SUMS-0.1.6.txt
+sudo apt install ./shiwen-dsh_0.1.6_amd64.deb
+```
+
+**验证：** 46 项测试通过；已验证隔离资料库的密码登录、设备撤销与实时连接断开、重启持久化、共享资料，以及真实 Electron 会话和打包后客户端启动。未完成全新机器的系统安装/升级验收。
+
+**范围：** 仅发布 Linux amd64。Windows/macOS、移动端离线资料库及同步尚未交付。HTTP 只用于可信局域网；加密访问配置见独立服务说明。
+
+### English
+
+Linux x64 preview bundling the desktop client, standalone service and Node runtime.
+
+- Reuse or automatically start a local service, or connect to another computer on the LAN. Local exit offers keep/stop/cancel; remote exit leaves the server running.
+- Password login, 30-day remembered devices, password changes, device revocation and sign-out. Revocation closes live connections. First setup uses local administration; remote devices open clean server URLs.
+- Computer and phone browsers share server-side data, conversations and configuration. Library ownership locks prevent concurrent backend writers.
+- Collapsible narrow lists show titles and dates, with search and filters at the top. Legacy import moves to Settings.
+- Updated bilingual README, service instructions and mobile design notes.
+
+**Upgrade:** quit the client and stop the old service before installing the `.deb`, then restart. Set the access password on first local launch. Personal data is neither bundled nor replaced. Verify the download using `SHA256SUMS-0.1.6.txt`.
+
+**Validation:** 46 tests passed, plus isolated service checks for authentication, revocation/live disconnection, persistence and shared data; real Electron cookie handling and packaged-client startup were checked. Fresh-machine system installation/upgrades remain unverified.
+
+**Scope:** Linux amd64 only. Windows/macOS and mobile offline storage/synchronization are not delivered. Use HTTP only on a trusted LAN; see the service guide for HTTPS.
 
 ## 0.2.0-dev.1 - 2026-11-06
 

@@ -1,8 +1,8 @@
 # 独立服务与局域网访问 / Standalone server and LAN access
 
-本地构建的 v0.1.6 Linux 安装包同时包含桌面客户端、独立服务与 Node 运行环境。已发布的 v0.1.5 仍使用旧桌面后端。源码启动需要 Node.js >=24.9 与仓库依赖。
+v0.1.6 Linux 安装包同时包含桌面客户端、独立服务与 Node 运行环境。已发布的 v0.1.5 仍使用旧桌面后端。源码启动需要 Node.js >=24.9 与仓库依赖。
 
-The local v0.1.6 Linux build bundles the desktop client, standalone server and Node runtime. Published v0.1.5 packages still use the older desktop host. Source launches require Node.js >=24.9 and repository dependencies.
+The v0.1.6 Linux release bundles the desktop client, standalone server and Node runtime. Published v0.1.5 packages still use the older desktop host. Source launches require Node.js >=24.9 and repository dependencies.
 
 ## 桌面连接 / Desktop connections
 
