@@ -1,4 +1,5 @@
 import React,{useState,useEffect,useSyncExternalStore} from 'react';
+import {BrowserAccess} from './BrowserAccess.jsx';
 export function ExternalPanel({locale,rpc}){
  const language=useSyncExternalStore(callback=>locale.subscribe(callback),()=>locale.getSnapshot().active,()=>locale.getSnapshot().active);
  const zh=String(language).startsWith('zh'),t=(a,b)=>zh?a:b;
@@ -14,6 +15,7 @@ export function ExternalPanel({locale,rpc}){
   <div className="sw-head"><div><span className="sw-eyebrow">SHIWEN / CONNECTIONS</span><h1>{t('外部接入','External access')}</h1></div><button onClick={load}>{t('刷新','Refresh')}</button></div>
   <p className="sw-sub">{t('让其他 Agent、插件或脚本通过 MCP、HTTP API 或 CLI 保存和管理资料。使用时保持拾文运行。','Connect other agents, plugins or scripts through MCP, HTTP API or CLI. Keep Shiwen running while connected.')}</p>
   {error&&<div className="sw-error" role="alert">{error}</div>}{notice&&<div className="sw-notice" role="status">{notice}</div>}
+  <BrowserAccess rpc={rpc} t={t}/>
   {state&&<>
    <section className="sw-memory-card"><h2>{t('本机服务','Local service')}</h2><p className="sw-meta">{state.running?t('运行中','Running'):t('未运行','Stopped')} · {state.endpoint}</p><p className="sw-sub">{t('只接受本机连接；每个客户端使用独立凭据。保存渠道与内容作者分别记录。','Accepts local connections with a separate credential for each client. Client identity and authorship are recorded separately.')}</p><details className="sw-details"><summary>{t('CLI、API 与 Skill 路径','CLI, API and Skill paths')}</summary><p>CLI: {state.command}</p><p>API: {state.endpoint}/v1/tools/call</p><p>{t('服务发现文件','Discovery file')}: {state.discoveryFile}</p><p>Skill: {state.skillPath}</p><p>{t('端口随启动变化，CLI/MCP 自动读取发现文件。将 Skill 文件夹复制到外部 Agent 的技能目录即可使用。','The port changes on restart; CLI/MCP discover it automatically. Copy the Skill folder to your external agent’s skills directory.')}</p></details></section>
    {!issued&&<section className="sw-memory-card"><h2>{t('添加客户端','Add a client')}</h2><label className="sw-access-name">{t('客户端名称','Client name')}<input aria-label={t('客户端名称','Client name')} maxLength={80} placeholder="WorkBuddy" value={name} onChange={e=>setName(e.target.value)}/></label><fieldset className="sw-access-scopes"><legend>{t('允许的操作','Allowed actions')}</legend>{Object.entries(labels).map(([key,label])=><label key={key}><input type="checkbox" checked={scopes.includes(key)} onChange={e=>setScopes(values=>e.target.checked?[...values,key]:values.filter(x=>x!==key))}/>{label}</label>)}</fieldset><button className="sw-primary" disabled={busy||!name.trim()||!scopes.length} onClick={create}>{t('创建凭据','Create credential')}</button></section>}

@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import {Client} from '@modelcontextprotocol/client';
 import {StdioClientTransport} from '@modelcontextprotocol/client/stdio';
 const root=resolve(import.meta.dirname,'..'),cli=join(root,'node_modules/@deepseek-ai/dsh/lib/bin.js');
-const archive=resolve(process.argv[2]??'release/dsh-shiwen-0.2.0-dev.0.tgz');
+const archive=resolve(process.argv[2]??'release/dsh-shiwen-0.2.0-dev.1.tgz');
 const data=await mkdtemp(join(tmpdir(),'shiwen-web-plugin-'));
 const env={...process.env,DSH_HOME:join(data,'home'),DSH_AGENTS_HOME:join(data,'agents'),DSH_TELEMETRY_DISABLED:'1'};
 for(const key of ['SHIWEN_DATA_DIR','SHIWEN_ROOT_DIR','SHIWEN_DESKTOP','SHIWEN_APP_PATCH','ELECTRON_RUN_AS_NODE'])delete env[key];
@@ -49,6 +49,19 @@ for(let round=0;round<4;round++){
    continue;
   }
   assert.equal((await raw('snapshot',{},'https://untrusted.example')).status,403);
+  const browserStatus=await rpc('browserStatus');assert.equal(browserStatus.profile,'web');
+  assert.equal('loginUrl' in browserStatus,false);
+  const {loginUrl}=await rpc('browserLogin');assert.equal(new URL(loginUrl).origin,base);
+  assert.equal((await fetch(loginUrl,{redirect:'manual'})).status,303);
+  for(const interactions of ['none','answer']){
+   const connect=new URL(url);connect.pathname='/connect';connect.searchParams.set('interactions',interactions);
+   const admission=await fetch(connect,{redirect:'manual'});assert.equal(admission.status,302);
+   const apiCookie=admission.headers.getSetCookie().map(x=>x.split(';')[0]).join('; ');
+   const api=method=>fetch(base+'/api/shiwen',{method:'POST',headers:{cookie:apiCookie,origin:base,'content-type':'application/json'},body:JSON.stringify({method})});
+   assert.equal((await api('snapshot')).status,200);
+   const denied=await api('browserLogin');assert.equal(denied.status,403);
+   assert.equal('result' in await denied.json(),false);
+  }
   if(round===0){
    assert.equal((await rpc('snapshot')).records.length,0);
    record=await rpc('saveMarkdown',{kind:'journal',title:'Web 插件验收日记',body:'# 标题\n\n我的原始日记。'});

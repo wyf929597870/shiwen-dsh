@@ -32,3 +32,5 @@
 .sw-access-scopes{display:flex;flex-wrap:wrap;gap:16px;border:0;padding:0;margin:18px 0;font-size:13px}.sw-access-scopes legend{margin-bottom:12px}.sw-access-scopes label{display:flex;gap:8px;align-items:center}
 .sw-issued label{display:block;margin-top:16px;font-size:13px}.sw-issued textarea{font-family:monospace;min-height:70px;font-size:12px;word-break:break-all}.sw-issued textarea[aria-label="MCP JSON"]{height:290px;white-space:pre}
 .sw-external .sw-memory-row{flex-wrap:wrap}.sw-external .sw-memory-row>div{flex:1 1 180px}
+.sw-browser-access>.sw-sub{margin-top:12px;line-height:1.7}.sw-browser-access dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px 16px;font-size:12px;margin:18px 0}.sw-browser-access dt{color:var(--dsw-alias-label-tertiary)}.sw-browser-access dd{margin:0;overflow-wrap:anywhere}.sw-browser-access .sw-error{margin-top:12px}.sw-browser-access input{width:100%;font-family:monospace;font-size:12px}.sw-browser-access .sw-access-name button{align-self:flex-start}
+@media(max-width:480px){.sw-browser-access dl{grid-template-columns:minmax(0,1fr);gap:7px}.sw-browser-access dd{margin-bottom:7px}}

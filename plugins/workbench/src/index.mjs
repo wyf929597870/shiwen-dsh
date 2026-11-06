@@ -6,6 +6,7 @@ import {homedir} from 'node:os';
 import {join} from 'node:path';
 import {existsSync} from 'node:fs';
 import {inspectLegacy,importLegacyToStore} from '../../library/src/migrate.mjs';
+import {browserAccess} from './browser-access.mjs';
 export const inject=['connection','shiwenLibrary','sessionQuery','shiwenExternal'];
 export function apply(ctx){
   ctx.effect(()=>ctx.connection.fetch.register({path:'/api/shiwen',methods:['POST'],requestBody:'buffered',async fetch(request){
@@ -13,7 +14,18 @@ export function apply(ctx){
       const {method,args}=await request.json();
       const library=ctx.shiwenLibrary;
       let result;
-      if(method==='externalStatus'){
+      if(method==='browserStatus'||method==='browserLogin'){
+        if(method==='browserLogin'){
+          // DSH exact Fetch routes do not pass their admitted Peer to the handler.
+          // Resolve it from the original request through DSH, never from JSON fields.
+          const admission=ctx.connection.admit(request);
+          if('rejection' in admission||admission.peer!==ctx.connection.browserPeer){
+            return Response.json({error:'仅浏览器会话可以获取登录地址 / Browser session required'},
+              {status:'rejection' in admission?admission.rejection:403,headers:{'Cache-Control':'no-store'}});
+          }
+        }
+        result=browserAccess(ctx,{login:method==='browserLogin'});
+      }else if(method==='externalStatus'){
         result={...ctx.shiwenExternal.status(),clients:library.externalClients()};
       }else if(method==='externalClientCreate'){
         result=library.externalClientCreate(args);
