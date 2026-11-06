@@ -1,6 +1,6 @@
 {
   "name": "shiwen-dsh-desktop",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "private": true,
   "type": "module",
   "description": "拾文桌面客户端，以 DSH 为底座、以插件集成个人知识与创作功能",

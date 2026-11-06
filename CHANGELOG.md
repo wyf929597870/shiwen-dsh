@@ -3,6 +3,45 @@
 0.1.4 是本仓库首次公开的 Linux 预览版；0.1.0–0.1.3 为本地开发与打包记录。
 0.1.4 is this repository's first public Linux preview; 0.1.0–0.1.3 are local development builds.
 
+## 0.1.7 - 2026-11-06
+
+### 中文
+
+Linux x64 预览版，安装包包含桌面客户端、独立服务与 Node 运行环境。
+
+- 修复页面切换后恢复 DSH 标题的问题；客户端标题栏、菜单、连接设置和托盘显示版本，侧栏显示 Web 版本。
+- 原生对话首页加入今日积累、继续创作与最近记录；输入框、工作区选择和内容卡片对齐，适配宽屏。
+- 校对素材、创作、设置等页面的边距、字号和层次；列表仍支持收起，让正文获得更多阅读空间。
+- 手机 Web 增加底部导航、列表与正文切换、返回和草稿恢复；支持中英文及深浅主题。
+- 回顾支持期间与自然月切换、逐日图表和记录明细；修复未注明日期的历史记录计数。发布前检查分项展示规则结果与人工核对提示。
+
+**安装或升级：** 先退出客户端并停止旧独立服务，再安装并重新启动。安装不会预装或替换个人资料。
+
+```bash
+sha256sum -c SHA256SUMS-0.1.7.txt
+sudo apt install ./shiwen-dsh_0.1.7_amd64.deb
+```
+
+**验证：** 48 项测试通过；完成插件构建、源码检查及 Linux 打包。浏览器检查覆盖桌面、宽屏与手机尺寸、中英文和深浅主题。未进行真实模型请求、手机真机软键盘或全新系统安装/升级验收。
+
+**范围：** 仅发布 Linux amd64 安装包；移动端为联网访问的 Web 页面，离线资料库与同步尚未实现。单独的 Web 插件预览包仍为 v0.2.0-dev.1，不包含本次新增功能。
+
+### English
+
+Linux x64 preview bundling the desktop client, standalone service and Node runtime.
+
+- Keep Shiwen titles after navigation and show client/Web versions in the relevant UI.
+- Add daily activity, ongoing articles and recent records to the native chat home; align the composer and cards on wide screens.
+- Refine library, writing and settings typography and spacing while retaining collapsible lists.
+- Add phone Web navigation, list/detail views, back navigation and draft restoration, with Chinese/English and light/dark layouts.
+- Expand review periods, calendar months, daily charts and record details; correct the undated historical-record count. Show publication checks as individual rules and manual-review prompts.
+
+**Upgrade:** quit the client and stop the old service before installing, then restart. Personal data is neither bundled nor replaced. Verify the download using `SHA256SUMS-0.1.7.txt`.
+
+**Validation:** 48 tests passed, plus plugin build, source checks, Linux packaging and desktop/wide/phone browser layout checks. Real model calls, physical phone keyboards and fresh-system installation/upgrades were not tested.
+
+**Scope:** Linux amd64 installer only. Mobile Web requires a server connection; offline libraries and synchronization are not implemented. The separate Web plugin preview remains v0.2.0-dev.1 and does not include these changes.
+
 ## 0.1.6 - 2026-11-06
 
 ### 中文

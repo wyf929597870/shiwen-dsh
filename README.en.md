@@ -10,9 +10,11 @@ Shiwen is a personal AI workspace built on [DeepSeek Harness (DSH)](https://gith
 
 [Why Shiwen](#why-shiwen) · [What it does](#what-it-does) · [Getting started](#getting-started) · [Data and privacy](#data-and-privacy) · [Contributing](#contributing)
 
-Published desktop release: **[0.1.6 · Linux Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.6)**, under active development and licensed under [MIT](LICENSE). Desktop checks have passed locally on Linux x64. Official Windows/macOS desktop hosts have not been validated. The Web plugin is available as a [0.2.0-dev.1 preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.1).
+Published desktop release: **[0.1.7 · Linux Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.7)**, under active development and licensed under [MIT](LICENSE). Desktop checks have passed locally on Linux x64. Official Windows/macOS desktop hosts have not been validated. The Web plugin is available as a [0.2.0-dev.1 preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.1).
 
-The **v0.1.6 Linux preview** includes the standalone service, local/remote connections and password login. Older v0.1.5 installers and the separate Web plugin preview do not include these new service features.
+The **v0.1.7 Linux preview** includes the standalone service, local/remote connections and password login. Older v0.1.5 installers and the separate Web plugin preview do not include these new service features.
+
+**New in v0.1.7:** stable Shiwen titles and visible client/Web versions; daily activity and recent records on the chat home; consistent library, writing, review and settings layouts. Phone browsers get bottom navigation, full-width reading/editing and responsive review statistics. See the [mobile plan](docs/mobile-plan.md).
 
 ## Why Shiwen
 
@@ -74,7 +76,7 @@ Open the login URL printed by DSH. This uses a dedicated `shiwen-web` profile. A
 
 [Web setup, storage and validation](docs/web-plugin.md) · [Bundle configuration](bundle/README.md)
 
-### Desktop client and standalone service (v0.1.6)
+### Desktop client and standalone service (v0.1.7)
 
 The Linux package includes the client, standalone service and Node runtime, with no separate Node installation required. Data stays on **the computer running the service**. Local mode uses that computer's library; remote mode accesses another computer's library without copying or merging it.
 
@@ -97,10 +99,10 @@ Under **Settings → Shiwen data → Manage password and devices**, change the p
 ```bash
 npm run package:linux
 # Quit the client and stop the old service before installing
-sudo apt install ./release/shiwen-dsh_0.1.6_amd64.deb
+sudo apt install ./release/shiwen-dsh_0.1.7_amd64.deb
 ```
 
-For a service launched from source, use `npm run server:stop` with the same data root. The package also includes management commands that need no system Node; see the [standalone service guide](docs/server.md). Restart the local service after upgrading. To use a prebuilt package, download the v0.1.6 installer below.
+For a service launched from source, use `npm run server:stop` with the same data root. The package also includes management commands that need no system Node; see the [standalone service guide](docs/server.md). Restart the local service after upgrading. To use a prebuilt package, download the v0.1.7 installer below.
 
 ### Run only the service and connect from a browser
 
@@ -119,12 +121,12 @@ The service can run without a desktop window. LAN devices must be able to reach 
 
 ### Published Linux desktop
 
-Download the **[Linux x64 installer (.deb)](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.6/shiwen-dsh_0.1.6_amd64.deb)**. This preview is intended for users willing to report issues; Windows builds are not published yet. See the [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.6) for checksums and known limitations.
+Download the **[Linux x64 installer (.deb)](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.7/shiwen-dsh_0.1.7_amd64.deb)**. This preview is intended for users willing to report issues; Windows builds are not published yet. See the [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.7) for checksums and known limitations.
 
 Fully quit Shiwen and stop any running standalone service, then install or upgrade from your download directory:
 
 ```bash
-sudo apt install ./shiwen-dsh_0.1.6_amd64.deb
+sudo apt install ./shiwen-dsh_0.1.7_amd64.deb
 ```
 
 Open 拾文 from the application menu or run `shiwen-dsh`. The package includes Electron, Node, DSH and Shiwen plugins; no separate Node installation or source checkout is required. Desktop validation currently covers Ubuntu 26.04 x64. Other distributions still need testing.
@@ -133,7 +135,7 @@ Start by creating a record in Materials. For AI conversations, configure a model
 
 ### Share data between desktop and Web
 
-With v0.1.6, the desktop client, computer browser and phone browser connect to **one standalone service, library and set of conversations**. Find or copy its address under **External access → Browser access**, then sign in with the access password. No reimport is needed. Keeping the service running when quitting the local client lets browsers continue using it; the server computer must remain awake and reachable.
+With v0.1.7, the desktop client, computer browser and phone browser connect to **one standalone service, library and set of conversations**. Find or copy its address under **External access → Browser access**, then sign in with the access password. No reimport is needed. Keeping the service running when quitting the local client lets browsers continue using it; the server computer must remain awake and reachable.
 
 Change panels or refresh to read another client's saved records, and reopen a record to load its content. Unsaved drafts remain in each window; stale saves are rejected when two clients edit the same record. Offline library synchronization is not implemented. The [mobile offline recording, independent AI and synchronization plan](docs/mobile-plan.md) is documented only.
 
@@ -141,7 +143,7 @@ The published v0.1.5 desktop still uses the older flow: copy a full login link f
 
 ### Bring an earlier Shiwen library
 
-In current source and v0.1.6, open **Settings → Shiwen data → Import previous library**, enter the path to the old Shiwen database on the server computer and preview it before importing. In published v0.1.5, the entry is still under **Materials**. The destination must be empty. The source is read only, and old messages remain archives rather than being converted into native DSH sessions.
+In current source and v0.1.7, open **Settings → Shiwen data → Import previous library**, enter the path to the old Shiwen database on the server computer and preview it before importing. In published v0.1.5, the entry is still under **Materials**. The destination must be empty. The source is read only, and old messages remain archives rather than being converted into native DSH sessions.
 
 This repository maintains the DSH edition only. The earlier standalone client is no longer updated here.
 
@@ -162,7 +164,7 @@ The local Linux desktop and standalone service share the data root at `${XDG_DAT
 | `library/` | Shiwen records, content and provenance in a local database |
 | `dsh/` | DSH sessions, configuration and skills |
 | `desktop/` | Desktop connection preferences and client session data |
-| `server/` | v0.1.6 service state, logs and password authentication database |
+| `server/` | v0.1.7 service state, logs and password authentication database |
 | `workspaces/` | Working files |
 
 When connected remotely, the library stays on the server computer. Passwords are stored as salted scrypt derivations, and the server stores only hashes of device credentials. Keep local administration links and device credentials private.
