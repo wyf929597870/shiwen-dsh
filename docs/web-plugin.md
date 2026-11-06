@@ -46,7 +46,7 @@ dsh web --no-open
 
 ## 共用桌面后端 / Share the desktop Host
 
-从 `v0.1.5` 桌面包 / `v0.2.0-dev.1` 插件包提供。本次仅支持同一台电脑上的浏览器访问，局域网访问和独立后端服务尚未实现。
+从 `v0.1.5` 桌面包 / `v0.2.0-dev.1` 插件包提供。这两个已发布版本仅支持同一台电脑上的浏览器访问；源码新增的局域网独立服务见 [独立服务说明](server.md)。
 
 1. 启动装有新版拾文插件的桌面端，打开「外部接入」。
 2. 在「浏览器访问 · 共用当前资料」核对资料库位置，点击「复制浏览器登录地址」。
@@ -58,7 +58,7 @@ dsh web --no-open
 
 独立 `web` / `shiwen-web` 与 `desktop` profile 不会自动连接或合并。需要共享时，从桌面端获取浏览器入口；不要把两个运行中的 Host 配到同一个 SQLite 文件。此方案也不提供官方桌面端连接任意远程 Web 后端的设置。
 
-From **External access → Browser access** in the desktop app, copy the login URL into a browser on the same computer. One desktop Host owns the data and serves both clients, including native DSH conversations. Keep it running and copy a fresh URL after restart. Refresh/reopen records to see changes; drafts remain in each window and stale writes are rejected. Independent Web profiles remain separate. Non-loopback deployments should use their configured Web URL. Available since desktop `v0.1.5` / plugin `v0.2.0-dev.1`; this is same-computer access, with no LAN or independent-backend mode.
+From **External access → Browser access** in the desktop app, copy the login URL into a browser on the same computer. One desktop Host owns the data and serves both clients, including native DSH conversations. Keep it running and copy a fresh URL after restart. Refresh/reopen records to see changes; drafts remain in each window and stale writes are rejected. Independent Web profiles remain separate. Non-loopback deployments should use their configured Web URL. Available since desktop `v0.1.5` / plugin `v0.2.0-dev.1`; those published versions provide same-computer access. Source now also offers a [standalone LAN service](server.md) using existing desktop data.
 
 Verification: after `npm run build`, run `node scripts/check-shared-host.mjs [path/to/linux-unpacked/resources]`. This launches the actual packaged Desktop Host through IPC with current source plugins and temporary data, then checks two authenticated HTTP clients, shared writes, conflicts, delete/restore, restart persistence and expired launch tokens. It does not automate Electron or browser UI clicks.
 

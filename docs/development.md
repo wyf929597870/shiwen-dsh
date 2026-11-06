@@ -54,18 +54,22 @@ Desktop prerequisites include upstream pnpm dependencies and native build tools,
 
 ## 4. 启动、打包和桌面验收 / Launch, package and desktop checks
 
+v0.1.6 使用 `desktop/entry.mjs` 作为独立 Electron 客户端，不再由窗口内嵌启动 DSH Desktop Host。`npm start` 首次准备隔离的服务构建；修改插件后执行 `npm run server:prepare` 并重启服务。服务运行时可启动/退出客户端。安装包将 `scripts/server-worker.mjs`、插件和 Node 一起装入资源目录。打包使用暂存插件输出，不覆盖开发预览的构建。
+
+验证：`npm test`、`node scripts/check-server.mjs`、`node scripts/check-password-auth.mjs`、`node scripts/check-desktop-service.mjs`；包体验证传入 `release/linux-unpacked`。客户端流程检查使用临时资料，不调用模型。旧 `check-linux` / `check-shared-host` 针对 v0.1.5 的原生 Host，不作为 v0.1.6 客户端验收脚本。
+
 在上述前置条件满足后，从拾文根目录运行：
 
 ```bash
 npm run upstream:check
 npm run prepare:linux
+npm run server:prepare
 npm start
-# 退出开发窗口后打包
+# 退出开发客户端后打包；更新运行资源前也须停止对应服务
 npm run package:linux
-node scripts/check-linux.mjs
-node scripts/check-record-tools.mjs
-node scripts/check-external-desktop.mjs
-node scripts/check-record-order.mjs
+node scripts/check-server.mjs
+node scripts/check-password-auth.mjs
+node scripts/check-desktop-service.mjs release/linux-unpacked
 ```
 
 产物是 `release/shiwen-dsh_<version>_amd64.deb` 与 `release/linux-unpacked/`。验收脚本使用临时资料目录；GUI 检查需要可用的桌面会话和本机回环连接。安装包应作为 Release 附件分发，不提交到 Git。

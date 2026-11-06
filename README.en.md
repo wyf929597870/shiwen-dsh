@@ -10,7 +10,9 @@ Shiwen is a personal AI workspace built on [DeepSeek Harness (DSH)](https://gith
 
 [Why Shiwen](#why-shiwen) · [What it does](#what-it-does) · [Getting started](#getting-started) · [Data and privacy](#data-and-privacy) · [Contributing](#contributing)
 
-Latest desktop release: **[0.1.5 · Linux Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.5)**, under active development and licensed under [MIT](LICENSE). Desktop checks have passed locally on Linux x64. Official Windows/macOS desktop hosts have not been validated. The Web plugin is available as a [0.2.0-dev.1 preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.1).
+Published desktop release: **[0.1.5 · Linux Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.5)**, under active development and licensed under [MIT](LICENSE). Desktop checks have passed locally on Linux x64. Official Windows/macOS desktop hosts have not been validated. The Web plugin is available as a [0.2.0-dev.1 preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.1).
+
+Current source and the local **v0.1.6** build support a standalone service, local/remote connections and password login. **These changes are not yet published on GitHub Releases.** The linked v0.1.5 installer and plugin preview do not include the new service features.
 
 ## Why Shiwen
 
@@ -36,6 +38,8 @@ The name 拾文 reflects that wish: gathering the fragments of daily life worth 
 | Look back | Review a day, the last 7/14/30 days or a calendar month; ask the agent to search and read records from that period |
 | Develop an article | Create an article, link its source material and review pre-publication prompts |
 | Connect another agent | Save, query and manage material through MCP, HTTP, CLI and a companion Skill |
+
+In current source, the Materials and Writing lists show only titles and dates, with search and filters at the top. Collapse either list to give the content area more room.
 
 Lists and searches use descending content dates, then creation times within each day, with unknown dates last. Personal writing, external sources and AI content have separate attribution. An agent saving your words does not automatically make them AI-authored.
 
@@ -70,7 +74,50 @@ Open the login URL printed by DSH. This uses a dedicated `shiwen-web` profile. A
 
 [Web setup, storage and validation](docs/web-plugin.md) · [Bundle configuration](bundle/README.md)
 
-### Linux desktop
+### Desktop client and standalone service (local v0.1.6 build)
+
+The Linux package includes the client, standalone service and Node runtime, with no separate Node installation required. Data stays on **the computer running the service**. Local mode uses that computer's library; remote mode accesses another computer's library without copying or merging it.
+
+| Connection | Startup and exit behavior |
+| --- | --- |
+| This computer | Reuse a running service or start it automatically; on exit, choose keep, stop or cancel |
+| LAN / another computer | Enter the server address and access password; closing the client does not stop the remote service |
+
+**First use:**
+
+1. Open Shiwen on the computer that stores your library. Select **This computer** and enable LAN access if other computers or phones should connect.
+2. Set an access password on the first page, using at least 10 characters. This workspace password is separate from your model provider's API key.
+3. On another desktop client, choose **LAN / another computer** and enter the address and password. Computer and phone browsers open the clean URL, such as `http://192.168.1.20:3080/`, and sign in. No token is needed in the address.
+4. Choose **Remember this device** for a 30-day credential. Otherwise, login uses a browser session cookie with a server-side maximum lifetime of 12 hours. Desktop connection preferences never store the password.
+
+Under **Settings → Shiwen data → Manage password and devices**, change the password, revoke a device or sign out. **External access** also links to this page. Changing the password requires the current password and signs out other devices. Revocation also closes that device's live connections. Unexpired credentials survive service restarts at the same protocol, address and port. All signed-in devices share this personal workspace; separate user roles are not implemented.
+
+**Local installation or upgrade:** complete the [desktop build prerequisites](docs/development.md#3-桌面构建前置条件--desktop-prerequisites), then build from the repository directory. Before installation, quit the desktop client and stop any running standalone service. Choosing to keep the service running when closing the client is not enough for an upgrade.
+
+```bash
+npm run package:linux
+# Quit the client and stop the old service before installing
+sudo apt install ./release/shiwen-dsh_0.1.6_amd64.deb
+```
+
+For a service launched from source, use `npm run server:stop` with the same data root. The package also includes management commands that need no system Node; see the [standalone service guide](docs/server.md). Restart the local service after upgrading. This build has not been uploaded to GitHub; the download below still refers to the published older version.
+
+### Run only the service and connect from a browser
+
+With Node.js >=24.9, run these commands in the repository on the server computer. First quit any older desktop or service using the same library:
+
+```bash
+npm ci
+npm run server:prepare
+npm run server:start -- --lan
+npm run server:url
+```
+
+Open the one-time administration link from `server:url` on the server computer to set the first password. The link expires after five minutes, works once, and must not be shared. Use `npm run server:status` to find the clean service address for other devices, which sign in with the password. Without `--lan`, the service accepts local connections only. With multiple interfaces, select an address explicitly using `--host <LAN IP>`.
+
+The service can run without a desktop window. LAN devices must be able to reach each other; a phone cannot use `127.0.0.1` to reach the computer. HTTP is for trusted LANs. See the [service guide](docs/server.md) for HTTPS, lifecycle commands and storage details.
+
+### Published Linux desktop
 
 Download the **[Linux x64 installer (.deb)](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.5/shiwen-dsh_0.1.5_amd64.deb)**. This preview is intended for users willing to report issues; Windows builds are not published yet. See the [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.5) for checksums and known limitations.
 
@@ -84,15 +131,23 @@ Open 拾文 from the application menu or run `shiwen-dsh`. The package includes 
 
 Start by creating a record in Materials. For AI conversations, configure a model and credentials through DSH first. The installer does not include a model-service account or API key.
 
+### Share data between desktop and Web
+
+With v0.1.6, the desktop client, computer browser and phone browser connect to **one standalone service, library and set of conversations**. Find or copy its address under **External access → Browser access**, then sign in with the access password. No reimport is needed. Keeping the service running when quitting the local client lets browsers continue using it; the server computer must remain awake and reachable.
+
+Change panels or refresh to read another client's saved records, and reopen a record to load its content. Unsaved drafts remain in each window; stale saves are rejected when two clients edit the same record. Offline library synchronization is not implemented. The [mobile offline recording, independent AI and synchronization plan](docs/mobile-plan.md) is documented only.
+
+The published v0.1.5 desktop still uses the older flow: copy a full login link from **External access → Browser access**, use it in a browser on the same computer, and keep the desktop running. The plugin installed in stock DSH retains host authentication. The separate `shiwen-web` profile created by `npm run start:web` does not automatically connect to your desktop library. See the [Web plugin guide](docs/web-plugin.md).
+
 ### Bring an earlier Shiwen library
 
-Open **Materials → Import previous library**, select the old Shiwen database and preview it before importing. The destination must be empty. The source is read only, and old messages remain archives rather than being converted into native DSH sessions.
+In current source and v0.1.6, open **Settings → Shiwen data → Import previous library**, enter the path to the old Shiwen database on the server computer and preview it before importing. In published v0.1.5, the entry is still under **Materials**. The destination must be empty. The source is read only, and old messages remain archives rather than being converted into native DSH sessions.
 
 This repository maintains the DSH edition only. The earlier standalone client is no longer updated here.
 
 ### Connect an external agent
 
-Open **External access** (under **More** if the sidebar is crowded), create a client credential, select permissions and copy the generated MCP configuration into your agent. Only creation is allowed by default. Permissions can be granted separately and credentials revoked. Keep Shiwen running; the service listens only on loopback.
+Open **External access** (under **More** if the sidebar is crowded), create a client credential, select permissions and copy the generated MCP configuration into your agent. Only creation is allowed by default. Permissions can be granted separately and credentials revoked. Keep the library Host or standalone service running. External-agent interfaces listen only on the server computer’s loopback address; enabling LAN Web access does not expose these interfaces to the LAN.
 
 [Integration guide](docs/external-access.en.md) · [中文说明](docs/external-access.md) · [Companion Skill](skills/shiwen-library/SKILL.md)
 
@@ -100,16 +155,17 @@ Open **External access** (under **More** if the sidebar is crowded), create a cl
 
 Web plugin data defaults to `$DSH_HOME/shiwen/<profile>/library`, with DSH_HOME defaulting to `~/.dsh`. Data lives on the DSH host; profiles are isolated by default.
 
-**Sharing desktop data with a browser:** open **External access → Browser access** in the desktop app and copy its login URL into a browser on the same computer. Both clients use one DSH backend, library and conversations. Keep the desktop running; obtain a new URL after restarting. Reopen a panel or refresh to read changes saved by the other client. Unsaved drafts remain local to each window; stale record saves are rejected. A separately launched `shiwen-web` profile is still independent. Available starting with desktop `v0.1.5` and plugin `v0.2.0-dev.1`, for same-computer access only. LAN access and a separate backend service are not implemented. See [shared Host usage](docs/web-plugin.md#共用桌面后端--share-the-desktop-host).
-
-The existing Linux desktop keeps its data root at `${XDG_DATA_HOME:-~/.local/share}/shiwen-dsh`:
+The local Linux desktop and standalone service share the data root at `${XDG_DATA_HOME:-~/.local/share}/shiwen-dsh`:
 
 | Directory | Contents |
 | --- | --- |
 | `library/` | Shiwen records, content and provenance in a local database |
 | `dsh/` | DSH sessions, configuration and skills |
-| `desktop/` | Desktop preferences |
+| `desktop/` | Desktop connection preferences and client session data |
+| `server/` | v0.1.6 service state, logs and password authentication database |
 | `workspaces/` | Working files |
+
+When connected remotely, the library stays on the server computer. Passwords are stored as salted scrypt derivations, and the server stores only hashes of device credentials. Keep local administration links and device credentials private.
 
 Markdown content lives in the local library database; each record is not a separate `.md` file. Personal material, sessions and credentials are not bundled. Uninstalling or reinstalling does not automatically erase user data.
 
@@ -121,9 +177,9 @@ External data transfer depends on the models and tools you use. Cloud models rec
 
 | Status | Scope |
 | --- | --- |
-| Verified locally | Linux startup, library operations/filtering/date order, deletion/restoration, restart persistence, external MCP/HTTP/CLI and credential revocation |
+| Verified locally | Linux startup, local service start/reuse, library operations/filtering/date order, deletion/restoration, restart persistence, external MCP/HTTP/CLI; password login, device revocation and live-connection shutdown; narrow-screen and bilingual login pages |
 | Still needs validation | Full desktop builds and system-level installation/upgrades on a fresh machine, Windows/macOS, real-model end-to-end flows and individual provider/external-agent configurations |
-| Still to implement | Automatic updates, close-window behavior settings, article export and version-history UI |
+| Still to implement | Automatic updates, configurable minimize-to-tray behavior, article export and version-history UI, mobile offline recording and synchronization |
 
 A standalone bundle can now be built and installed through DSH's CLI, while the Linux desktop shares the same business modules. The bundle is distributed through [GitHub Releases](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.1) and is not published to npm; the `dsh-plugin` topic does not imply official inclusion. See [plugin architecture and publication status](docs/plugin-status.md).
 
