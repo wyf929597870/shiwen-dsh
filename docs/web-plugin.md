@@ -2,7 +2,7 @@
 
 拾文现在可作为预构建的 `dsh-shiwen` 组合包安装在 **原生 DSH Web** 中。同一套业务代码仍供已有 Linux 桌面端使用；无需下载、编译或修改 DSH 上游源码来运行 Web 版。
 
-当前目标版本为 **DSH 0.2.2-alpha.3 / Node.js >=24.9**。组合包版本 `0.2.0-dev.0` 是本地开发产物，尚未发布到 npm 或 GitHub Release。现有 `v0.1.4` Release 仍是 Linux 桌面安装包。
+当前目标版本为 **DSH 0.2.2-alpha.3 / Node.js >=24.9**。组合包版本 `0.2.0-dev.0` 通过 [GitHub Release](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.0) 提供预构建 tgz，尚未发布到 npm。现有 `v0.1.4` Release 仍是 Linux 桌面安装包。
 
 ## 在本仓库启动 / Run from this repository
 
@@ -25,7 +25,7 @@ DSH_HOME=/tmp/shiwen-web-demo npm run start:web -- --no-open --port 3081
 
 ## 安装到已有 DSH / Install into stock DSH
 
-先构建 tarball：
+从 [Release](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.0) 下载 tgz 和 SHA256 校验文件即可安装，不需要源码。也可以自行构建 tarball：
 
 ```sh
 npm ci
@@ -76,4 +76,4 @@ The default bundle preserves the host's theme and agent settings. Optional Shiwe
 
 The MCP configuration and legacy-import paths refer to the host, not a remote browser. External access remains loopback-only; stock Web authentication is retained. This is not a multi-user cloud service.
 
-`node scripts/check-web-plugin.mjs` checks real installation, Web authentication, record operations, dates, MCP, optional theme loading, restart persistence, removal and reinstallation using temporary data. Linux Web is the current verification target; browser interaction/visual checks, official Windows/macOS desktop hosts, remote deployments and real-model flows remain unverified. `0.2.0-dev.0` is a local development bundle, not an npm or GitHub release; the published `v0.1.4` remains the Linux desktop preview.
+`node scripts/check-web-plugin.mjs` checks real installation, Web authentication, record operations, dates, MCP, optional theme loading, restart persistence, removal and reinstallation using temporary data. Linux Web is the current verification target; browser interaction/visual checks, official Windows/macOS desktop hosts, remote deployments and real-model flows remain unverified. `0.2.0-dev.0` is a [GitHub pre-release](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.0), not an npm package; the published `v0.1.4` remains the Linux desktop preview.

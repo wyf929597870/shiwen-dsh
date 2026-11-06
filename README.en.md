@@ -10,7 +10,7 @@ Shiwen is a personal AI workspace built on [DeepSeek Harness (DSH)](https://gith
 
 [Why Shiwen](#why-shiwen) · [What it does](#what-it-does) · [Getting started](#getting-started) · [Data and privacy](#data-and-privacy) · [Contributing](#contributing)
 
-Latest desktop release: **[0.1.4 · Linux Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.4)**, under active development and licensed under [MIT](LICENSE). Desktop checks have passed locally on Linux x64. Official Windows/macOS desktop hosts have not been validated. The Web plugin can now be built from this repository.
+Latest desktop release: **[0.1.4 · Linux Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.4)**, under active development and licensed under [MIT](LICENSE). Desktop checks have passed locally on Linux x64. Official Windows/macOS desktop hosts have not been validated. The Web plugin is available as a [0.2.0-dev.0 preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.0).
 
 ## Why Shiwen
 
@@ -55,7 +55,9 @@ These are example requests; results depend on your material, model and tool conf
 
 ## Getting started
 
-### Web plugin (in development)
+### Web plugin preview
+
+With **DSH 0.2.2-alpha.3 / Node.js >=24.9**, download the **[prebuilt plugin (.tgz)](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.2.0-dev.0/dsh-shiwen-0.2.0-dev.0.tgz)** without cloning this repository. See the [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.0) for installation, checksums and limitations.
 
 Run from this repository, without Electron or an upstream checkout:
 
@@ -119,9 +121,9 @@ External data transfer depends on the models and tools you use. Cloud models rec
 | --- | --- |
 | Verified locally | Linux startup, library operations/filtering/date order, deletion/restoration, restart persistence, external MCP/HTTP/CLI and credential revocation |
 | Still needs validation | Full desktop builds and system-level installation/upgrades on a fresh machine, Windows/macOS, real-model end-to-end flows and individual provider/external-agent configurations |
-| Still to implement | Public bundle distribution, automatic updates, close-window behavior settings, article export and version-history UI |
+| Still to implement | Automatic updates, close-window behavior settings, article export and version-history UI |
 
-A standalone bundle can now be built and installed through DSH's CLI, while the Linux desktop shares the same business modules. The bundle has not been published to npm or Releases; the `dsh-plugin` topic does not imply official inclusion. See [plugin architecture and publication status](docs/plugin-status.md).
+A standalone bundle can now be built and installed through DSH's CLI, while the Linux desktop shares the same business modules. The bundle is distributed through [GitHub Releases](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.0) and is not published to npm; the `dsh-plugin` topic does not imply official inclusion. See [plugin architecture and publication status](docs/plugin-status.md).
 
 ## Contributing
 

@@ -3,12 +3,59 @@
 0.1.4 是本仓库首次公开的 Linux 预览版；0.1.0–0.1.3 为本地开发与打包记录。
 0.1.4 is this repository's first public Linux preview; 0.1.0–0.1.3 are local development builds.
 
-## Unreleased
+## 0.2.0-dev.0 - 2026-11-06
 
-- 增加预构建 DSH 组合包与独立 Web 启动入口，不再依赖 Electron/桌面补丁；主题和皮皮可选。
-- 资料路径支持显式配置和 profile 隔离，保留原桌面兼容；MCP 配置支持宿主 Node 命令及参数。
-- 增加原生 Web 安装、权限、重启、卸载重装与数据保留的隔离验收。
-- Add a prebuilt stock-DSH bundle and Web launcher, optional appearance/persona, profile-scoped storage, portable MCP commands and installation/removal acceptance checks.
+### 中文
+
+**拾文独立插件预览版**，安装进原生 DSH Web。需要 **DSH 0.2.2-alpha.3、Node.js >=24.9** 和 pnpm；宿主需提供可用的 DSH CLI 插件管理命令。
+
+- 预构建组合包包含资料库、Agent 工具、素材/创作/回顾界面，以及 MCP/HTTP/CLI 和 Skill。
+- 保留 DSH 原生对话、模型配置和登录鉴权；不需要拾文 Electron 外壳或桌面补丁。
+- 默认按 profile 隔离资料；卸载插件保留数据，重装后可继续使用。
+- 拾文主题与皮皮人设为可选项，默认保留原生 DSH 外观与角色。
+
+下载本页的 `.tgz` 和 `SHA256SUMS-0.2.0-dev.0.txt` 到同一目录，在终端执行：
+
+```sh
+sha256sum -c SHA256SUMS-0.2.0-dev.0.txt
+# 首次使用时初始化原生 Web profile，已有则跳过。
+dsh web --help
+# 先停止正在运行的目标 DSH Web 实例，再安装并重启。
+dsh plugin --profile web add ./dsh-shiwen-0.2.0-dev.0.tgz --ignore-scripts
+dsh web --no-open
+```
+
+打开终端打印的登录地址。安装需要下载普通 npm 依赖，不会运行插件构建脚本；本包不附带模型账号、API Key 或个人资料。默认资料目录为 `$DSH_HOME/shiwen/web/library`，DSH_HOME 默认 `~/.dsh`。已有拾文桌面资料不会自动迁移。
+
+**验收范围**：Linux 原生 Web 下的安装、登录/来源校验、资料读写/日期排序、MCP、主题可选加载、重启、卸载重装及数据保留。浏览器视觉与完整点击流程、官方 Windows/macOS 桌面宿主及真实模型对话仍未完成验收。本次不提供新的桌面安装包；Linux 桌面用户仍可使用 v0.1.4。
+
+[完整安装与数据说明](https://github.com/wyf929597870/shiwen-dsh/blob/v0.2.0-dev.0/docs/web-plugin.md) · [主题、皮皮及卸载配置](https://github.com/wyf929597870/shiwen-dsh/blob/v0.2.0-dev.0/bundle/README.md)
+
+### English
+
+The first **standalone Shiwen plugin preview** for stock DSH Web. Requires **DSH 0.2.2-alpha.3, Node.js >=24.9** and pnpm, with a working DSH CLI plugin manager.
+
+- Prebuilt library, agent tools, material/writing/review panels, MCP/HTTP/CLI integration and companion Skill.
+- Native DSH conversations, model settings and Web authentication; no Shiwen Electron shell or desktop patch required.
+- Profile-scoped default storage, retained through plugin removal and reinstallation.
+- Optional Shiwen appearance and Pipi persona; the default bundle preserves host branding and agent preferences.
+
+Download the `.tgz` and `SHA256SUMS-0.2.0-dev.0.txt` into one directory, then run:
+
+```sh
+sha256sum -c SHA256SUMS-0.2.0-dev.0.txt
+# Initialize the Web profile if needed.
+dsh web --help
+# Stop the target DSH Web instance before installing, then restart it.
+dsh plugin --profile web add ./dsh-shiwen-0.2.0-dev.0.tgz --ignore-scripts
+dsh web --no-open
+```
+
+Open the login URL printed by DSH. Installation downloads ordinary npm dependencies but needs no plugin build scripts. No model account, API key or personal data is bundled. Data defaults to `$DSH_HOME/shiwen/web/library`, with DSH_HOME defaulting to `~/.dsh`; existing Shiwen desktop data is not automatically migrated.
+
+**Verified on Linux Web**: installation, login/origin checks, records/date ordering, MCP, optional theme loading, restart persistence, removal and reinstallation. Browser visual/full interaction checks, official Windows/macOS desktop hosts and real-model conversations remain unverified. No new desktop installer is included; v0.1.4 remains available for Linux desktop users.
+
+[Installation and storage guide](https://github.com/wyf929597870/shiwen-dsh/blob/v0.2.0-dev.0/docs/web-plugin.md) · [Appearance, persona and removal](https://github.com/wyf929597870/shiwen-dsh/blob/v0.2.0-dev.0/bundle/README.md)
 
 ## 0.1.4 - 2026-11-06
 

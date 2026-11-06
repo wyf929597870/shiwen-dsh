@@ -2,12 +2,12 @@
 
 为原生 DSH Web 提供素材、日记、文章、回顾和 Agent 工具。预构建包不依赖拾文 Electron 外壳，不需要编译安装脚本。
 
-Requires **DSH 0.2.2-alpha.3** and **Node.js >=24.9**. This is a development build, not a new stable release. Windows/macOS desktop hosts have not yet been validated.
+Requires **DSH 0.2.2-alpha.3** and **Node.js >=24.9**. This is the [0.2.0-dev.0 plugin pre-release](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.0), not a stable release. Windows/macOS desktop hosts have not yet been validated.
 
-在已有 Web profile 中安装本 tgz：
+在已有 Web profile 中安装本 tgz（尚未初始化时先执行 `dsh web --help`）：
 
 ```sh
-dsh plugin --profile web add ./dsh-shiwen-0.2.0-dev.0.tgz
+dsh plugin --profile web add ./dsh-shiwen-0.2.0-dev.0.tgz --ignore-scripts
 dsh web --no-open
 ```
 

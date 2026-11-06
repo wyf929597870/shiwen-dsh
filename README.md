@@ -10,7 +10,7 @@
 
 [为什么做](#为什么做拾文) · [能做什么](#能做什么) · [开始使用](#开始使用) · [数据与隐私](#数据与隐私) · [参与开发](#参与开发)
 
-最新桌面发布 **[0.1.4 · Linux 预览版](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.4)**，仍在开发中。已在 Linux x64 上完成本机桌面验收；Windows、macOS 桌面宿主尚未验收。Web 插件版已可在本仓库构建，见下文。项目采用 [MIT](LICENSE) 许可证。
+最新桌面发布 **[0.1.4 · Linux 预览版](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.4)**，仍在开发中。已在 Linux x64 上完成本机桌面验收；Windows、macOS 桌面宿主尚未验收。Web 插件版提供 [0.2.0-dev.0 预览包](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.0)，见下文。项目采用 [MIT](LICENSE) 许可证。
 
 ## 为什么做拾文
 
@@ -55,7 +55,9 @@
 
 ## 开始使用
 
-### Web 插件版（开发中）
+### Web 插件预览版
+
+已有 **DSH 0.2.2-alpha.3 / Node.js >=24.9** 的用户，可直接下载 **[拾文插件包（.tgz）](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.2.0-dev.0/dsh-shiwen-0.2.0-dev.0.tgz)**，无需克隆源码。安装命令、校验文件和已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.0)。
 
 直接在本仓库运行，不需要 Electron 或 DSH 上游源码：
 
@@ -119,9 +121,9 @@ Markdown 内容存放在本地资料数据库中，并非每条记录都是独�
 | --- | --- |
 | 已完成本机验收 | Linux 桌面启动、资料读写/筛选/排序、删除恢复、重启持久化、外部 MCP/HTTP/CLI、凭据撤销 |
 | 仍需验证 | 全新机器上的完整桌面构建与系统安装/升级、Windows/macOS、真实模型端到端流程，以及不同模型供应商和外部 Agent 配置 |
-| 尚待完成 | 组合包公开发布、自动更新、关闭窗口行为设置、文章导出与版本界面 |
+| 尚待完成 | 自动更新、关闭窗口行为设置、文章导出与版本界面 |
 
-现在可构建并通过 DSH CLI 安装独立组合包，已有 Linux 桌面版继续共用业务模块。组合包尚未公开发布到 npm 或 Release；`dsh-plugin` 话题也不代表官方收录。详见 [插件架构与发布状态](docs/plugin-status.md)。
+现在可构建并通过 DSH CLI 安装独立组合包，已有 Linux 桌面版继续共用业务模块。组合包通过 [GitHub Release](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.0) 提供，尚未发布 npm；`dsh-plugin` 话题也不代表官方收录。详见 [插件架构与发布状态](docs/plugin-status.md)。
 
 ## 参与开发
 
