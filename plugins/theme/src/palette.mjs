@@ -1,0 +1,25 @@
+const pair=(light,dark)=>({light,dark});
+export const tokens={
+  '--dsw-alias-bg-base':pair('#f5f7f3','#1c1f25'),
+  '--dsw-alias-bg-layer-1':pair('#ffffff','#23272e'),
+  '--dsw-alias-bg-layer-2':pair('#eef2ed','#2a2f37'),
+  '--dsw-alias-bg-layer-3':pair('#e2e9e2','#343b43'),
+  '--dsw-alias-label-primary':pair('#263b32','#edf0f3'),
+  '--dsw-alias-label-primary-dimmed':pair('#344b41','#d5dde1'),
+  '--dsw-alias-label-secondary':pair('#5d7166','#a7b2bc'),
+  '--dsw-alias-label-tertiary':pair('#708077','#959faa'),
+  '--dsw-alias-border-l1':pair('#dce4dc','#363c45'),
+  '--dsw-alias-border-l2':pair('#cdd9cf','#414852'),
+  '--dsw-alias-state-business-primary':pair('#267e65','#87dec2'),
+  '--dsw-alias-state-business-tertiary':pair('#deeee5','#284139'),
+  '--dsw-alias-button-info-fill':pair('#267e65','#87dec2'),
+  '--dsw-alias-button-contrast-fill':pair('#267e65','#87dec2'),
+  '--dsw-alias-label-primary-foreground':pair('#ffffff','#142e27'),
+  '--dsw-specific-sidebar-fill':pair('#eaf0e9','#191c21'),
+  '--dsw-specific-sidebar-nav-item-active':pair('#dbe8dd','#284139'),
+  '--dsw-specific-sidebar-nav-item-active-accent':pair('#dbe8dd','#284139'),
+  '--dsw-specific-input-major':pair('#ffffff','#23272e'),
+  '--dsw-focus-ring-color':pair('#267e65','#87dec2'),
+  '--dsw-alias-menu-icon':pair('#496659','#a7c8ba'),
+};
+export const bootCSS=Object.entries(tokens).map(([name,value])=>`${name}:${value.dark}`).join(';');

@@ -1,0 +1,392 @@
+diff --git a/apps/desktop-host/src/index.ts b/apps/desktop-host/src/index.ts
+index 31bbbffe..51053fb9 100644
+--- a/apps/desktop-host/src/index.ts
++++ b/apps/desktop-host/src/index.ts
+@@ -32,7 +32,7 @@ async function main(): Promise<void> {
+     environment: loadLayeredEnv('dsh'),
+     profile: 'desktop',
+     resolvedProfile: { profile, installAnchor },
+-    patchFiles: [],
++    patchFiles: process.env.SHIWEN_APP_PATCH ? [process.env.SHIWEN_APP_PATCH] : [],
+     args: ['--no-open', '--host', '127.0.0.1', '--port', '0'],
+     ...(process.argv[5] === undefined ? {} : {
+       packageManager: {
+diff --git a/apps/desktop/scripts/desktop-build-paths.mjs b/apps/desktop/scripts/desktop-build-paths.mjs
+index edfd9cdf..86077edc 100644
+--- a/apps/desktop/scripts/desktop-build-paths.mjs
++++ b/apps/desktop/scripts/desktop-build-paths.mjs
+@@ -4,14 +4,14 @@ import { isAbsolute, join, resolve } from 'node:path'
+ 
+ const APP_ROOT = resolve(import.meta.dirname, '..')
+ const BUILD_ROOT = join(APP_ROOT, '.desktop-build')
+-const SUPPORTED_TARGETS = new Set(['mac-arm64', 'mac-x64', 'win-x64'])
++const SUPPORTED_TARGETS = new Set(['mac-arm64', 'mac-x64', 'win-x64', 'linux-x64'])
+ 
+ /**
+  * Resolve the fixed build target selected by a packaging environment.
+  * @param {NodeJS.ProcessEnv} env - Packaging environment.
+  * @param {NodeJS.Platform} hostPlatform - Build-host platform used when no target override exists.
+  * @param {string} hostArch - Build-host architecture used when no target override exists.
+- * @returns {'mac-arm64' | 'mac-x64' | 'win-x64'} Supported Desktop target name.
++ * @returns {'mac-arm64' | 'mac-x64' | 'win-x64' | 'linux-x64'} Supported Desktop target name.
+  */
+ export function resolveDesktopBuildTarget(
+   env = process.env,
+@@ -26,7 +26,7 @@ export function resolveDesktopBuildTarget(
+   if (!SUPPORTED_TARGETS.has(target)) {
+     throw new Error(`desktop build paths: unsupported target ${target}`)
+   }
+-  return /** @type {'mac-arm64' | 'mac-x64' | 'win-x64'} */ (target)
++  return /** @type {'mac-arm64' | 'mac-x64' | 'win-x64' | 'linux-x64'} */ (target)
+ }
+ 
+ function assertSupportedTarget(target) {
+@@ -37,7 +37,7 @@ function assertSupportedTarget(target) {
+ 
+ /**
+  * Return the mutable preparation and artifact directories owned by one release target.
+- * @param {'mac-arm64' | 'mac-x64' | 'win-x64'} target - Supported Desktop target name.
++ * @param {'mac-arm64' | 'mac-x64' | 'win-x64' | 'linux-x64'} target - Supported Desktop target name.
+  * @param {NodeJS.ProcessEnv} environment - Packaging environment with an optional absolute cache directory.
+  * @returns {{ root: string, artifacts: string, unsignedArtifacts: string, unnotarizedArtifacts: string, runtime: string, packageSet: string, dsh: string, dshPnpm: string, electron: string, packedDsh: string, packedVendor: string, packedLandlock: string, downloads: string, pnpmStore: string }} Target paths plus shared download and package caches.
+  */
+@@ -70,8 +70,8 @@ export function desktopTargetBuildPaths(target, environment = process.env) {
+ /**
+  * Return the platform and architecture of the payload one release target prepares.
+  * Windows is prepared as x64 only, so this differs from the build host on an arm64 Windows machine.
+- * @param {'mac-arm64' | 'mac-x64' | 'win-x64'} target - Supported Desktop target name.
+- * @returns {{ platform: 'darwin' | 'win32', arch: 'arm64' | 'x64' }} Platform and architecture of the prepared payload.
++ * @param {'mac-arm64' | 'mac-x64' | 'win-x64' | 'linux-x64'} target - Supported Desktop target name.
++ * @returns {{ platform: 'darwin' | 'win32' | 'linux', arch: 'arm64' | 'x64' }} Platform and architecture of the prepared payload.
+  */
+ export function desktopTargetPlatform(target) {
+   assertSupportedTarget(target)
+@@ -79,6 +79,7 @@ export function desktopTargetPlatform(target) {
+     'mac-arm64': { platform: 'darwin', arch: 'arm64' },
+     'mac-x64': { platform: 'darwin', arch: 'x64' },
+     'win-x64': { platform: 'win32', arch: 'x64' },
++    'linux-x64': { platform: 'linux', arch: 'x64' },
+   })
+   return targets[target]
+ }
+diff --git a/apps/desktop/scripts/dev.ts b/apps/desktop/scripts/dev.ts
+index 37515c20..92b3709d 100644
+--- a/apps/desktop/scripts/dev.ts
++++ b/apps/desktop/scripts/dev.ts
+@@ -63,19 +63,20 @@ async function launchElectron(): Promise<void> {
+   const mainPort = debugPort('DSH_DESKTOP_MAIN_INSPECT_PORT', 9229)
+   const rendererPort = debugPort('DSH_DESKTOP_RENDERER_DEBUG_PORT', 9222)
+   const hostPort = debugPort('DSH_DESKTOP_HOST_INSPECT_PORT', 9230)
++  const debug = process.env.SHIWEN_DEBUG === '1'
+   const home = resolve(process.env.DSH_HOME ?? join(DEVELOPMENT_ROOT, 'home'))
+   const userData = resolve(process.env.DSH_DESKTOP_USER_DATA_DIR ?? join(DEVELOPMENT_ROOT, 'electron-user-data'))
+   const environment: NodeJS.ProcessEnv = {
+     ...process.env,
+     DSH_HOME: home,
+     DSH_DESKTOP_PRIMARY_RUNTIME_DIR: process.env.DSH_DESKTOP_PRIMARY_RUNTIME_DIR ?? developmentRuntimeDirectory(),
+-    DSH_DESKTOP_HOST_INSPECT_PORT: String(hostPort),
++    ...(debug ? { DSH_DESKTOP_HOST_INSPECT_PORT: String(hostPort) } : {}),
+     DSH_DESKTOP_OPEN_DEVTOOLS: process.env.DSH_DESKTOP_OPEN_DEVTOOLS ?? '1',
+     ELECTRON_ENABLE_LOGGING: process.env.ELECTRON_ENABLE_LOGGING ?? '1',
+   }
+   console.log(`desktop development: DSH_HOME=${home}`)
+   console.log(`desktop development: userData=${userData}`)
+-  console.log(`desktop development: inspectors main=${String(mainPort)}, renderer=${String(rendererPort)}, host=${String(hostPort)}`)
++  if (debug) console.log(`desktop development: inspectors main=${String(mainPort)}, renderer=${String(rendererPort)}, host=${String(hostPort)}`)
+   if (process.platform === 'darwin') {
+     const executable = prepareDevelopmentApp({ electron, appRoot: APP_ROOT, directory: DEVELOPMENT_ROOT, home, userData,
+       mainPort, rendererPort, hostPort, openDevtools: environment.DSH_DESKTOP_OPEN_DEVTOOLS! })
+@@ -83,8 +84,7 @@ async function launchElectron(): Promise<void> {
+     return
+   }
+   await run(electron, [
+-    `--inspect=127.0.0.1:${String(mainPort)}`,
+-    `--remote-debugging-port=${String(rendererPort)}`,
++    ...(debug ? [`--inspect=127.0.0.1:${String(mainPort)}`, `--remote-debugging-port=${String(rendererPort)}`] : []),
+     `--user-data-dir=${userData}`,
+     APP_ROOT,
+   ], APP_ROOT, environment)
+@@ -120,7 +120,10 @@ async function main(): Promise<void> {
+     release,
+     target: resolveDesktopBuildTarget(),
+   })
+-  await preparePrimaryRuntime()
++  if (process.env.SHIWEN_PREPARED_RUNTIME !== '1') await preparePrimaryRuntime()
++  else if (!existsSync(join(developmentRuntimeDirectory(), 'runtime.json'))) {
++    throw new Error('desktop development: prepared primary runtime is missing')
++  }
+   await launchElectron()
+ }
+ 
+diff --git a/apps/desktop/scripts/development-project.ts b/apps/desktop/scripts/development-project.ts
+index d544ce6d..8802db9d 100644
+--- a/apps/desktop/scripts/development-project.ts
++++ b/apps/desktop/scripts/development-project.ts
+@@ -38,7 +38,7 @@ export interface DevelopmentProjectOptions {
+   /** Release identity written into the disposable project metadata. */
+   readonly release: DesktopRelease
+   /** Build target whose prepared payload the disposable project runs against. */
+-  readonly target: DesktopAutoUpdateTarget
++  readonly target: DesktopAutoUpdateTarget | 'linux-x64'
+ }
+ 
+ function readManifest(path: string): PackageManifest {
+diff --git a/apps/desktop/scripts/prepare-dsh.ts b/apps/desktop/scripts/prepare-dsh.ts
+index a0698880..3f3509d2 100644
+--- a/apps/desktop/scripts/prepare-dsh.ts
++++ b/apps/desktop/scripts/prepare-dsh.ts
+@@ -44,7 +44,9 @@ const STORE_ROOT = BUILD_PATHS.pnpmStore
+ const RUNTIME_ROOT = BUILD_PATHS.runtime
+ const PNPM_BUILD_STATE = BUILD_PATHS.dshPnpm
+ const PACKAGE_SET_ROOT = BUILD_PATHS.packageSet
+-const NODE = join(BUILD_PATHS.electron, process.platform === 'win32' ? 'electron.exe' : 'Electron.app/Contents/MacOS/Electron')
++const NODE = process.env.SHIWEN_DESKTOP === '1' && process.platform === 'linux'
++  ? join(RUNTIME_ROOT, 'primary-runtime', 'dependencies', 'node', 'bin', 'node')
++  : join(BUILD_PATHS.electron, process.platform === 'win32' ? 'electron.exe' : process.platform === 'linux' ? 'electron' : 'Electron.app/Contents/MacOS/Electron')
+ const PNPM = join(RUNTIME_ROOT, 'primary-runtime', 'dependencies', 'pnpm', 'bin', 'pnpm.mjs')
+ 
+ function manifestVersion(path: string, subject: string): string {
+diff --git a/apps/desktop/src/main.ts b/apps/desktop/src/main.ts
+index 1a2488fe..657e2dc4 100644
+--- a/apps/desktop/src/main.ts
++++ b/apps/desktop/src/main.ts
+@@ -71,6 +71,17 @@ import { DesktopQuitConfirmation } from './quit-confirmation.ts'
+ import { DesktopTray } from './tray.ts'
+ import { DesktopBackgroundNotice } from './background-notice.ts'
+ 
++const shiwenDesktop = process.env.SHIWEN_DESKTOP === '1'
++const shiwenIconPath = shiwenDesktop ? process.env.SHIWEN_ICON_PATH : undefined
++if (shiwenDesktop) {
++  app.setName('拾文')
++  if (process.platform === 'linux') {
++    const desktopName = app.isPackaged ? 'shiwen-dsh' : 'shiwen-dsh-dev'
++    app.setDesktopName(`${desktopName}.desktop`)
++    app.commandLine.appendSwitch('class', desktopName)
++  }
++}
++
+ let focusPrimaryWindow = (): void => {}
+ let stopForRecovery = async (): Promise<void> => { await stopOperationReports() }
+ let shuttingDown = false
+@@ -206,13 +217,17 @@ interface RuntimeResources {
+ 
+ function runtimeResources(): RuntimeResources {
+   const development = !app.isPackaged
+-  const node = process.execPath
++  // Linux Electron links GLib globally, which conflicts with Sharp's bundled GLib.
++  // Shiwen runs the Host with the same standalone Node shipped in its primary runtime.
++  const node = shiwenDesktop && process.platform === 'linux'
++    ? join(development ? developmentPrimaryRuntime() : join(process.resourcesPath, 'runtime', 'primary-runtime'), 'dependencies', 'node', 'bin', 'node')
++    : process.execPath
+   const nodeBin = development ? join(app.getAppPath(), 'scripts', 'node-bin') : join(process.resourcesPath, 'runtime', 'bin')
+   const pnpm = (development ? process.env.DSH_DESKTOP_PNPM_ENTRY : undefined)
+     ?? (development ? join(app.getAppPath(), 'node_modules', 'pnpm', 'bin', 'pnpm.mjs')
+       : join(process.resourcesPath, 'runtime', 'primary-runtime', 'dependencies', 'pnpm', 'bin', 'pnpm.mjs'))
+   const dsh = (development ? process.env.DSH_DESKTOP_DSH_DIR : undefined)
+-    ?? (development ? join(app.getAppPath(), '.desktop-build', 'development', 'project') : join(app.getAppPath(), 'dsh'))
++    ?? (development ? join(app.getAppPath(), '.desktop-build', 'development', 'project') : shiwenDesktop ? join(process.resourcesPath, 'dsh') : join(app.getAppPath(), 'dsh'))
+   return { node, nodeBin, pnpm, dsh }
+ }
+ 
+@@ -265,6 +280,7 @@ function createWindow(preload: string, show = false, primary = false): BrowserWi
+     height: 820,
+     minWidth: 520,
+     minHeight: 600,
++    ...(shiwenIconPath === undefined ? {} : { icon: shiwenIconPath }),
+     show,
+     ...(process.platform === 'win32' && primary ? {
+       titleBarStyle: 'hidden' as const,
+@@ -369,6 +385,12 @@ function createWindow(preload: string, show = false, primary = false): BrowserWi
+ }
+ 
+ async function main(): Promise<void> {
++  if (shiwenDesktop && app.isPackaged) {
++    const { setupProfile } = await import(join(process.resourcesPath, 'shiwen', 'profile.mjs'))
++    const { appPatch } = await setupProfile({ root: join(process.resourcesPath, 'shiwen'),
++      home: process.env.DSH_HOME, pluginRoot: join(process.resourcesPath, 'shiwen', 'plugins'), relocate: true })
++    process.env.SHIWEN_APP_PATCH = appPatch
++  }
+   const desktopSettings = await readDesktopSettings(app.getPath('userData'))
+   void pruneCrashReports(app.getPath('logs'))
+   const journalDirectory = process.env.DSH_DESKTOP_UPDATE_JOURNAL_DIR
+@@ -1127,10 +1149,10 @@ async function main(): Promise<void> {
+     updates.dispose()
+   })
+ 
+-  const applicationIconPath = development ? join(app.getAppPath(), 'resources', 'icon-windows.png')
+-    : join(process.resourcesPath, 'icon.png')
++  const applicationIconPath = shiwenIconPath ?? (development ? join(app.getAppPath(), 'resources', 'icon-windows.png')
++    : join(process.resourcesPath, 'icon.png'))
+   app.setAboutPanelOptions({
+-    applicationName: 'DeepSeek Harness',
++    applicationName: shiwenDesktop ? '拾文' : 'DeepSeek Harness',
+     applicationVersion: app.getVersion(),
+     // The release has no separate build number; omit Electron's bundle version.
+     version: '',
+@@ -1189,11 +1211,12 @@ async function main(): Promise<void> {
+     tray?.relabel()
+   }
+   refreshApplicationMenu()
+-  const trayIconPath = development ? join(app.getAppPath(), 'resources', 'tray-windows.ico') : join(process.resourcesPath, 'tray.ico')
+-  if (process.platform === 'win32') {
++  const trayIconPath = shiwenIconPath ?? (development ? join(app.getAppPath(), 'resources', 'tray-windows.ico') : join(process.resourcesPath, 'tray.ico'))
++  if (process.platform === 'win32' || (shiwenDesktop && process.platform === 'linux')) {
+     // The tray is the way back to a hidden window; without it, relaunching the application still focuses it.
+     try {
+       tray = new DesktopTray({ iconPath: trayIconPath, locale: currentDesktopLocale,
++        ...(shiwenDesktop ? { productName: '拾文' } : {}),
+         open: () => { focusPrimaryWindow() }, quit: () => { app.quit() } })
+     } catch (error) { console.warn('desktop tray: unavailable', error) }
+   }
+@@ -1408,7 +1431,7 @@ async function main(): Promise<void> {
+     writeDesktopLocaleCache(app.getPath('userData'), locale.id)
+     windowsLanguage = locale.id
+     refreshApplicationMenu()
+-    if (!enteredWorkspace && needsWelcome({ loggedIn: state.loggedIn, hasApiKey: state.hasApiKey })) {
++    if (process.env.SHIWEN_DESKTOP !== '1' && !enteredWorkspace && needsWelcome({ loggedIn: state.loggedIn, hasApiKey: state.hasApiKey })) {
+       // A later login must retain its own activation policy instead of replaying startup focus.
+       raiseAfterUpdate = false
+       await showWelcome()
+@@ -1432,7 +1455,7 @@ async function main(): Promise<void> {
+     window.focus()
+   }
+ 
+-  if (app.isPackaged || process.env.DSH_DESKTOP_DEV_APP === '1') app.setAsDefaultProtocolClient('dsh')
++  if (!shiwenDesktop && (app.isPackaged || process.env.DSH_DESKTOP_DEV_APP === '1')) app.setAsDefaultProtocolClient('dsh')
+   app.on('open-url', (event, url) => {
+     event.preventDefault()
+     if (url === 'dsh://open' || url === 'dsh://open/') focusPrimaryWindow()
+diff --git a/apps/desktop/src/tray.ts b/apps/desktop/src/tray.ts
+index b2ce416b..f0a297dd 100644
+--- a/apps/desktop/src/tray.ts
++++ b/apps/desktop/src/tray.ts
+@@ -1,4 +1,4 @@
+-/** Windows system tray: the always-present way back to a hidden window and the explicit quit entry. */
++/** Desktop system tray: the always-present way back to a hidden window and the explicit quit entry. */
+ 
+ import { Menu, nativeImage, Tray } from 'electron'
+ import type { DesktopLocale } from './locale.ts'
+@@ -7,6 +7,8 @@ import type { DesktopLocale } from './locale.ts'
+ export interface DesktopTrayOptions {
+   /** Multi-size ICO rendered by `scripts/render-tray-icon.ts`; Windows picks the bitmap for the display scale. */
+   readonly iconPath: string
++  /** Optional downstream product name for tooltip and menu labels. */
++  readonly productName?: string
+   readonly locale: () => DesktopLocale
+   /** Show and focus the primary window. */
+   readonly open: () => void
+@@ -20,7 +22,9 @@ export class DesktopTray {
+ 
+   /** @param options - Icon path, locale reader, and the open and quit actions. */
+   constructor(private readonly options: DesktopTrayOptions) {
+-    const tray = new Tray(nativeImage.createFromPath(options.iconPath))
++    const icon = nativeImage.createFromPath(options.iconPath)
++    if (icon.isEmpty()) throw new Error('desktop tray: icon is empty')
++    const tray = new Tray(process.platform === 'linux' ? icon.resize({ width: 32, height: 32 }) : icon)
+     this.tray = tray
+     tray.on('click', () => { options.open() })
+     this.relabel()
+@@ -31,11 +35,13 @@ export class DesktopTray {
+     const tray = this.tray
+     if (tray === undefined) return
+     const { messages } = this.options.locale()
+-    tray.setToolTip(messages.aboutProduct)
++    const name = this.options.productName ?? messages.aboutProduct
++    const label = (value: string): string => value.replace(messages.aboutProduct, name)
++    tray.setToolTip(name)
+     tray.setContextMenu(Menu.buildFromTemplate([
+-      { label: messages.openApplication, click: () => { this.options.open() } },
++      { label: label(messages.openApplication), click: () => { this.options.open() } },
+       { type: 'separator' },
+-      { label: messages.quitApplication, click: () => { this.options.quit() } },
++      { label: label(messages.quitApplication), click: () => { this.options.quit() } },
+     ]))
+   }
+ 
+diff --git a/apps/desktop/tests/fixtures/pnpm-smoke.mjs b/apps/desktop/tests/fixtures/pnpm-smoke.mjs
+index 5d16769a..0fbaa334 100644
+--- a/apps/desktop/tests/fixtures/pnpm-smoke.mjs
++++ b/apps/desktop/tests/fixtures/pnpm-smoke.mjs
+@@ -2,7 +2,7 @@
+ 
+ import assert from 'node:assert/strict'
+ import { execFileSync } from 'node:child_process'
+-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
++import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+ import { rm } from 'node:fs/promises'
+ import { tmpdir } from 'node:os'
+ import { delimiter, join } from 'node:path'
+@@ -13,7 +13,12 @@ import { delimiter, join } from 'node:path'
+  * @returns {Promise<void>} Resolves after execution and removal of the private installation.
+  */
+ export async function checkPnpm(resourcesRuntime) {
+-  assert.ok(process.versions.electron, 'Run the package-manager smoke with Electron Node mode')
++  if (process.env.SHIWEN_DESKTOP === '1' && process.platform === 'linux') {
++    assert.equal(realpathSync(process.execPath), realpathSync(join(resourcesRuntime, 'primary-runtime/dependencies/node/bin/node')),
++      'Run the Shiwen package-manager smoke with its bundled standalone Node')
++  } else {
++    assert.ok(process.versions.electron, 'Run the package-manager smoke with Electron Node mode')
++  }
+   assert.equal(existsSync(join(resourcesRuntime, 'pnpm')), false, 'Desktop must ship only primary-runtime pnpm')
+   const primary = join(resourcesRuntime, 'primary-runtime')
+   const pnpm = join(primary, 'dependencies', 'pnpm', 'bin', 'pnpm.mjs')
+@@ -36,7 +41,8 @@ export async function checkPnpm(resourcesRuntime) {
+ const assert = require('node:assert/strict')
+ assert.equal(require('desktop-pnpm-smoke-dependency').answer, 42)
+ assert.equal(process.execPath, ${JSON.stringify(process.execPath)})
+-assert.ok(process.versions.electron)
++assert.equal(process.versions.electron, ${JSON.stringify(process.versions.electron)})
++assert.equal(process.versions.node, ${JSON.stringify(process.versions.node)})
+ assert.ok(process.execArgv.includes('--expose-internals'))
+ assert.equal(typeof require('internal/modules/esm/loader').getOrInitializeCascadedLoader, 'function')
+ console.log('desktop-node-script-ok')
+diff --git a/apps/desktop/tests/tray.spec.ts b/apps/desktop/tests/tray.spec.ts
+index 11c3a488..8224afe6 100644
+--- a/apps/desktop/tests/tray.spec.ts
++++ b/apps/desktop/tests/tray.spec.ts
+@@ -15,7 +15,7 @@ const native = await vi.hoisted(async () => {
+   const menus: MenuItemConstructorOptions[][] = []
+   return {
+     trays, FakeTray, menus,
+-    createFromPath: vi.fn((path: string) => ({ path })),
++    createFromPath: vi.fn((path: string) => ({ path, isEmpty: () => false, resize: (size: { width: number; height: number }) => ({ path, ...size }) })),
+     buildFromTemplate: vi.fn((template: MenuItemConstructorOptions[]) => { menus.push(template); return { template } }),
+   }
+ })
+@@ -27,11 +27,11 @@ vi.mock('electron', () => ({
+ 
+ afterEach(() => { native.trays.length = 0; native.menus.length = 0; vi.clearAllMocks() })
+ 
+-function setup(locale = 'en') {
++function setup(locale = 'en', productName?: string) {
+   let current = resolveDesktopLocale(locale)
+   const open = vi.fn()
+   const quit = vi.fn()
+-  const tray = new DesktopTray({ iconPath: 'C:/app/resources/tray.ico', locale: () => current, open, quit })
++  const tray = new DesktopTray({ iconPath: 'C:/app/resources/tray.ico', ...(productName === undefined ? {} : { productName }), locale: () => current, open, quit })
+   return { tray, open, quit, native: native.trays[0]!, setLocale: (next: string) => { current = resolveDesktopLocale(next) } }
+ }
+ 
+@@ -42,7 +42,8 @@ function labels(menu: MenuItemConstructorOptions[]): (string | undefined)[] {
+ it('shows the application icon with its name as the tooltip and an Open / Quit menu', () => {
+   const f = setup()
+   expect(native.createFromPath).toHaveBeenCalledWith('C:/app/resources/tray.ico')
+-  expect(f.native.image).toEqual({ path: 'C:/app/resources/tray.ico' })
++  expect(f.native.image).toMatchObject({ path: 'C:/app/resources/tray.ico' })
++  if (process.platform === 'linux') expect(f.native.image).toMatchObject({ width: 32, height: 32 })
+   expect(f.native.setToolTip).toHaveBeenCalledWith('DeepSeek Harness')
+   expect(labels(native.menus[0]!)).toEqual(['Open DeepSeek Harness', 'separator', 'Quit DeepSeek Harness'])
+   expect(f.native.setContextMenu).toHaveBeenCalledWith({ template: native.menus[0] })
+@@ -70,3 +71,12 @@ it('relabels the menu in the current locale and ignores relabel after disposal',
+   f.tray.relabel()
+   expect(native.menus).toHaveLength(2)
+ })
++
++it('uses the downstream product name in the tooltip and localized menu', () => {
++  const f = setup('zh', '拾文')
++  expect(f.native.setToolTip).toHaveBeenCalledWith('拾文')
++  expect(labels(native.menus[0]!)).toEqual(['打开 拾文', 'separator', '退出 拾文'])
++  f.setLocale('en')
++  f.tray.relabel()
++  expect(labels(native.menus[1]!)).toEqual(['Open 拾文', 'separator', 'Quit 拾文'])
++})

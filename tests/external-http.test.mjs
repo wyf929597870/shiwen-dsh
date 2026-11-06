@@ -1,0 +1,45 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,rm,readFile,stat,writeFile} from 'node:fs/promises';
+import {join,resolve} from 'node:path';
+import {tmpdir} from 'node:os';
+import {request as httpRequest} from 'node:http';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {createStore} from '../plugins/library/legacy/store.mjs';
+import {startExternalServer} from '../integration/http-server.mjs';
+import {createClient} from '../integration/client.mjs';
+const exec=promisify(execFile);
+async function setup(t){const root=await mkdtemp(join(tmpdir(),'shiwen-ext-http-'));const store=createStore(join(root,'library.sqlite'));let server=await startExternalServer({store,root,command:'test-bridge',skillPath:'test-skill'});t.after(async()=>{await server.close();store.close();await rm(root,{recursive:true,force:true});});return {root,store,get server(){return server;},restart:async()=>{await server.close();server=await startExternalServer({store,root,command:'test-bridge',skillPath:'test-skill'});}};}
+test('HTTP 鉴权、权限、浏览器来源隔离与端口重新发现',async t=>{
+ const fixture=await setup(t),{store,root}=fixture;
+ const issued=store.externalClientCreate({name:'HTTP client',scopes:['create']}),request=createClient({root,token:issued.token});
+ const url=fixture.server.status().endpoint;
+ assert.equal((await fetch(url+'/v1/tools')).status,401);
+ assert.equal((await fetch(url+'/v1/tools',{headers:{Authorization:'Bearer '+issued.token,Origin:'https://untrusted.example'}})).status,403);
+ const wrongHost=await new Promise((resolve,reject)=>{const req=httpRequest(url+'/v1/tools',{headers:{Authorization:'Bearer '+issued.token,Host:'untrusted.example'}},res=>{res.resume();resolve(res.statusCode);});req.on('error',reject);req.end();});assert.equal(wrongHost,403);
+ assert.equal((await request('/v1/tools')).tools.length,2);
+ await assert.rejects(()=>request('/v1/tools/call',{name:'shiwen_search',arguments:{}}),/权限/);
+ const args={requestId:'http-one',kind:'idea',origin:'personal',body:'HTTP 保存的想法'};
+ const saved=(await request('/v1/tools/call',{name:'shiwen_save',arguments:args})).result;
+ const discovery=await readFile(join(root,'external-endpoint.json'),'utf8');assert.ok(!discovery.includes(issued.token));assert.equal((await stat(join(root,'external-endpoint.json'))).mode&0o777,0o600);
+ await fixture.restart();assert.equal((await request('/v1/tools/call',{name:'shiwen_save',arguments:args})).result.id,saved.id);
+ store.externalClientRevoke({id:issued.id});await assert.rejects(()=>request('/v1/tools'),/撤销/);
+});
+test('CLI 文件输入和真实 MCP stdio 工具发现、写入、读取、撤销凭据',async t=>{
+ const {root,store}=await setup(t),issued=store.externalClientCreate({name:'External Agent',scopes:['create','read','update','delete']});
+ const tokenFile=join(root,'token');await writeFile(tokenFile,issued.token,{mode:0o600});
+ const cli=resolve('integration/cli.mjs'),env={...process.env,SHIWEN_ROOT_DIR:root,SHIWEN_TOKEN_FILE:tokenFile};delete env.SHIWEN_TOKEN;
+ const input=join(root,'input.json');await writeFile(input,JSON.stringify({requestId:'cli-save',kind:'journal',origin:'personal',body:'CLI 日记'}));
+ const saved=JSON.parse((await exec(process.execPath,[cli,'call','shiwen_save','--input',input],{env})).stdout).result;
+ assert.equal(saved.origin,'personal');assert.equal(saved.client.name,'External Agent');
+ const {Client}=await import('@modelcontextprotocol/client');const {StdioClientTransport}=await import('@modelcontextprotocol/client/stdio');
+ const transport=new StdioClientTransport({command:process.execPath,args:[cli,'mcp'],env,stderr:'pipe'});
+ const client=new Client({name:'shiwen-integration-test',version:'1.0.0'});t.after(()=>client.close());
+ await client.connect(transport);
+ const {tools}=await client.listTools();assert.equal(tools.length,8);
+ const result=await client.callTool({name:'shiwen_read',arguments:{id:saved.id}});assert.ok(!result.isError);const record=JSON.parse(result.content[0].text);assert.equal(record.body,'CLI 日记');
+ const edited=await client.callTool({name:'shiwen_update',arguments:{requestId:'mcp-update',id:saved.id,revision:record.revision,kind:'idea',origin:'external',url:'https://example.org'}});assert.ok(!edited.isError);assert.equal(store.get(saved.id).kind,'idea');
+ store.externalClientRevoke({id:issued.id});const refused=await client.callTool({name:'shiwen_read',arguments:{id:saved.id}});assert.equal(refused.isError,true);
+ await client.close();
+});

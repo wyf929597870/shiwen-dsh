@@ -1,0 +1,24 @@
+import {spawn,execFileSync} from 'node:child_process';
+import {mkdir,cp,writeFile,readFile} from 'node:fs/promises';
+import {join,resolve} from 'node:path';
+const root=resolve(import.meta.dirname,'..'),dsh=join(root,'upstream/dsh');
+const target=join(dsh,'apps/desktop/.desktop-build/targets/linux-x64'),runtime=join(target,'runtime');
+const pnpm=join(dsh,'apps/desktop/node_modules/pnpm/bin/pnpm.mjs');
+const env={...process.env,SHIWEN_DESKTOP:'1',DSH_DESKTOP_UNSIGNED:'1',DSH_DESKTOP_TARGET_PLATFORM:'linux',DSH_DESKTOP_TARGET_ARCH:'x64',DSH_DESKTOP_PACKAGE_CACHE_DIR:join(root,'.runtime')};delete env.ELECTRON_RUN_AS_NODE;
+async function run(args){await new Promise((ok,no)=>{const p=spawn(process.execPath,[pnpm,...args],{cwd:dsh,env,stdio:'inherit'});p.once('error',no);p.once('exit',code=>code===0?ok():no(Error(`Preparation failed (${code}): ${args.join(' ')}`)))});}
+await mkdir(target,{recursive:true});
+await cp(join(root,'.runtime/electron-44.7.0'),join(target,'electron'),{recursive:true});
+const node=execFileSync(join(runtime,'primary-runtime/dependencies/node/bin/node'),['-p','process.versions.node'],{env,encoding:'utf8'}).trim();
+const pnpmVersion=JSON.parse(await readFile(join(runtime,'primary-runtime/dependencies/pnpm/package.json'),'utf8')).version;
+await mkdir(join(runtime,'bin'),{recursive:true});await cp(join(dsh,'apps/desktop/scripts/node-bin'),join(runtime,'bin'),{recursive:true});
+await writeFile(join(runtime,'versions.json'),JSON.stringify({schemaVersion:1,node,pnpm:pnpmVersion},null,2)+'\n');
+await mkdir(join(runtime,'cli/bin'),{recursive:true});
+await cp(join(dsh,'apps/desktop/lib/command-manager-entry.js'),join(runtime,'cli/command-manager.js'));
+await writeFile(join(runtime,'cli/bin/dsh'),'#!/bin/sh\nset -e\nresources=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd -P)\nexec "$resources/runtime/primary-runtime/dependencies/node/bin/node" --expose-internals "$resources/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js" "$@"\n',{mode:0o755});
+await run(['run','build:artifacts','--profile','local']);
+await run(['exec','tsx','apps/desktop/scripts/pack-local-packages.ts','--concurrency','4','--out',join(target,'packed/dsh')]);
+await run(['--dir','apps/desktop-host','pack','--pack-destination',join(target,'packed/dsh')]);
+await run(['run','release:pack','--family','vendor','--out',join(target,'packed/vendor')]);
+await run(['--dir','native/system/packages/entry','pack','--pack-destination',join(target,'packed/landlock')]);
+await run(['--dir','apps/desktop','run','prepare:packages']);
+await run(['--dir','apps/desktop','run','prepare:dsh']);

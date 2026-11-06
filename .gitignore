@@ -1,0 +1,40 @@
+# Downloaded dependencies, upstream checkout and local build caches
+node_modules/
+/upstream/
+/.runtime/
+/plugins/*/lib/
+/dist/
+/release/
+/coverage/
+/.qa/
+
+# User data, imports, backups and local credentials
+/data/
+/backups/
+/workspaces/
+/.dsh/
+/.shiwen/
+/.config/
+/.agents/
+/.codex/
+/.aws/
+*.sqlite*
+*.db
+*.db-wal
+*.db-shm
+*.log
+.env
+.env.*
+!.env.example
+external-endpoint.json
+*token.json
+*token.txt
+*.pem
+*.key
+
+# Editor and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp

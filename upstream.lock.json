@@ -1,0 +1,13 @@
+{
+  "repository": "https://github.com/deepseek-ai/deepseek-harness.git",
+  "commit": "8bd073392eef6f54e921a093b95076248eb08cbb",
+  "version": "0.2.2-alpha.3",
+  "packageManager": "pnpm@11.28.5",
+  "electron": "44.7.0",
+  "patches": [
+    {
+      "path": "patches/desktop/0001-linux-development.patch",
+      "sha256": "867c05093551a1626ad6a83edeed9f35c3b4b43e07a191d222098e0acac0cbdd"
+    }
+  ]
+}

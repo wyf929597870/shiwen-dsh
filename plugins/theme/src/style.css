@@ -1,0 +1,7 @@
+body{--dsw-font-family:'Noto Sans CJK SC','Microsoft YaHei',system-ui,sans-serif;--dsw-radius-lg:10px;--dsw-radius-md:7px}
+.shiwen-sidebar-mark{display:block;object-fit:contain;flex-shrink:0}
+/* DSH gives both brand slots a 24px row; keep their contents inside it. */
+.shiwen-wordmark{display:block;white-space:nowrap;font-size:20px;font-weight:650;letter-spacing:1px;color:var(--dsw-alias-label-primary);line-height:24px}
+.shiwen-hero{display:flex;align-items:center;gap:18px;text-align:left;max-width:100%;padding:12px}.shiwen-hero h1{font-size:28px;font-weight:600;letter-spacing:-.5px;margin:0 0 10px}.shiwen-hero p{font-size:13px;line-height:1.8;color:var(--dsw-alias-label-secondary);margin:0}.shiwen-hero img{object-fit:contain;flex-shrink:0}
+span:has(> [data-slot="conversation.hero.brand.mark"] > .shiwen-hero) + span{display:none}
+@media(max-width:650px){.shiwen-hero{gap:12px}.shiwen-hero h1{font-size:22px}.shiwen-hero img{width:50px;height:50px}.shiwen-hero p{font-size:12px}}

@@ -1,0 +1,21 @@
+import {spawn} from 'node:child_process';
+import {existsSync} from 'node:fs';
+import {mkdir} from 'node:fs/promises';
+import {homedir} from 'node:os';
+import {join,resolve} from 'node:path';
+import {setupProfile} from './profile.mjs';
+const root=resolve(import.meta.dirname,'..'),dsh=join(root,'upstream/dsh');
+if(process.platform!=='linux'||process.arch!=='x64')throw new Error('当前启动脚本仅支持 Linux x64。');
+const runtime=join(dsh,'apps/desktop/.desktop-build/targets/linux-x64/runtime/primary-runtime');
+const node=join(runtime,'dependencies/node/bin/node'),pnpm=join(dsh,'apps/desktop/node_modules/pnpm/bin/pnpm.mjs');
+const electron=join(root,'.runtime/electron-44.7.0/electron');
+for(const [path,label] of [[join(root,'assets/shiwen-icon-rounded.png'),'拾文图标'],[node,'Node 运行资源'],[pnpm,'DSH 构建依赖'],[electron,'Electron 44.7.0'],[join(dsh,'apps/desktop/lib/main.js'),'原生桌面构建产物']])if(!existsSync(path))throw new Error(`${label}缺失：${path}。请先按 README 准备构建环境。`);
+const base=resolve(process.env.SHIWEN_ROOT_DIR??join(process.env.XDG_DATA_HOME??join(homedir(),'.local/share'),'shiwen-dsh'));
+const home=resolve(process.env.DSH_HOME??join(base,'dsh')),userData=resolve(process.env.DSH_DESKTOP_USER_DATA_DIR??join(base,'desktop')),library=resolve(process.env.SHIWEN_DATA_DIR??join(base,'library'));
+await mkdir(library,{recursive:true,mode:0o700});const {appPatch}=await setupProfile({root,home,relocate:true});
+await new Promise((resolvePromise,reject)=>{
+ const child=spawn(process.execPath,[join(root,'scripts/build.mjs')],{cwd:root,stdio:'inherit'});child.on('error',reject);child.on('exit',code=>code===0?resolvePromise():reject(new Error('拾文插件构建失败')));
+});
+const env={...process.env,DSH_HOME:home,DSH_DESKTOP_USER_DATA_DIR:userData,SHIWEN_DATA_DIR:library,SHIWEN_DESKTOP:'1',SHIWEN_ICON_PATH:join(root,'assets/shiwen-icon-rounded.png'),SHIWEN_PREPARED_RUNTIME:'1',SHIWEN_APP_PATCH:appPatch,DSH_DESKTOP_PACKAGE_CACHE_DIR:join(root,'.runtime'),DSH_DESKTOP_OPEN_DEVTOOLS:'0',ELECTRON_OVERRIDE_DIST_PATH:join(root,'.runtime/electron-44.7.0')};delete env.ELECTRON_RUN_AS_NODE;
+const child=spawn(node,[pnpm,'run','start:desktop'],{cwd:dsh,env,stdio:'inherit'});child.on('error',error=>{console.error(error.message);process.exitCode=1;});child.on('exit',(code,signal)=>{process.exitCode=code??(signal?1:0);});
+for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>child.kill(signal));

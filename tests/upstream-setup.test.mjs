@@ -1,0 +1,35 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtempSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {execFileSync} from 'node:child_process';
+import {setupUpstream,checkPatch} from '../scripts/setup-upstream.mjs';
+
+test('上游准备可重复运行、校验补丁，并拒绝覆盖已有开发改动',t=>{
+ const dir=mkdtempSync(join(tmpdir(),'shiwen-upstream-'));
+ t.after(()=>rmSync(dir,{recursive:true,force:true}));
+ const git=(...args)=>execFileSync('git',args,{encoding:'utf8',stdio:['pipe','pipe','pipe']});
+ const repository=join(dir,'source'),target=join(dir,'checkout');
+ git('init',repository);
+ writeFileSync(join(repository,'example.txt'),'original\n');
+ git('-C',repository,'add','example.txt');
+ git('-C',repository,'-c','user.name=Fixture','-c','user.email=fixture@example.invalid','-c','commit.gpgsign=false','commit','-m','fixture');
+ const commit=git('-C',repository,'rev-parse','HEAD').trim();
+ writeFileSync(join(repository,'example.txt'),'patched\n');
+ const patch=git('-C',repository,'diff','--binary','--no-ext-diff','--no-color','HEAD');
+ const options={target,repository,commit,patch};
+ assert.throws(()=>setupUpstream({...options,checkOnly:true}),/missing/);
+ assert.equal(setupUpstream(options),'prepared');
+ assert.equal(readFileSync(join(target,'example.txt'),'utf8'),'patched\n');
+ assert.equal(setupUpstream({...options,checkOnly:true}),'already prepared');
+ checkPatch(options);
+ assert.throws(()=>checkPatch({...options,patch:patch.replace('-original','-wrong base')}));
+ assert.throws(()=>setupUpstream({...options,commit:'0'.repeat(40)}),/revision differs/);
+ writeFileSync(join(target,'example.txt'),'my changes\n');
+ assert.throws(()=>setupUpstream(options),/changes differ/);
+ assert.equal(readFileSync(join(target,'example.txt'),'utf8'),'my changes\n');
+ writeFileSync(join(target,'example.txt'),'patched\n');
+ git('-C',target,'add','example.txt');
+ assert.throws(()=>setupUpstream(options),/staged changes/);
+});

@@ -1,0 +1,48 @@
+{
+  "name": "shiwen-dsh-desktop",
+  "version": "0.1.4",
+  "private": true,
+  "type": "module",
+  "description": "拾文桌面客户端，以 DSH 为底座、以插件集成个人知识与创作功能",
+  "license": "MIT",
+  "workspaces": [
+    "plugins/*"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "node scripts/start-native.mjs",
+    "dev": "node scripts/start-native.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "desktop:install": "node scripts/install-desktop-entry.mjs",
+    "prepare:linux": "node scripts/prepare-linux.mjs",
+    "package:linux": "node scripts/package-linux.mjs",
+    "upstream:prepare": "node scripts/setup-upstream.mjs",
+    "upstream:check": "node scripts/setup-upstream.mjs --check",
+    "check:source": "node scripts/check-source.mjs"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh": "0.2.2-alpha.3",
+    "@modelcontextprotocol/server": "2.2.0",
+    "diff": "^8.0.0",
+    "js-yaml": "^4.3.2",
+    "markdown-it": "^15.0.3",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.2.0",
+    "electron": "45.2.2",
+    "electron-builder": "26.18.0",
+    "esbuild": "0.25.12"
+  },
+  "engines": {
+    "node": ">=24.9.0"
+  },
+  "homepage": "https://github.com/wyf929597870/shiwen-dsh",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wyf929597870/shiwen-dsh.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wyf929597870/shiwen-dsh/issues"
+  }
+}
