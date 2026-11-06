@@ -3,7 +3,8 @@ const text=(zh,en)=>language==='zh'?zh:en;
 function sections(){const mode=form.elements.mode.value;document.querySelector('#local').hidden=mode!=='local';document.querySelector('#remote').hidden=mode!=='remote';}
 form.addEventListener('change',sections);
 window.shiwenConnection.onError(message=>{error.textContent=message;});
-window.shiwenConnection.get().then(({preference,language:lang,current})=>{
+window.shiwenConnection.get().then(({preference,language:lang,current,version})=>{
+ document.querySelector('#version').textContent='v'+version;
  language=lang;document.documentElement.lang=lang==='zh'?'zh-CN':'en';
  for(const item of document.querySelectorAll('[data-zh]'))item.textContent=item.dataset[lang];
  form.elements.mode.value=preference.mode;document.querySelector('#lan').checked=preference.lan??true;document.querySelector('#port').value=preference.port??3080;document.querySelector('#address').value=preference.address??'';

@@ -7,6 +7,7 @@ import {controlServer,ensureServer,stopServer} from '../scripts/server-control.m
 import {serverOptions} from '../scripts/server-config.mjs';
 import {connectionPreference,connectionPartition,remoteTarget,quitConnection,recognizedLocalPreference,authenticateRemote} from './connection.mjs';
 const base=resolve(process.env.SHIWEN_ROOT_DIR??join(process.env.XDG_DATA_HOME??join(homedir(),'.local/share'),'shiwen-dsh'));
+const version=app.isPackaged?app.getVersion():JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8')).version;
 app.setName('拾文');app.setPath('userData',join(base,'desktop'));
 if(!app.requestSingleInstanceLock()){app.quit();}else{
  let window,settings,tray,connected,preference,connecting=false,quitting=false,exitAllowed=false,localSeen;
@@ -29,7 +30,7 @@ if(!app.requestSingleInstanceLock()){app.quit();}else{
  function updateMenu(){
   const target=connected?(connected.mode==='local'?(connected.recognized?t('本机服务 · 自动识别','Local service · detected'):t('本机服务','Local service')):t('远端服务','Remote service'))+' · '+connected.origin:t('未连接','Not connected');
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-   {label:t('拾文','Shiwen'),submenu:[{label:target,enabled:false},{label:t('连接设置…','Connection settings…'),accelerator:'CmdOrCtrl+,',click:()=>showSettings()},{type:'separator'},{label:t('退出','Quit'),accelerator:'CmdOrCtrl+Q',click:()=>app.quit()}]},
+   {label:t('拾文','Shiwen'),submenu:[{label:`${t('拾文客户端','Shiwen client')} v${version}`,enabled:false},{label:target,enabled:false},{label:t('连接设置…','Connection settings…'),accelerator:'CmdOrCtrl+,',click:()=>showSettings()},{type:'separator'},{label:t('退出','Quit'),accelerator:'CmdOrCtrl+Q',click:()=>app.quit()}]},
    {label:t('编辑','Edit'),submenu:[{role:'undo'},{role:'redo'},{type:'separator'},{role:'cut'},{role:'copy'},{role:'paste'},{role:'selectAll'}]},
    {label:t('查看','View'),submenu:[{role:'reload'},{role:'resetZoom'},{role:'zoomIn'},{role:'zoomOut'},{role:'togglefullscreen'}]}
   ]));
@@ -74,7 +75,7 @@ if(!app.requestSingleInstanceLock()){app.quit();}else{
    candidate=new BrowserWindow({show:false,width:1320,height:880,minWidth:760,minHeight:600,title:'拾文',icon,backgroundColor:'#1d2126',webPreferences:{contextIsolation:true,nodeIntegration:false,sandbox:true,partition:connectionPartition(next.mode,origin)}});
    protect(candidate,origin);
    candidate.webContents.on('page-title-updated',event=>event.preventDefault());
-   candidate.setTitle(`拾文 · ${next.mode==='local'?(recognized?t('本机 · 自动识别','Local · detected'):t('本机','Local')):t('远端','Remote')} · ${origin}`);
+   candidate.setTitle(`拾文 v${version} · ${next.mode==='local'?(recognized?t('本机 · 自动识别','Local · detected'):t('本机','Local')):t('远端','Remote')} · ${origin}`);
    if(next.mode==='remote')await authenticateRemote(candidate.webContents.session,origin,input);
    let loadTimer;
    try{await Promise.race([candidate.loadURL(url),new Promise((_,reject)=>{loadTimer=setTimeout(()=>reject(Error(t('连接超时，请检查服务地址与网络。','Connection timed out. Check the address and network.'))),15000);})]);}finally{clearTimeout(loadTimer);}
@@ -108,9 +109,9 @@ if(!app.requestSingleInstanceLock()){app.quit();}else{
  app.on('second-instance',()=>{if(window){window.show();window.focus();}else void showSettings();});
  // Do not await ready at ESM top level: Electron waits for module evaluation first.
  void app.whenReady().then(async()=>{
- tray=new Tray(nativeImage.createFromPath(icon).resize({width:24,height:24}));tray.setToolTip('拾文');tray.on('click',()=>{if(window){window.show();window.focus();}else void showSettings();});
+ tray=new Tray(nativeImage.createFromPath(icon).resize({width:24,height:24}));tray.setToolTip(`拾文 v${version}`);tray.on('click',()=>{if(window){window.show();window.focus();}else void showSettings();});
  updateMenu();
- ipcMain.handle('connection:get',event=>{if(!trusted(event))throw Error('Forbidden');return {preference:preference??{mode:'local',lan:true,port:3080},language:zh()?'zh':'en',current:connected?{mode:connected.mode,origin:connected.origin}:null};});
+ ipcMain.handle('connection:get',event=>{if(!trusted(event))throw Error('Forbidden');return {version,preference:preference??{mode:'local',lan:true,port:3080},language:zh()?'zh':'en',current:connected?{mode:connected.mode,origin:connected.origin}:null};});
  ipcMain.handle('connection:connect',async(event,input)=>{if(!trusted(event))throw Error('Forbidden');try{return await connect(input);}catch(error){return {error:message(error)};}});
  try{preference=connectionPreference(JSON.parse(await readFile(preferences,'utf8')));await connect(preference);}catch(error){if(error.code!=='ENOENT')console.error('[shiwen-client]',message(error));await showSettings(error.code==='ENOENT'?'':message(error));}
  }).catch(error=>{console.error('[shiwen-client]',message(error));app.exit(1);});
