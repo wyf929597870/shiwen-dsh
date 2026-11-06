@@ -3,6 +3,76 @@
 0.1.4 是本仓库首次公开的 Linux 预览版；0.1.0–0.1.3 为本地开发与打包记录。
 0.1.4 is this repository's first public Linux preview; 0.1.0–0.1.3 are local development builds.
 
+## 0.2.0-dev.1 - 2026-11-06
+
+### 中文
+
+DSH 独立插件预览版，要求 **DSH 0.2.2-alpha.3 / Node.js >=24.9**。
+
+- 新增「外部接入 → 浏览器访问」，显示当前资料位置和 profile，并复制当前 Host 的本机浏览器登录地址。
+- 只有浏览器会话可以获取登录地址；拒绝临时 API Peer 换取浏览器凭据。
+- 在原生 Web 的安装、重启、卸载重装测试中增加新入口与身份限制验证。
+
+本次只提供**本机访问**入口，局域网和独立后端服务尚未实现；不同 profile 的资料仍然隔离。Linux 桌面用户可使用同批发布的 [v0.1.5](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.5)。
+
+下载 `.tgz` 和 `SHA256SUMS-0.2.0-dev.1.txt`，停止目标 DSH Web 实例后运行：
+
+```sh
+sha256sum -c SHA256SUMS-0.2.0-dev.1.txt
+# 首次使用时初始化 Web profile；已有则跳过。
+dsh web --help
+dsh plugin --profile web add ./dsh-shiwen-0.2.0-dev.1.tgz --ignore-scripts
+dsh web --no-open
+```
+
+主题与皮皮继续可选；数据、模型配置不自动迁移。本包未发布到 npm。已验证 Linux 原生 Web 下的安装、鉴权、资料读写、MCP、主题、持久化与卸载重装；浏览器视觉/完整点击流程、官方 Windows/macOS 宿主及真实模型调用仍未验收。
+
+### English
+
+Standalone plugin preview for **DSH 0.2.2-alpha.3 / Node.js >=24.9**.
+
+- Add **External access → Browser access**, showing the library/profile and copying this Host's local browser login URL.
+- Restrict login URL issuance to browser sessions; temporary API Peers cannot exchange their credentials for browser access.
+- Extend stock Web installation/restart/removal tests with the new endpoint and identity restrictions.
+
+This release provides **same-computer access only**. LAN access and a separate backend service are not implemented; profiles remain isolated. Linux desktop users can install [v0.1.5](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.5).
+
+Download the tarball and checksum file, stop the target DSH Web instance, and run the commands above. Appearance/Pipi remain optional; no automatic data or model-configuration migration. Not published to npm. Verified on Linux stock Web: installation, authentication, records, MCP, appearance, persistence and removal/reinstallation. Browser visuals/full clicks, official Windows/macOS hosts and real-model calls remain unverified.
+
+## 0.1.5 - 2026-11-06
+
+### 中文
+
+Linux x64 预览版。新增「外部接入 → 浏览器访问」，在同一台电脑的浏览器访问桌面端正在运行的 DSH 后端，共用已保存的资料和原生会话。
+
+- 显示当前资料库、profile 和本机地址，支持复制完整登录地址及手动复制回退。
+- 登录地址仅向浏览器会话开放；临时 API Peer 无法换取浏览器凭据。
+- 保留现有版本冲突检查，防止旧草稿覆盖另一端的新修改。
+- 同步更新中英文使用说明和隔离验收脚本。
+
+**范围**：仅本机浏览器访问。保持桌面端运行；重启后重新复制登录地址。局域网访问、独立后端服务、手机本地资料库和离线同步尚未实现。独立 Web profile 不会自动合并资料，未保存草稿不跨端同步。
+
+下载 `.deb` 与 `SHA256SUMS-0.1.5.txt` 到同一目录，完整退出拾文后运行：
+
+```sh
+sha256sum -c SHA256SUMS-0.1.5.txt
+sudo apt install ./shiwen-dsh_0.1.5_amd64.deb
+```
+
+**验证**：35 项自动测试；实际打包 Desktop Host 的登录、API Peer 拒绝、双客户端读写、冲突、删除恢复和重启持久化；原生 Web 插件安装与生命周期检查。此次新增面板的实际浏览器点击、视觉验收、全新机器系统级安装、Windows/macOS 和真实模型调用尚未完成验证。安装包不包含个人资料或凭据。
+
+### English
+
+Linux x64 preview. **External access → Browser access** connects a browser on the same computer to the running desktop DSH Host, sharing saved records and native conversations.
+
+- Display the current library, profile and local address; copy the full login URL with a manual-copy fallback.
+- Issue browser login URLs only to browser sessions; temporary API Peers are refused.
+- Preserve revision checks against stale edits and update bilingual usage/verification docs.
+
+**Scope**: same-computer access only. Keep the desktop app running and copy a new login URL after restart. LAN access, an independent backend service, mobile local storage and offline synchronization are not implemented. Separate Web profiles are not merged; unsaved drafts are not synchronized.
+
+Download the `.deb` and `SHA256SUMS-0.1.5.txt`, fully quit Shiwen, then run the commands above. Verified: 35 automated tests, the packaged Desktop Host with two HTTP clients, authentication/API Peer denial, shared writes, conflicts, delete/restore and restart persistence, plus stock Web plugin lifecycle checks. New panel browser clicks/visuals, fresh-machine system installation, Windows/macOS and real-model calls remain unverified. No personal data or credentials are bundled.
+
 ## 0.2.0-dev.0 - 2026-11-06
 
 ### 中文

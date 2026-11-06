@@ -2,12 +2,12 @@
 
 为原生 DSH Web 提供素材、日记、文章、回顾和 Agent 工具。预构建包不依赖拾文 Electron 外壳，不需要编译安装脚本。
 
-Requires **DSH 0.2.2-alpha.3** and **Node.js >=24.9**. This is the [0.2.0-dev.0 plugin pre-release](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.0), not a stable release. Windows/macOS desktop hosts have not yet been validated.
+Requires **DSH 0.2.2-alpha.3** and **Node.js >=24.9**. This is the [0.2.0-dev.1 plugin pre-release](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.1), not a stable release. Windows/macOS desktop hosts have not yet been validated.
 
 在已有 Web profile 中安装本 tgz（尚未初始化时先执行 `dsh web --help`）：
 
 ```sh
-dsh plugin --profile web add ./dsh-shiwen-0.2.0-dev.0.tgz --ignore-scripts
+dsh plugin --profile web add ./dsh-shiwen-0.2.0-dev.1.tgz --ignore-scripts
 dsh web --no-open
 ```
 
@@ -34,6 +34,10 @@ Data is stored on the DSH host, not in browser storage. Different profiles have 
 The theme and Pipi are opt-in. Copy selected rows from `appearance.patch.yml` into your profile patch. Remove these custom rows before uninstalling the bundle. Existing model credentials and presets are not overwritten.
 
 ## 外部 Agent / External agents
+
+共用桌面资料：在桌面端「外部接入 → 浏览器访问」复制本机登录地址。浏览器连接同一个 DSH Host，无需重复导入；保持桌面端运行，重启后重新复制。独立启动的 Web profile 仍然隔离，未保存草稿也不跨窗口同步。此入口从 `0.2.0-dev.1` 提供，仅限本机访问，尚不支持局域网或独立后端服务。
+
+To share desktop data, copy the local browser login URL from **External access → Browser access** in the desktop app. Keep the app running; copy a fresh URL after restarting. Separate Web profiles and unsaved drafts remain independent. Available since `0.2.0-dev.1` for same-computer access; LAN access and a separate backend service are not implemented.
 
 在外部接入页创建凭据并复制 MCP JSON。命令、参数和资料路径根据宿主生成，接口仍只监听宿主的回环地址。远程浏览器看到的路径属于 DSH 服务所在电脑；MCP 配置应在那台电脑使用。旧资料导入也是读取宿主文件路径。
 

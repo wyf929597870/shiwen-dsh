@@ -10,7 +10,7 @@
 
 [为什么做](#为什么做拾文) · [能做什么](#能做什么) · [开始使用](#开始使用) · [数据与隐私](#数据与隐私) · [参与开发](#参与开发)
 
-最新桌面发布 **[0.1.4 · Linux 预览版](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.4)**，仍在开发中。已在 Linux x64 上完成本机桌面验收；Windows、macOS 桌面宿主尚未验收。Web 插件版提供 [0.2.0-dev.0 预览包](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.0)，见下文。项目采用 [MIT](LICENSE) 许可证。
+最新桌面发布 **[0.1.5 · Linux 预览版](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.5)**，仍在开发中。已在 Linux x64 上完成本机桌面验收；Windows、macOS 桌面宿主尚未验收。Web 插件版提供 [0.2.0-dev.1 预览包](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.1)，见下文。项目采用 [MIT](LICENSE) 许可证。
 
 ## 为什么做拾文
 
@@ -57,7 +57,7 @@
 
 ### Web 插件预览版
 
-已有 **DSH 0.2.2-alpha.3 / Node.js >=24.9** 的用户，可直接下载 **[拾文插件包（.tgz）](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.2.0-dev.0/dsh-shiwen-0.2.0-dev.0.tgz)**，无需克隆源码。安装命令、校验文件和已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.0)。
+已有 **DSH 0.2.2-alpha.3 / Node.js >=24.9** 的用户，可直接下载 **[拾文插件包（.tgz）](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.2.0-dev.1/dsh-shiwen-0.2.0-dev.1.tgz)**，无需克隆源码。安装命令、校验文件和已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.1)。
 
 直接在本仓库运行，不需要 Electron 或 DSH 上游源码：
 
@@ -72,17 +72,23 @@ npm run start:web -- --no-open
 
 ### Linux 桌面版
 
-下载 **[Linux x64 安装包（.deb）](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.4/shiwen-dsh_0.1.4_amd64.deb)**。这是预览版，适合愿意反馈问题的用户；Windows 版本暂未发布。校验文件与已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.4)。
+下载 **[Linux x64 安装包（.deb）](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.5/shiwen-dsh_0.1.5_amd64.deb)**。这是预览版，适合愿意反馈问题的用户；Windows 版本暂未发布。校验文件与已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.5)。
 
 完整退出拾文，在下载目录安装或升级：
 
 ```bash
-sudo apt install ./shiwen-dsh_0.1.4_amd64.deb
+sudo apt install ./shiwen-dsh_0.1.5_amd64.deb
 ```
 
 从应用菜单打开「拾文」，或运行 `shiwen-dsh`。安装包包含 Electron、Node、DSH 和拾文插件，无需另外安装 Node 或保留源码目录。当前桌面验证环境为 Ubuntu 26.04 x64，其他发行版仍需验证。
 
 先在素材页新建一条记录即可开始使用。使用 AI 对话前，需要完成 DSH 的模型与凭据配置；安装包不附带模型服务账号或 API Key。
+
+### Web 与桌面共用资料
+
+在桌面端打开「外部接入 → 浏览器访问」，复制登录地址到本机浏览器，即可访问**同一个 DSH 后端、同一份资料与会话**。无需另启 Web 服务或重新导入。切换页面或点击「刷新」可读取另一端保存的记录；未保存草稿保留在各自窗口，同时编辑同一条记录时，旧版本保存会被拒绝。
+
+使用时保持桌面端运行；退出程序会断开浏览器，重启后重新复制地址。独立启动的 `shiwen-web` 仍是另一套 profile，不会自动合并已有资料。此入口从 `v0.1.5` 桌面版 / `v0.2.0-dev.1` 插件版提供，仅限本机访问；局域网和独立后端尚未实现。详见 [共用资料说明](docs/web-plugin.md#共用桌面后端--share-the-desktop-host)。
 
 ### 已有旧版资料
 
@@ -123,7 +129,7 @@ Markdown 内容存放在本地资料数据库中，并非每条记录都是独�
 | 仍需验证 | 全新机器上的完整桌面构建与系统安装/升级、Windows/macOS、真实模型端到端流程，以及不同模型供应商和外部 Agent 配置 |
 | 尚待完成 | 自动更新、关闭窗口行为设置、文章导出与版本界面 |
 
-现在可构建并通过 DSH CLI 安装独立组合包，已有 Linux 桌面版继续共用业务模块。组合包通过 [GitHub Release](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.0) 提供，尚未发布 npm；`dsh-plugin` 话题也不代表官方收录。详见 [插件架构与发布状态](docs/plugin-status.md)。
+现在可构建并通过 DSH CLI 安装独立组合包，已有 Linux 桌面版继续共用业务模块。组合包通过 [GitHub Release](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.1) 提供，尚未发布 npm；`dsh-plugin` 话题也不代表官方收录。详见 [插件架构与发布状态](docs/plugin-status.md)。
 
 ## 参与开发
 

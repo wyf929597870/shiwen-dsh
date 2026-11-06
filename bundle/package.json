@@ -1,6 +1,6 @@
 {
   "name": "dsh-shiwen",
-  "version": "0.2.0-dev.0",
+  "version": "0.2.0-dev.1",
   "description": "拾文：为 DSH 提供本地资料库、日记、回顾与创作工作台",
   "type": "module",
   "license": "MIT",
