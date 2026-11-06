@@ -10,7 +10,7 @@
 
 [为什么做](#为什么做拾文) · [能做什么](#能做什么) · [开始使用](#开始使用) · [数据与隐私](#数据与隐私) · [参与开发](#参与开发)
 
-已发布桌面版 **[0.1.7 · Linux 预览版](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.7)**，仍在开发中。已在 Linux x64 上完成本机桌面验收；Windows、macOS 桌面宿主尚未验收。Web 插件版提供 [0.2.0-dev.1 预览包](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.1)，见下文。项目采用 [MIT](LICENSE) 许可证。
+已发布桌面版 **[0.1.7 · Linux 预览版](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.7)**，仍在开发中。已在 Linux x64 上完成本机桌面验收；Windows、macOS 桌面宿主尚未验收。Web 插件版提供 [0.2.0-dev.2 预览包](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.2)，见下文。项目采用 [MIT](LICENSE) 许可证。
 
 **v0.1.7 Linux 预览版**已提供独立服务、本机/远端连接和密码登录。旧版 v0.1.5 与单独的 Web 插件预览包不包含这些新增服务能力。
 
@@ -63,7 +63,7 @@
 
 ### Web 插件预览版
 
-已有 **DSH 0.2.2-alpha.3 / Node.js >=24.9** 的用户，可直接下载 **[拾文插件包（.tgz）](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.2.0-dev.1/dsh-shiwen-0.2.0-dev.1.tgz)**，无需克隆源码。安装命令、校验文件和已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.1)。
+已有 **DSH 0.2.2-alpha.3 / Node.js >=24.9** 的用户，可直接下载 **[拾文插件包（.tgz）](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.2.0-dev.2/dsh-shiwen-0.2.0-dev.2.tgz)**，无需克隆源码。安装命令、校验文件和已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.2)。
 
 直接在本仓库运行，不需要 Electron 或 DSH 上游源码：
 
@@ -183,7 +183,7 @@ Markdown 内容存放在本地资料数据库中，并非每条记录都是独�
 | 仍需验证 | 全新机器上的完整桌面构建与系统安装/升级、Windows/macOS、真实模型端到端流程，以及不同模型供应商和外部 Agent 配置 |
 | 尚待完成 | 自动更新、关闭窗口最小化到托盘的可配置行为、文章导出与版本界面、移动端离线记录与同步 |
 
-现在可构建并通过 DSH CLI 安装独立组合包，已有 Linux 桌面版继续共用业务模块。组合包通过 [GitHub Release](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.1) 提供，尚未发布 npm；`dsh-plugin` 话题也不代表官方收录。详见 [插件架构与发布状态](docs/plugin-status.md)。
+现在可构建并通过 DSH CLI 安装独立组合包，已有 Linux 桌面版继续共用业务模块。组合包通过 [GitHub Release](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.2) 提供，尚未发布 npm；`dsh-plugin` 话题也不代表官方收录。详见 [插件架构与发布状态](docs/plugin-status.md)。
 
 ## 参与开发
 

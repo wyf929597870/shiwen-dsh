@@ -2,7 +2,7 @@
 
 拾文现在可作为预构建的 `dsh-shiwen` 组合包安装在 **原生 DSH Web** 中。同一套业务代码仍供已有 Linux 桌面端使用；无需下载、编译或修改 DSH 上游源码来运行 Web 版。
 
-当前目标版本为 **DSH 0.2.2-alpha.3 / Node.js >=24.9**。组合包版本 `0.2.0-dev.1` 通过 [GitHub Release](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.1) 提供预构建 tgz，尚未发布到 npm。现有 `v0.1.5` Release 仍是 Linux 桌面安装包。
+当前目标版本为 **DSH 0.2.2-alpha.3 / Node.js >=24.9**。组合包版本 `0.2.0-dev.2` 通过 [GitHub Release](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.2) 提供预构建 tgz，尚未发布到 npm。最新 Linux 桌面安装包为 `v0.1.7`；插件包共用其工作台页面，不包含 Electron 外壳或拾文独立服务。
 
 ## 在本仓库启动 / Run from this repository
 
@@ -25,20 +25,20 @@ DSH_HOME=/tmp/shiwen-web-demo npm run start:web -- --no-open --port 3081
 
 ## 安装到已有 DSH / Install into stock DSH
 
-从 [Release](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.1) 下载 tgz 和 SHA256 校验文件即可安装，不需要源码。也可以自行构建 tarball：
+从 [Release](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.2) 下载 tgz 和 SHA256 校验文件即可安装，不需要源码。也可以自行构建 tarball：
 
 ```sh
 npm ci
 npm run package:plugin
 ```
 
-产物为 `release/dsh-shiwen-0.2.0-dev.1.tgz`。将它复制到运行 DSH 的电脑，使用匹配版本的 DSH CLI：
+产物为 `release/dsh-shiwen-0.2.0-dev.2.tgz`。将它复制到运行 DSH 的电脑，使用匹配版本的 DSH CLI：
 
 ```sh
 # 初始化内置 Web profile；若已经有 Web profile，可跳过这一行。
 dsh web --help
 # 在 tgz 所在目录运行；需要下载普通 npm 依赖，不需要安装构建脚本。
-dsh plugin --profile web add ./dsh-shiwen-0.2.0-dev.1.tgz --ignore-scripts
+dsh plugin --profile web add ./dsh-shiwen-0.2.0-dev.2.tgz --ignore-scripts
 dsh web --no-open
 ```
 
@@ -46,7 +46,7 @@ dsh web --no-open
 
 ## 共用桌面后端 / Share the desktop Host
 
-从 `v0.1.5` 桌面包 / `v0.2.0-dev.1` 插件包提供。这两个已发布版本仅支持同一台电脑上的浏览器访问；源码新增的局域网独立服务见 [独立服务说明](server.md)。
+原生 DSH Host 的本机浏览器入口从 `v0.1.5` 桌面包 / `v0.2.0-dev.1` 插件包提供。以下说明适用于原生 DSH 宿主；拾文 `v0.1.7` 桌面端使用独立服务，局域网和密码登录见 [独立服务说明](server.md)。
 
 1. 启动装有新版拾文插件的桌面端，打开「外部接入」。
 2. 在「浏览器访问 · 共用当前资料」核对资料库位置，点击「复制浏览器登录地址」。
@@ -58,7 +58,7 @@ dsh web --no-open
 
 独立 `web` / `shiwen-web` 与 `desktop` profile 不会自动连接或合并。需要共享时，从桌面端获取浏览器入口；不要把两个运行中的 Host 配到同一个 SQLite 文件。此方案也不提供官方桌面端连接任意远程 Web 后端的设置。
 
-From **External access → Browser access** in the desktop app, copy the login URL into a browser on the same computer. One desktop Host owns the data and serves both clients, including native DSH conversations. Keep it running and copy a fresh URL after restart. Refresh/reopen records to see changes; drafts remain in each window and stale writes are rejected. Independent Web profiles remain separate. Non-loopback deployments should use their configured Web URL. Available since desktop `v0.1.5` / plugin `v0.2.0-dev.1`; those published versions provide same-computer access. Source now also offers a [standalone LAN service](server.md) using existing desktop data.
+From **External access → Browser access** in the desktop app, copy the login URL into a browser on the same computer. One desktop Host owns the data and serves both clients, including native DSH conversations. Keep it running and copy a fresh URL after restart. Refresh/reopen records to see changes; drafts remain in each window and stale writes are rejected. Independent Web profiles remain separate. Non-loopback deployments should use their configured Web URL. This native DSH Host entry has been available since desktop `v0.1.5` / plugin `v0.2.0-dev.1`. Shiwen desktop `v0.1.7` uses a [standalone LAN service](server.md); that service is not included in the plugin tarball.
 
 Verification: after `npm run build`, run `node scripts/check-shared-host.mjs [path/to/linux-unpacked/resources]`. This launches the actual packaged Desktop Host through IPC with current source plugins and temporary data, then checks two authenticated HTTP clients, shared writes, conflicts, delete/restore, restart persistence and expired launch tokens. It does not automate Electron or browser UI clicks.
 
@@ -82,7 +82,7 @@ node scripts/check-web-plugin.mjs
 
 集成验收使用全新的临时 DSH_HOME，实际执行 DSH 插件安装、原生 Web 启动、登录与来源校验、资料读写/排序、MCP、主题可选加载、重启持久化、卸载与重装保留资料。需要本机回环和 npm 依赖下载，不调用真实模型。
 
-当前验证范围是 Linux 上的原生 Web 宿主。浏览器视觉与完整点击流程尚未完成验证；官方 Windows/macOS 桌面宿主、远程部署和真实模型对话也不在已验证范围内。
+当前验证范围是 Linux 上的原生 Web 宿主。共享页面已完成桌面与手机尺寸的浏览器布局和主要交互检查，见 [移动端验证](mobile-web-qa.md)；官方 Windows/macOS 桌面宿主、手机真机键盘、远程部署和真实模型对话不在本次验证范围内。
 
 ## English
 
@@ -94,4 +94,4 @@ The default bundle preserves the host's theme and agent settings. Optional Shiwe
 
 The MCP configuration and legacy-import paths refer to the host, not a remote browser. External access remains loopback-only; stock Web authentication is retained. This is not a multi-user cloud service.
 
-`node scripts/check-web-plugin.mjs` checks real installation, Web authentication, record operations, dates, MCP, optional theme loading, restart persistence, removal and reinstallation using temporary data. Linux Web is the current verification target; browser interaction/visual checks, official Windows/macOS desktop hosts, remote deployments and real-model flows remain unverified. `0.2.0-dev.1` is a [GitHub pre-release](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.1), not an npm package; the published `v0.1.5` remains the Linux desktop preview.
+`node scripts/check-web-plugin.mjs` checks real installation, Web authentication, record operations, dates, MCP, optional theme loading, restart persistence, removal and reinstallation using temporary data. Linux Web is the current verification target. Shared UI layouts and primary interactions were checked at desktop and phone viewport sizes; official Windows/macOS desktop hosts, physical phone keyboards, remote deployments and real-model flows remain unverified. `0.2.0-dev.2` is a [GitHub pre-release](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.2), not an npm package; the current Linux desktop preview is `v0.1.7`.

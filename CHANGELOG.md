@@ -3,6 +3,40 @@
 0.1.4 是本仓库首次公开的 Linux 预览版；0.1.0–0.1.3 为本地开发与打包记录。
 0.1.4 is this repository's first public Linux preview; 0.1.0–0.1.3 are local development builds.
 
+## 0.2.0-dev.2 - 2026-11-06
+
+### 中文
+
+DSH 独立插件预览版，要求 **DSH 0.2.2-alpha.3 / Node.js >=24.9**。
+
+- 与桌面 v0.1.7 共用工作台源码：原生对话首页摘要、手机底部导航、素材/文章列表与正文切换、回顾图表与明细、分项发布前检查。
+- 校对页面排版，修复宽屏首页输入框对齐和未注明日期的历史记录计数；旧资料导入入口位于设置。
+- 可选拾文主题修复标题并显示共享 UI 构建版本 0.1.7；插件包自身版本为 0.2.0-dev.2。主题与皮皮默认保持可选，不覆盖已有模型配置。
+
+**安装或升级：** 先停止目标 DSH 实例，再在同一 profile 安装并重启；资料不会预装或替换。尚未初始化 Web profile 时，先执行 `dsh web --help`。
+
+```sh
+sha256sum -c SHA256SUMS-0.2.0-dev.2.txt
+dsh plugin --profile web add ./dsh-shiwen-0.2.0-dev.2.tgz --ignore-scripts
+dsh web --no-open
+```
+
+**验证：** 48 项单元测试通过；预构建 tgz 在隔离 DSH 环境中完成安装、认证、资料读写与排序、MCP、可选主题、重启持久化和卸载重装保留资料验证；未调用真实模型。
+
+插件包不包含 Electron、Node 或拾文独立服务；Web 认证和服务监听由 DSH 宿主负责。需要拾文桌面连接管理、独立服务与密码登录，请使用 [Linux v0.1.7](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.7)。手机 Web 仍需联网，离线库与同步尚未实现。
+
+### English
+
+Standalone plugin preview for **DSH 0.2.2-alpha.3 / Node.js >=24.9**.
+
+- Shares desktop v0.1.7 workspace code: native-chat home summaries, mobile navigation, library/article list-detail views, review charts/details and publication checks.
+- Refines layouts, aligns the wide-screen composer and fixes undated historical-record counts. Legacy library import is in Settings.
+- Optional Shiwen appearance preserves branded titles and displays shared UI build version 0.1.7. The bundle itself is 0.2.0-dev.2; theme/persona remain opt-in and model settings are preserved.
+
+**Validation:** 48 unit tests passed. The packed tarball passed isolated stock-DSH installation, authentication, record operations/order, MCP, optional theme loading, restart persistence and uninstall/reinstall data-retention checks. No real model calls were made.
+
+Stop the target host before upgrading, install into the same profile with the commands above, then restart. Personal data is neither bundled nor replaced. The tarball excludes Electron, Node and the Shiwen standalone service; authentication and network binding remain the DSH host's responsibility. For Shiwen connection management and password authentication, use [Linux v0.1.7](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.7). Offline mobile libraries and synchronization are not implemented.
+
 ## 0.1.7 - 2026-11-06
 
 ### 中文

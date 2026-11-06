@@ -10,7 +10,7 @@ Shiwen is a personal AI workspace built on [DeepSeek Harness (DSH)](https://gith
 
 [Why Shiwen](#why-shiwen) · [What it does](#what-it-does) · [Getting started](#getting-started) · [Data and privacy](#data-and-privacy) · [Contributing](#contributing)
 
-Published desktop release: **[0.1.7 · Linux Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.7)**, under active development and licensed under [MIT](LICENSE). Desktop checks have passed locally on Linux x64. Official Windows/macOS desktop hosts have not been validated. The Web plugin is available as a [0.2.0-dev.1 preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.1).
+Published desktop release: **[0.1.7 · Linux Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.7)**, under active development and licensed under [MIT](LICENSE). Desktop checks have passed locally on Linux x64. Official Windows/macOS desktop hosts have not been validated. The Web plugin is available as a [0.2.0-dev.2 preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.2).
 
 The **v0.1.7 Linux preview** includes the standalone service, local/remote connections and password login. Older v0.1.5 installers and the separate Web plugin preview do not include these new service features.
 
@@ -63,7 +63,7 @@ These are example requests; results depend on your material, model and tool conf
 
 ### Web plugin preview
 
-With **DSH 0.2.2-alpha.3 / Node.js >=24.9**, download the **[prebuilt plugin (.tgz)](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.2.0-dev.1/dsh-shiwen-0.2.0-dev.1.tgz)** without cloning this repository. See the [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.1) for installation, checksums and limitations.
+With **DSH 0.2.2-alpha.3 / Node.js >=24.9**, download the **[prebuilt plugin (.tgz)](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.2.0-dev.2/dsh-shiwen-0.2.0-dev.2.tgz)** without cloning this repository. See the [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.2) for installation, checksums and limitations.
 
 Run from this repository, without Electron or an upstream checkout:
 
@@ -183,7 +183,7 @@ External data transfer depends on the models and tools you use. Cloud models rec
 | Still needs validation | Full desktop builds and system-level installation/upgrades on a fresh machine, Windows/macOS, real-model end-to-end flows and individual provider/external-agent configurations |
 | Still to implement | Automatic updates, configurable minimize-to-tray behavior, article export and version-history UI, mobile offline recording and synchronization |
 
-A standalone bundle can now be built and installed through DSH's CLI, while the Linux desktop shares the same business modules. The bundle is distributed through [GitHub Releases](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.1) and is not published to npm; the `dsh-plugin` topic does not imply official inclusion. See [plugin architecture and publication status](docs/plugin-status.md).
+A standalone bundle can now be built and installed through DSH's CLI, while the Linux desktop shares the same business modules. The bundle is distributed through [GitHub Releases](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.2) and is not published to npm; the `dsh-plugin` topic does not imply official inclusion. See [plugin architecture and publication status](docs/plugin-status.md).
 
 ## Contributing
 
