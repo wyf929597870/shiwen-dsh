@@ -1,10 +1,12 @@
-// Installed-app smoke check. All writes go to a new temporary user-data root.
+// Packaged-app smoke check. Optional argv[3] seeds data with an older executable.
+// All writes go to a new temporary user-data root.
 import {spawn} from 'node:child_process';
 import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import assert from 'node:assert/strict';
 const executable=resolve(process.argv[2]??'release/linux-unpacked/shiwen-dsh');
+const previousExecutable=process.argv[3]?resolve(process.argv[3]):executable;
 const data=await mkdtemp(join(tmpdir(),'shiwen-packaged-check-'));
 const delay=ms=>new Promise(done=>setTimeout(done,ms));
 async function until(fn){const deadline=Date.now()+90000;let last;while(Date.now()<deadline){try{const result=await fn();if(result)return result;}catch(error){last=error;}await delay(300);}throw last??Error('Timed out waiting for packaged app');}
@@ -14,7 +16,7 @@ for(let round=0;round<2;round++){
  await rm(join(data,'desktop/DevToolsActivePort'),{force:true});
  const env={...process.env,SHIWEN_ROOT_DIR:data};
  for(const name of ['ELECTRON_RUN_AS_NODE','NODE_PATH','NODE_OPTIONS','DSH_HOME','SHIWEN_DATA_DIR','SHIWEN_APP_PATCH'])delete env[name];
- const child=spawn(executable,['--remote-debugging-port=0'],{cwd:tmpdir(),env,stdio:['ignore','pipe','pipe']});
+ const child=spawn(round===0?previousExecutable:executable,['--remote-debugging-port=0'],{cwd:tmpdir(),env,stdio:['ignore','pipe','pipe']});
  child.stdout.on('data',chunk=>output+=chunk);child.stderr.on('data',chunk=>output+=chunk);
  const exited=new Promise(done=>child.once('exit',done));
  try{
