@@ -6,7 +6,7 @@ import {createStore} from '../legacy/store.mjs';
 export function inspectLegacy(path){
  const db=new DatabaseSync(resolve(path),{readOnly:true});
  try{
-  const meta=db.prepare("SELECT value FROM meta WHERE key='schema'").get();if(!meta||!['1','2','3','4','5'].includes(meta.value))throw new Error('旧资料库版本不受支持');
+  const meta=db.prepare("SELECT value FROM meta WHERE key='schema'").get();if(!meta||!['1','2','3','4','5','6','7','8'].includes(meta.value))throw new Error('旧资料库版本不受支持');
   const records=db.prepare("SELECT kind, count(*) AS count FROM records WHERE deleted=0 GROUP BY kind ORDER BY kind").all().map(row=>({...row}));
   const table=name=>!!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name);
   const messages=table('messages')?db.prepare('SELECT count(*) AS count FROM messages').get().count:0;

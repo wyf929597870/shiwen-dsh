@@ -1,0 +1,26 @@
+import {registerTranslations} from './i18n.js';
+
+registerTranslations({
+  '已恢复上次未完成的编辑。':'Restored the unfinished edit.',
+  '编辑草稿读取失败：':'Could not read the edit draft: ',
+  '导入完成':'Import complete','跳过重复':'Skipped duplicates','Markdown 已导出。':'Markdown exported.',
+  '已打开系统分享面板。':'Opened the system share sheet.','已打开系统文件查看器。':'Opened the system file viewer.',
+  '只复制正文与来源说明，不复制附件文件或跨库关联。继续？':'Copy the body and provenance notes only. Attachments and cross-library links will not be copied. Continue?',
+  '已复制到另一资料库':'Copied to another library','切换记录会丢弃或中断当前编辑。未确认的写入需留在本页核对。确定继续吗？':'Switching records may discard or interrupt the current edit. Unconfirmed writes must be checked on this page. Continue?',
+  '请先核对当前未确认的写入，再切换记录。':'Check the unconfirmed write before switching records.','开始新内容会放弃当前编辑。确定继续吗？':'Starting a new item will discard the current edit. Continue?',
+  '请先核对当前未确认的写入。':'Check the unconfirmed write first.','草稿未保存：':'Draft not saved: ','草稿清理失败：':'Could not clear draft: ','编辑草稿未保存：':'Edit draft not saved: ',
+  '保存回执缺少记录版本；内容保留，请刷新后核对。':'The save receipt has no record revision. Content is preserved; refresh and check the result.',
+  '保存成功但草稿回执尚未确认；保留原请求并再次核对。':'Saved, but the draft receipt is not confirmed. Keep the original request and check again.',
+  '保存结果待核对，编辑内容已锁定并保留。请用同一请求再次核对：':'Save result needs verification. Your edits are locked and preserved. Check again using the same request: ',
+  '删除结果已返回，但草稿回执未确认。':'Delete result returned, but the draft receipt is not confirmed.',
+  '删除结果待核对。保持当前页面并使用同一请求再次核对：':'Delete result needs verification. Stay on this page and check again with the same request: ',
+  '恢复结果已返回，但草稿回执未确认。':'Restore result returned, but the draft receipt is not confirmed.',
+  '恢复结果待核对。保持当前页面并使用同一请求再次核对：':'Restore result needs verification. Stay on this page and check again with the same request: ',
+  '条已加载':'loaded','返回列表':'Back to list','再次核对保存结果':'Check save result again','内容来源':'Content origin',
+  '先到素材页添加资料，再返回关联。':'Add material on the Materials page, then return here to link it.',
+  '项待处理':'items to review','检查仅供作者自查，不会替你发布文章。':'These checks are for your review; they do not publish the article.',
+  '再次核对删除':'Check delete result again','再次核对恢复':'Check restore result again','导出 Markdown':'Export Markdown','分享':'Share',
+  '此记录在回收站中，恢复后会回到当前资料库。':'This record is in the trash. Restoring it returns it to the current library.',
+  '正文来源':'Body sources','原件与附件':'Original files and attachments','尚未下载':'Not downloaded','已保存在资料库':'Saved in the library',
+  '复制到资料库':'Copy to library','选择目标资料库':'Choose a target library','复制正文':'Copy body','更多历史版本':'More versions',
+});

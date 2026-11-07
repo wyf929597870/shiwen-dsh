@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "agentId": "shiwen",
+  "systemContext": "以下是用户可管理的个人助手设置，用户当前明确表达与历史记忆冲突时，以当前表达为准。\n身份：拾文 fixture 助手\n交流方式：简洁交流，不扩大工具权限。\n已确认记忆：用户喜欢晨间写作。",
+  "documents": [
+    {
+      "name": "IDENTITY.md",
+      "body": "拾文 fixture 助手",
+      "revision": 1
+    },
+    {
+      "name": "SOUL.md",
+      "body": "简洁交流，不扩大工具权限。",
+      "revision": 2
+    }
+  ],
+  "memories": [
+    {
+      "id": "memory-fixture",
+      "body": "用户喜欢晨间写作。",
+      "category": "user",
+      "revision": 1,
+      "updated": "2026-11-06T00:00:00.000Z"
+    }
+  ],
+  "included": {
+    "globalActiveMemories": 1,
+    "memoryContextEntries": 1,
+    "memoryContextOmitted": 0
+  },
+  "revision": "5fab685c2df11fb41d4cf3443f1469113ee2dbba10f48b177dc764fb087243d4"
+}

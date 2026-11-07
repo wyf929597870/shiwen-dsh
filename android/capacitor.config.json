@@ -1,0 +1,7 @@
+{
+  "appId": "io.github.wyf929597870.shiwen",
+  "appName": "拾文",
+  "webDir": "dist",
+  "android": { "path": "native", "allowMixedContent": false },
+  "server": { "hostname": "localhost", "androidScheme": "https" }
+}

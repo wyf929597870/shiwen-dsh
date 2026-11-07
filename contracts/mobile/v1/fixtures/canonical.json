@@ -1,0 +1,74 @@
+[
+  {
+    "name": "ordered keys",
+    "value": {
+      "z": 1,
+      "a": {
+        "b": null,
+        "a": true
+      },
+      "array": [
+        3,
+        2,
+        1
+      ]
+    },
+    "canonical": "{\"a\":{\"a\":true,\"b\":null},\"array\":[3,2,1],\"z\":1}",
+    "sha256": "40696cf11d6d559ce8d123087d90a0b8ba7a36893a67a46603c973925033b022"
+  },
+  {
+    "name": "Chinese Markdown",
+    "value": {
+      "markdown": "# 日记\r\n\r\n- 今天散步\r\n> 引用\r\n[[素材|标题]]\n",
+      "origin": "personal"
+    },
+    "canonical": "{\"markdown\":\"# 日记\\r\\n\\r\\n- 今天散步\\r\\n> 引用\\r\\n[[素材|标题]]\\n\",\"origin\":\"personal\"}",
+    "sha256": "08985c8af17102eecbcea6374af87813abb24f11e15ac23ade0cd41bed60abb4"
+  },
+  {
+    "name": "emoji and combining characters",
+    "value": {
+      "text": "👩🏽‍💻 / é / é / 🌱",
+      "中文": "不做归一化"
+    },
+    "canonical": "{\"text\":\"👩🏽‍💻 / é / é / 🌱\",\"中文\":\"不做归一化\"}",
+    "sha256": "6409e742a5bc513be7a82e5ed725a443dc32d3f5d8ca290b71367a9c429497c9"
+  },
+  {
+    "name": "JSON escapes",
+    "value": {
+      "text": "\"\\\t\n\r\b\f\u0000\u001f/  "
+    },
+    "canonical": "{\"text\":\"\\\"\\\\\\t\\n\\r\\b\\f\\u0000\\u001f/  \"}",
+    "sha256": "b954b6f58f133bfd6b302ff9d99cf6cb713e8bf857844c1c193b934955af5413"
+  },
+  {
+    "name": "lexical numeric keys",
+    "value": {
+      "2": "two",
+      "10": "ten",
+      "a": -9007199254740991,
+      "zero": 0
+    },
+    "canonical": "{\"10\":\"ten\",\"2\":\"two\",\"a\":-9007199254740991,\"zero\":0}",
+    "sha256": "0d34922de2e37c0e3bd3642773229141f729e1010f596f3f5baabc808643c418"
+  },
+  {
+    "name": "source segments",
+    "value": {
+      "markdown": "我的话\nAI 整理",
+      "segments": [
+        {
+          "text": "我的话\n",
+          "origin": "personal"
+        },
+        {
+          "text": "AI 整理",
+          "origin": "ai"
+        }
+      ]
+    },
+    "canonical": "{\"markdown\":\"我的话\\nAI 整理\",\"segments\":[{\"origin\":\"personal\",\"text\":\"我的话\\n\"},{\"origin\":\"ai\",\"text\":\"AI 整理\"}]}",
+    "sha256": "fd8221b5e6f424c604afa39f713765a70c6d2b0d740b8114551dcd2575c7a545"
+  }
+]

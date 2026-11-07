@@ -1,0 +1,63 @@
+.settings-page {
+  --settings-gap: 14px;
+}
+
+.settings-page > h1 {
+  margin: 0 0 18px;
+}
+
+.settings-page > .settings-group-title {
+  margin: 22px 2px 8px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--border, rgba(160, 177, 190, .2));
+  color: var(--text-secondary, #a8b3bd);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+
+.settings-page > .settings-group-title:first-of-type {
+  margin-top: 0;
+}
+
+.settings-page > .settings-card,
+.settings-page > details.settings-card {
+  margin-block: var(--settings-gap);
+}
+
+.settings-page .settings-menu {
+  display: grid;
+  gap: 0;
+}
+
+.settings-page .management-row {
+  min-height: 52px;
+}
+
+.settings-page select,
+.settings-page input:not([type="checkbox"]),
+.settings-page textarea {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.settings-page .settings-details dd {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 380px) {
+  .settings-page .appearance-grid,
+  .settings-page .record-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.local-profile label,.settings-page .local-profile label,.settings-page details.settings-card>label{display:grid;gap:6px;margin:12px 0;min-width:0}
+.settings-page details.settings-card>label textarea{box-sizing:border-box;display:block;width:100%;min-width:0;min-height:100px;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--field-bg,transparent);color:inherit;font:inherit}
+.management-page .settings-heading>div,.settings-heading h2{min-width:0;overflow-wrap:anywhere}
+.settings-heading>.text{flex-shrink:0;white-space:nowrap}
+.settings-page .settings-menu .management-row{border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;padding:12px 4px}
+html[data-theme=light] .settings-page .settings-menu .management-row{background:transparent}
+.transfer-restore{width:100%;margin-top:8px}.transfer-restore summary{min-height:44px;display:flex;align-items:center;cursor:pointer;color:var(--mint)}
+.settings-page .local-profile label textarea{box-sizing:border-box;display:block;width:100%;min-width:0;min-height:100px;padding:10px;border:1px solid var(--line);border-radius:9px;background:transparent;color:inherit;font:inherit}
+html[data-theme=light] .settings-page .local-profile label textarea{background:#f8faf9;color:#20282d}

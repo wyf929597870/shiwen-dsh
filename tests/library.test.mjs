@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
+import {createHash} from 'node:crypto';
 import {createStore} from '../plugins/library/legacy/store.mjs';
 
 test('DSH 原消息归档保留日期、来源和幂等操作，不计入编辑增量',t=>{
@@ -22,8 +23,19 @@ test('备份恢复保留 DSH 来源；旧版备份仍可导入',t=>{
   const dir=mkdtempSync(join(tmpdir(),'shiwen-dsh-backup-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));
   const source=createStore(join(dir,'source.sqlite')),target=createStore(join(dir,'target.sqlite'));t.after(()=>{source.close();target.close();});
   const saved=source.saveDsh({kind:'idea',body:'历史消息',origin:'personal',day:null,sessionId:'s',messageId:'m',role:'user',operationId:'dsh:a'});
-  const backup=source.exportBackup();assert.equal(JSON.parse(backup).payload.schema,7);
+  const backup=source.exportBackup();assert.equal(JSON.parse(backup).payload.schema,12);
   target.restoreBackup(backup);assert.equal(target.get(saved.id).body,'历史消息');assert.equal(target.dshSources({id:saved.id})[0].message_id,'m');
+});
+
+test('schema 7 backup migrates records with the new sync defaults',t=>{
+  const dir=mkdtempSync(join(tmpdir(),'shiwen-dsh-backup-v7-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));
+  const source=createStore(join(dir,'source.sqlite')),target=createStore(join(dir,'target.sqlite'));t.after(()=>{source.close();target.close();});
+  const saved=source.save({kind:'idea',body:'旧备份正文'}),wrapped=JSON.parse(source.exportBackup());
+  wrapped.payload.schema=7;for(const row of wrapped.payload.tables.records){delete row.processing;delete row.created_by_device;}
+  for(const table of ['sync_changes','sync_activities','sync_receipts'])delete wrapped.payload.tables[table];
+  wrapped.sha256=createHash('sha256').update(JSON.stringify(wrapped.payload)).digest('hex');
+  target.restoreBackup(JSON.stringify(wrapped));assert.equal(target.get(saved.id).body,'旧备份正文');
+  assert.equal(target.get(saved.id).processing,'unknown');assert.equal(target.get(saved.id).created_by_device,null);
 });
 
 test('迁移保持源库并拒绝覆盖目标，原有记录与历史会话可追溯',async t=>{

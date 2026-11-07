@@ -56,6 +56,21 @@ export function markdownSource(doc){
   }).join('\n');
 }
 
+export function markdownSegments(doc,fallback='unknown'){
+  const segments=[];
+  const append=(text,origin,sourceRef)=>{if(!text)return;const prior=segments.at(-1);if(prior&&prior.origin===origin&&prior.sourceRef===sourceRef)prior.text+=text;else segments.push({text,origin,...(sourceRef?{sourceRef}:{})});};
+  for(const [index,node] of (doc.content??[]).entries()){
+    if(index)append('\n',fallback);
+    if(node.type!=='paragraph'){append(toMarkdown({type:'doc',content:[node]}),fallback);continue;}
+    for(const child of node.content??[]){
+      if(child.type==='hardBreak'){append('\n',fallback);continue;}
+      let text=child.text??'';for(const mark of child.marks??[]){if(mark.type==='bold')text=`**${text}**`;if(mark.type==='italic')text=`*${text}*`;if(mark.type==='strike')text=`~~${text}~~`;if(mark.type==='code')text='`'+text+'`';if(mark.type==='link')text=`[${text}](${mark.attrs?.href??''})`;}
+      const provenance=child.marks?.find(mark=>mark.type==='provenance');append(text,provenance?.attrs?.origin??fallback,provenance?.attrs?.sourceRef);
+    }
+  }
+  return segments;
+}
+
 export function updateMarkdownDoc(doc,source,addedOrigin='personal',fallback='unknown'){
   const before=markdownSource(doc),spans=[];let offset=0;
   for(const [i,node] of (doc.content??[]).entries()){

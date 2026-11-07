@@ -7,14 +7,44 @@ import {join} from 'node:path';
 import {existsSync} from 'node:fs';
 import {inspectLegacy,importLegacyToStore} from '../../library/src/migrate.mjs';
 import {browserAccess} from './browser-access.mjs';
+import {createProfileSnapshot} from '../../mobile/src/profile-adapter.mjs';
+import {createManagementAdapter} from '../../mobile/src/management-adapter.mjs';
+import {createRemoteSessionsAdapter} from '../../mobile/src/remote-sessions-adapter.mjs';
+import {createMobileSyncAdapter} from '../../mobile/src/sync-adapter.mjs';
 export const inject=['connection','shiwenLibrary','sessionQuery','shiwenExternal'];
+const ownerMethods=new Set(['mobileAgentProfile','agentState','agentDocumentSave','memorySave','memoryDelete','memoryDecide',
+  'externalStatus','externalClientCreate','externalClientRevoke','mobileManagement','mobileSync','mobileSessions']);
 export function apply(ctx){
+  const management=createManagementAdapter(ctx);
+  const mobileSessions=createRemoteSessionsAdapter({ctx,library:ctx.shiwenLibrary});
+  const mobileSync=createMobileSyncAdapter({ctx,library:ctx.shiwenLibrary});
+  ctx.effect(()=>()=>mobileSessions.close());
+  ctx.effect(()=>()=>mobileSync.close());
   ctx.effect(()=>ctx.connection.fetch.register({path:'/api/shiwen',methods:['POST'],requestBody:'buffered',async fetch(request){
+    let method,args;
     try{
-      const {method,args}=await request.json();
+      ({method,args}=await request.json());
+      if(ownerMethods.has(method)){
+        const admission=ctx.connection.admit(request);
+        if('rejection' in admission||admission.peer!==ctx.connection.browserPeer){
+          return Response.json({error:'Authenticated owner session required'},
+            {status:'rejection' in admission?admission.rejection:403,headers:{'Cache-Control':'no-store'}});
+        }
+      }
       const library=ctx.shiwenLibrary;
       let result;
-      if(method==='browserStatus'||method==='browserLogin'){
+      if(method==='mobileManagement'){
+        if(typeof args?.action!=='string')throw Object.assign(new Error('Management action is required'),{code:'INVALID_REQUEST'});
+        result=await management.execute(args.action,args.args??{},request.signal);
+      }else if(method==='mobileSync'){
+        if(typeof args?.action!=='string'||!args.request||typeof args.request!=='object')throw Object.assign(new Error('Sync action and request are required'),{code:'VALIDATION_ERROR'});
+        result={action:args.action,data:await mobileSync.execute(args.action,args.request,request.signal)};
+      }else if(method==='mobileSessions'){
+        if(typeof args?.action!=='string')throw Object.assign(new Error('Session action is required'),{code:'INVALID_REQUEST'});
+        result=await mobileSessions.execute(args.action,args.args??{},request.signal);
+      }else if(method==='mobileAgentProfile'){
+        result=createProfileSnapshot(library.agentState(),{agentId:'shiwen'});
+      }else if(method==='browserStatus'||method==='browserLogin'){
         if(method==='browserLogin'){
           // DSH exact Fetch routes do not pass their admitted Peer to the handler.
           // Resolve it from the original request through DSH, never from JSON fields.
@@ -61,6 +91,15 @@ export function apply(ctx){
         result=library[method](args);
       }
       return Response.json({result},{headers:{'Cache-Control':'no-store'}});
-    }catch(error){return Response.json({error:String(error.message??error)},{status:400,headers:{'Cache-Control':'no-store'}});}
+    }catch(error){
+      if(method==='mobileSync'&&args?.action==='setupCommit'&&process.env.SHIWEN_SYNC_DIAGNOSTICS==='1'){
+        // Opt-in synthetic-host diagnostics: stack frames only, never request,
+        // response, SQL bindings, credentials, or exception message.
+        const frames=String(error?.stack??'').split('\n').slice(1,9).map(frame=>frame.trim());
+        const code=typeof error?.code==='string'&&/^SQLITE_[A-Z_]+$/.test(error.code)?error.code:undefined;
+        console.error('[shiwen-sync-diagnostic]',JSON.stringify({action:'setupCommit',errorName:String(error?.name??'Error'),...(code?{code}:{}),frames}));
+      }
+      return Response.json({error:String(error.message??error),...(typeof error.code==='string'?{code:error.code}:{}),...(error.name==='ProtocolError'&&error.details&&typeof error.details==='object'?{details:error.details}:{})},{status:400,headers:{'Cache-Control':'no-store'}});
+    }
   }}));
 }

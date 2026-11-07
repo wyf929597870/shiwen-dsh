@@ -1,0 +1,83 @@
+apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
+apply plugin: 'com.google.devtools.ksp'
+
+android {
+    namespace = "io.github.wyf929597870.shiwen"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "io.github.wyf929597870.shiwen"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 3
+        versionName "0.1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    kotlinOptions { jvmTarget = '21' }
+    sourceSets.main.java.srcDirs += '../core/model/src/main/kotlin'
+    sourceSets.androidTest.assets.srcDirs += files("$projectDir/schemas")
+    // Release credentials belong to the build environment, never to the source tree.
+    def releaseStore = System.getenv('SHIWEN_ANDROID_KEYSTORE')
+    signingConfigs {
+        release {
+            if (releaseStore) {
+                storeFile file(releaseStore)
+                storePassword System.getenv('SHIWEN_ANDROID_STORE_PASSWORD')
+                keyAlias System.getenv('SHIWEN_ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('SHIWEN_ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        debug {
+            applicationIdSuffix ".probe"
+            versionNameSuffix "-debug"
+        }
+        release {
+            minifyEnabled false
+            if (releaseStore) signingConfig signingConfigs.release
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    // Native tool loop; provider credentials are configured on the device.
+    implementation 'ai.koog:agents-core:1.3.0'
+    implementation 'ai.koog:prompt-executor-openai-client:1.3.0'
+    implementation 'ai.koog:http-client-ktor:1.3.0'
+    implementation 'io.ktor:ktor-client-okhttp:3.3.3'
+    implementation 'com.squareup.okhttp3:okhttp:5.2.1'
+    testImplementation 'com.squareup.okhttp3:mockwebserver:5.2.1'
+    testImplementation 'com.squareup.okhttp3:okhttp-tls:5.2.1'
+    implementation 'androidx.room:room-runtime:2.8.4'
+    implementation 'androidx.work:work-runtime-ktx:2.10.1'
+    ksp 'androidx.room:room-compiler:2.8.4'
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test:core:1.7.0"
+    androidTestImplementation 'com.squareup.okhttp3:mockwebserver:5.2.1'
+    androidTestImplementation "androidx.test:runner:1.7.0"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+ksp { arg("room.schemaLocation", "$projectDir/schemas") }

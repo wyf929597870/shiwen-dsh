@@ -21,7 +21,7 @@ test('删除持久化、撤销保留正文日期来源，过期请求不覆盖�
  assert.throws(()=>store.restoreRemoved({...receipt,revision:saved.revision}),/变更/);
  const restored=store.restoreRemoved(receipt),record=store.get(saved.id);
  assert.equal(record.body,saved.body);assert.equal(record.updated,saved.updated);assert.deepEqual(record.dateInfo,saved.dateInfo);
- assert.deepEqual(store.versions({id:saved.id}),versions);assert.deepEqual(store.dshSources({id:saved.id}),provenance);
+ const restoredVersions=store.versions({id:saved.id});assert.equal(restoredVersions.length,versions.length+2);assert.deepEqual(restoredVersions.slice(2),versions);assert.deepEqual(store.dshSources({id:saved.id}),provenance);
  assert.equal(store.snapshot().records.length,1);
  assert.throws(()=>store.restoreRemoved(receipt),/变更/);
  assert.throws(()=>store.save({...saved,body:'过期正文'}),/更新/);

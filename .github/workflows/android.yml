@@ -1,0 +1,81 @@
+name: Android checks
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'contracts/**'
+      - 'plugins/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - '*package*.json'
+      - '.github/workflows/android.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            android/package-lock.json
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+          cache-dependency-path: |
+            android/native/**/*.gradle
+            android/native/gradle/wrapper/gradle-wrapper.properties
+      - name: Install JavaScript dependencies
+        run: |
+          npm ci
+          npm --prefix android ci
+      - name: Check shared protocol and desktop regressions
+        run: |
+          node --test --test-isolation=none tests/*.test.mjs
+          npm run build
+          node scripts/check-mobile-sessions-host.mjs
+          node scripts/check-mobile-sync-host.mjs
+      - name: Install Android SDK packages
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"'
+      - name: Bundle local app assets
+        run: |
+          npm --prefix android run check:ui
+          npm --prefix android run sync
+      - name: Compile and run JVM tests
+        working-directory: android/native
+        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Checksum test APK
+        working-directory: android/native/app/build/outputs/apk/debug
+        run: sha256sum app-debug.apk > SHA256SUMS
+      - name: Keep test APK and reports
+        uses: actions/upload-artifact@v7
+        with:
+          name: shiwen-android-debug-${{ github.sha }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            android/native/app/build/outputs/apk/debug/app-debug.apk
+            android/native/app/build/outputs/apk/debug/SHA256SUMS
+            android/native/app/build/reports/tests/testDebugUnitTest/
+      - name: Keep failure reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: shiwen-android-failure-${{ github.sha }}
+          retention-days: 7
+          path: android/native/app/build/reports/

@@ -1,0 +1,25 @@
+{
+  "name": "@shiwen/android",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "preview:build": "node scripts/build-preview.mjs",
+    "sync": "npm run build && cap sync android",
+    "doctor": "node scripts/doctor.mjs",
+    "android:debug": "npm run sync && cd native && ./gradlew assembleDebug",
+    "check:ui": "node scripts/check-ui-references.mjs"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/core": "8.6.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.0",
+    "esbuild": "0.25.12",
+    "typescript": "5.9.3"
+  }
+}
