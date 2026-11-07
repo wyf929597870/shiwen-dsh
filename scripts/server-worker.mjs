@@ -3,6 +3,7 @@ import {createServer} from 'node:http';
 import {randomBytes,timingSafeEqual} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {join,resolve} from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {acquireOwnership} from '../plugins/library/src/ownership.mjs';
 import {setupProfile} from './profile.mjs';
 import {guardPasswordHost} from '../integration/password-auth.mjs';
@@ -36,8 +37,8 @@ try{
  for(const key of ['ELECTRON_RUN_AS_NODE','SHIWEN_DESKTOP','SHIWEN_APP_PATCH'])delete process.env[key];
  const {runProfile}=await import('@deepseek-ai/dsh/profile-boot');
  const require=createRequire(import.meta.resolve('@deepseek-ai/dsh/package.json'));
- const {loadLayeredEnv}=await import(require.resolve('@deepseek-ai/dsh-app-boot'));
- const {HostConnectionService}=await import(require.resolve('@deepseek-ai/dsh-client-connection'));
+ const {loadLayeredEnv}=await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-app-boot')).href);
+ const {HostConnectionService}=await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-client-connection')).href);
  guardPasswordHost(HostConnectionService);
  const args=['--no-open','--host',options.host,'--port',String(options.port)];
  if(options.cert)args.push('--tls-cert',options.cert,'--tls-key',options.key);

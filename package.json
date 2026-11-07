@@ -16,6 +16,7 @@
     "desktop:install": "node scripts/install-desktop-entry.mjs",
     "prepare:linux": "node scripts/prepare-linux.mjs",
     "package:linux": "node scripts/package-linux.mjs",
+    "package:windows": "node scripts/package-windows.mjs",
     "upstream:prepare": "node scripts/setup-upstream.mjs",
     "upstream:check": "node scripts/setup-upstream.mjs --check",
     "check:source": "node scripts/check-source.mjs",
@@ -25,7 +26,12 @@
     "server:start": "node scripts/server.mjs start",
     "server:stop": "node scripts/server.mjs stop",
     "server:status": "node scripts/server.mjs status",
-    "server:url": "node scripts/server.mjs url"
+    "server:url": "node scripts/server.mjs url",
+    "mobile:contracts": "node scripts/mobile-contracts.mjs",
+    "test:mobile": "node --test --test-isolation=none tests/mobile-*.test.mjs",
+    "check:mobile-kotlin": "node scripts/check-mobile-kotlin.mjs",
+    "android:doctor": "npm --prefix android run doctor",
+    "android:build:web": "npm --prefix android run build"
   },
   "dependencies": {
     "@deepseek-ai/dsh": "0.2.2-alpha.3",

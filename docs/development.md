@@ -103,3 +103,11 @@ git status --short
 Web 路线不需要上述桌面运行资源或上游补丁。在根目录运行 `npm run start:web -- --no-open`；使用 `npm run package:plugin` 生成预构建 tgz，随后 `node scripts/check-web-plugin.mjs` 验证在原生宿主中的生命周期。详细步骤及边界见 [Web 插件说明](web-plugin.md)。
 
 The Web path needs no desktop runtime or upstream patches. It shares the same six source modules and has a separate launcher/package workflow; see the linked guide for installation and data paths.
+
+## Windows x64 本地候选构建
+
+Windows 客户端当前仍为预览构建。它使用与 Linux 相同的桌面入口和独立服务，但需要在 Windows x64 上准备固定版本的上游依赖、桌面构建产物以及 `upstream/dsh/apps/desktop/.desktop-build/targets/win-x64/` 下经过校验的 DSH、Electron 和 primary runtime；这些资源不会由下述命令自动下载。上游版本和补丁仍以 `upstream.lock.json` 为准。
+
+将微软签名验证通过的 Visual C++ x64 Redistributable 安装程序路径设置为 `SHIWEN_VC_REDIST`，再在项目根目录运行 `npm run package:windows`。安装器会请求管理员权限，并在安装时运行该依赖；它不会在卸载拾文时移除其他应用可能共用的运行库。构建时可按 electron-builder 的配置指定 NSIS、资源和 7-Zip 本地路径。没有代码签名证书时生成的是未签名安装包，Windows 可能显示未知发布者提示。
+
+打包完成后应在隔离资料库检查首次启动、已有资料库从不同安装位置迁移、服务启停和文档转换；构建通过不等于所有 Windows 设备和升级路径均已验收。

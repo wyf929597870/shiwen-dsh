@@ -1,4 +1,4 @@
-import {mkdir,writeFile,symlink,readlink,realpath,readFile,rename} from 'node:fs/promises';
+import {mkdir,writeFile,symlink,readlink,realpath,readFile,rename,rmdir} from 'node:fs/promises';
 import {dirname,join,resolve} from 'node:path';
 const names=['library','agent-tools','theme','workbench','personal-context','external'];
 const persona='你是拾文的个人助理与思考伙伴。身份、性格和交流方式以 shiwen-personal-context 注入的用户设置为准。用户当前明确要求优先于角色口癖。遵守工具权限和资料来源规则。';
@@ -26,7 +26,13 @@ export async function setupProfile({root,home,pluginRoot=join(root,'plugins'),re
    let same=false;try{same=await realpath(destination)===await realpath(source);}catch{}
    if(!same){
     if(!relocate||!target||registered!==`file:${resolve(scope,target)}`)throw new Error(`拾文插件位置与现有配置冲突：${destination}`);
-    const temp=destination+'.'+process.pid+'.tmp';await symlink(source,temp);await rename(temp,destination);
+    const temp=destination+'.'+process.pid+'.tmp';await symlink(source,temp,process.platform==='win32'?'junction':'dir');
+    if(process.platform==='win32'){
+     const old=destination+'.'+process.pid+'.old';
+     await rename(destination,old);
+     try{await rename(temp,destination);}catch(error){await rename(old,destination);await rmdir(temp);throw error;}
+     await rmdir(old);
+    }else await rename(temp,destination);
    }
   }
  }

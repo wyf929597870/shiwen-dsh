@@ -15,7 +15,7 @@ if(!app.requestSingleInstanceLock()){app.quit();}else{
  const resources=app.isPackaged?join(process.resourcesPath,'shiwen'):resolve(import.meta.dirname,'..');
  const icon=join(resources,'assets/shiwen-icon-rounded.png');
  const zh=()=>app.getLocale().startsWith('zh'),t=(a,b)=>zh()?a:b;
- const launch={node:app.isPackaged?join(process.resourcesPath,'runtime/primary-runtime/dependencies/node/bin/node'):process.env.SHIWEN_NODE_EXECUTABLE,
+ const launch={node:app.isPackaged?join(process.resourcesPath,'runtime/primary-runtime/dependencies/node/bin',process.platform==='win32'?'node.exe':'node'):process.env.SHIWEN_NODE_EXECUTABLE,
   worker:join(resources,'scripts/server-worker.mjs'),...(app.isPackaged?{runtime:resources}:{}),env:{...process.env}};
  delete launch.env.ELECTRON_RUN_AS_NODE;
  const ask=options=>{const owner=window??settings;return owner&&!owner.isDestroyed()?dialog.showMessageBox(owner,options):dialog.showMessageBox(options);};

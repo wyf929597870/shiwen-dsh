@@ -24,7 +24,14 @@ export async function stopServer(root,expected){
  for(let n=0;n<100;n++){
   const state=await readServerState(root);
   if(!state||state.secret!==result.state.secret)return;
-  if(!await controlServer(root,'status',result.state))return;
+  try{if(!await controlServer(root,'status',result.state))return;}
+  catch(error){
+   // After an authenticated stop acknowledgement the worker may close a reused
+   // HTTP socket while this final poll is in flight. Recheck its identity file;
+   // a socket reset alone is not proof that the process has stopped.
+   const code=error.cause?.cause?.code;
+   if(code!=='UND_ERR_SOCKET'&&code!=='ECONNRESET')throw error;
+  }
   await delay(100);
  }
  throw Error('服务尚未停止，请稍后重试 / Service has not stopped yet');
