@@ -10,11 +10,9 @@ Shiwen is a personal AI workspace built on [DeepSeek Harness (DSH)](https://gith
 
 [Why Shiwen](#why-shiwen) · [What it does](#what-it-does) · [Getting started](#getting-started) · [Data and privacy](#data-and-privacy) · [Contributing](#contributing)
 
-Published desktop release: **[0.1.7 · Linux Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.7)**, under active development and licensed under [MIT](LICENSE). Desktop checks have passed locally on Linux x64. Official Windows/macOS desktop hosts have not been validated. The Web plugin is available as a [0.2.0-dev.2 preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.2).
+Downloads: **[Android 0.1.0](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.0)**, **[Linux 0.1.8](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.8)**, **[Windows 0.1.7 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/windows-v0.1.7)** and [DSH plugin 0.2.0-dev.3](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.3). Licensed under [MIT](LICENSE). Android upgrade, material saving and LAN sync have been verified on the current test phone. Windows installation and service lifecycle have been checked in a Windows 10 VM; full GUI validation remains outstanding. No project macOS installer is provided.
 
-The **v0.1.7 Linux preview** includes the standalone service, local/remote connections and password login. Older v0.1.5 installers and the separate Web plugin preview do not include these new service features.
-
-**New in v0.1.7:** stable Shiwen titles and visible client/Web versions; daily activity and recent records on the chat home; consistent library, writing, review and settings layouts. Phone browsers get bottom navigation, full-width reading/editing and responsive review statistics. See the [mobile plan](docs/mobile-plan.md).
+**This update:** Android keeps a full local library with offline editing, named service nodes and manual/automatic synchronization. The service adds sync, profile and DSH management endpoints. Linux 0.1.8, Windows 0.1.7 Preview and plugin 0.2.0-dev.3 contain these endpoints. Upgrade older Linux 0.1.7 or plugin packages before connecting Android for synchronization.
 
 ## Why Shiwen
 
@@ -63,7 +61,7 @@ These are example requests; results depend on your material, model and tool conf
 
 ### Web plugin preview
 
-With **DSH 0.2.2-alpha.3 / Node.js >=24.9**, download the **[prebuilt plugin (.tgz)](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.2.0-dev.2/dsh-shiwen-0.2.0-dev.2.tgz)** without cloning this repository. See the [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.2) for installation, checksums and limitations.
+With **DSH 0.2.2-alpha.3 / Node.js >=24.9**, download the **[prebuilt plugin (.tgz)](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.2.0-dev.3/dsh-shiwen-0.2.0-dev.3.tgz)** without cloning this repository. See the [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.3) for installation, checksums and limitations.
 
 Run from this repository, without Electron or an upstream checkout:
 
@@ -76,7 +74,7 @@ Open the login URL printed by DSH. This uses a dedicated `shiwen-web` profile. A
 
 [Web setup, storage and validation](docs/web-plugin.md) · [Bundle configuration](bundle/README.md)
 
-### Desktop client and standalone service (v0.1.7)
+### Desktop client and standalone service (v0.1.8)
 
 The Linux package includes the client, standalone service and Node runtime, with no separate Node installation required. Data stays on **the computer running the service**. Local mode uses that computer's library; remote mode accesses another computer's library without copying or merging it.
 
@@ -99,10 +97,10 @@ Under **Settings → Shiwen data → Manage password and devices**, change the p
 ```bash
 npm run package:linux
 # Quit the client and stop the old service before installing
-sudo apt install ./release/shiwen-dsh_0.1.7_amd64.deb
+sudo apt install ./release/shiwen-dsh_0.1.8_amd64.deb
 ```
 
-For a service launched from source, use `npm run server:stop` with the same data root. The package also includes management commands that need no system Node; see the [standalone service guide](docs/server.md). Restart the local service after upgrading. To use a prebuilt package, download the v0.1.7 installer below.
+For a service launched from source, use `npm run server:stop` with the same data root. The package also includes management commands that need no system Node; see the [standalone service guide](docs/server.md). Restart the local service after upgrading. To use a prebuilt package, download the v0.1.8 installer below.
 
 ### Run only the service and connect from a browser
 
@@ -121,29 +119,41 @@ The service can run without a desktop window. LAN devices must be able to reach 
 
 ### Published Linux desktop
 
-Download the **[Linux x64 installer (.deb)](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.7/shiwen-dsh_0.1.7_amd64.deb)**. This preview is intended for users willing to report issues; Windows builds are not published yet. See the [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.7) for checksums and known limitations.
+Download the **[Linux x64 installer (.deb)](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.8/shiwen-dsh_0.1.8_amd64.deb)**. This preview is intended for users willing to report issues; A Windows installer is available below. See the [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.8) for checksums and known limitations.
 
 Fully quit Shiwen and stop any running standalone service, then install or upgrade from your download directory:
 
 ```bash
-sudo apt install ./shiwen-dsh_0.1.7_amd64.deb
+sudo apt install ./shiwen-dsh_0.1.8_amd64.deb
 ```
 
 Open 拾文 from the application menu or run `shiwen-dsh`. The package includes Electron, Node, DSH and Shiwen plugins; no separate Node installation or source checkout is required. Desktop validation currently covers Ubuntu 26.04 x64. Other distributions still need testing.
 
 Start by creating a record in Materials. For AI conversations, configure a model and credentials through DSH first. The installer does not include a model-service account or API key.
 
+### Signed Android installer
+
+Download the [Android 0.1.0 APK](https://github.com/wyf929597870/shiwen-dsh/releases/download/android-v0.1.0/shiwen-android-0.1.0.apk), requiring Android 9 or later. Install updates over the existing release to preserve data and settings; do not uninstall an app containing unsynced records. This is a release-signed APK, separate from the `.probe` debug application and its storage.
+
+The phone keeps a complete local library and supports offline editing. Add and name a service node in Settings with its address and password, then sync manually or enable automatic sync when the service is reachable on the LAN. Phone model credentials are configured separately and excluded from library sync. See [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.0) and the [Android guide](android/README.md).
+
+### Windows x64 preview installer
+
+Download [Windows 0.1.7 Setup](https://github.com/wyf929597870/shiwen-dsh/releases/download/windows-v0.1.7/shiwen-dsh-0.1.7-windows-x64.exe). It includes the desktop client, standalone service, Node and the Microsoft Visual C++ x64 runtime. Installation requires administrator permission. The installer is not code-signed, so Windows may show an unknown-publisher warning.
+
+First installation, upgrade installation, test-library relocation and service start/stop passed in a Windows 10 VM. Full GUI workflows and other Windows versions remain unverified. Quit the client and stop its local service before upgrading. See the [Windows release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/windows-v0.1.7).
+
 ### Share data between desktop and Web
 
-With v0.1.7, the desktop client, computer browser and phone browser connect to **one standalone service, library and set of conversations**. Find or copy its address under **External access → Browser access**, then sign in with the access password. No reimport is needed. Keeping the service running when quitting the local client lets browsers continue using it; the server computer must remain awake and reachable.
+With v0.1.8, the desktop client, computer browser and phone browser connect to **one standalone service, library and set of conversations**. Find or copy its address under **External access → Browser access**, then sign in with the access password. No reimport is needed. Keeping the service running when quitting the local client lets browsers continue using it; the server computer must remain awake and reachable.
 
-Change panels or refresh to read another client's saved records, and reopen a record to load its content. Unsaved drafts remain in each window; stale saves are rejected when two clients edit the same record. Offline library synchronization is not implemented. The [mobile offline recording, independent AI and synchronization plan](docs/mobile-plan.md) is documented only.
+Change panels or refresh to read another client's saved records, and reopen a record to load its content. Unsaved drafts remain in each window; stale saves are rejected when two clients edit the same record. The Android app has a separate local library and server-coordinated synchronization implementation. This does not automatically make the desktop/Web clients offline replicas or enable peer-to-peer sync. The signed Android APK is available; see its [implementation and validation boundaries](docs/android/delivery-board.md).
 
 The published v0.1.5 desktop still uses the older flow: copy a full login link from **External access → Browser access**, use it in a browser on the same computer, and keep the desktop running. The plugin installed in stock DSH retains host authentication. The separate `shiwen-web` profile created by `npm run start:web` does not automatically connect to your desktop library. See the [Web plugin guide](docs/web-plugin.md).
 
 ### Bring an earlier Shiwen library
 
-In current source and v0.1.7, open **Settings → Shiwen data → Import previous library**, enter the path to the old Shiwen database on the server computer and preview it before importing. In published v0.1.5, the entry is still under **Materials**. The destination must be empty. The source is read only, and old messages remain archives rather than being converted into native DSH sessions.
+In current source and v0.1.8, open **Settings → Shiwen data → Import previous library**, enter the path to the old Shiwen database on the server computer and preview it before importing. In published v0.1.5, the entry is still under **Materials**. The destination must be empty. The source is read only, and old messages remain archives rather than being converted into native DSH sessions.
 
 This repository maintains the DSH edition only. The earlier standalone client is no longer updated here.
 
@@ -164,7 +174,7 @@ The local Linux desktop and standalone service share the data root at `${XDG_DAT
 | `library/` | Shiwen records, content and provenance in a local database |
 | `dsh/` | DSH sessions, configuration and skills |
 | `desktop/` | Desktop connection preferences and client session data |
-| `server/` | v0.1.7 service state, logs and password authentication database |
+| `server/` | v0.1.8 service state, logs and password authentication database |
 | `workspaces/` | Working files |
 
 When connected remotely, the library stays on the server computer. Passwords are stored as salted scrypt derivations, and the server stores only hashes of device credentials. Keep local administration links and device credentials private.
@@ -180,10 +190,11 @@ External data transfer depends on the models and tools you use. Cloud models rec
 | Status | Scope |
 | --- | --- |
 | Verified locally | Linux startup, local service start/reuse, library operations/filtering/date order, deletion/restoration, restart persistence, external MCP/HTTP/CLI; password login, device revocation and live-connection shutdown; narrow-screen and bilingual login pages |
-| Still needs validation | Full desktop builds and system-level installation/upgrades on a fresh machine, Windows/macOS, real-model end-to-end flows and individual provider/external-agent configurations |
-| Still to implement | Automatic updates, configurable minimize-to-tray behavior, article export and version-history UI, mobile offline recording and synchronization |
+| Still needs validation | Installation/upgrades on additional machines, complete Windows GUI workflows and macOS, real-model end-to-end flows and individual provider/external-agent configurations |
+| Desktop still to implement | Automatic updates, configurable minimize-to-tray behavior, article export and version-history UI |
+| Android released | Full local library, phone agent, multi-node sync, backups and DSH management pages. Upgrade, material saving and LAN sync passed on the current phone; other systems and background scenarios remain to be verified. See [delivery status](docs/android/delivery-board.md). |
 
-A standalone bundle can now be built and installed through DSH's CLI, while the Linux desktop shares the same business modules. The bundle is distributed through [GitHub Releases](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.2) and is not published to npm; the `dsh-plugin` topic does not imply official inclusion. See [plugin architecture and publication status](docs/plugin-status.md).
+A standalone bundle can now be built and installed through DSH's CLI, while the Linux desktop shares the same business modules. The bundle is distributed through [GitHub Releases](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.3) and is not published to npm; the `dsh-plugin` topic does not imply official inclusion. See [plugin architecture and publication status](docs/plugin-status.md).
 
 ## Contributing
 

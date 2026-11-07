@@ -3,6 +3,101 @@
 0.1.4 是本仓库首次公开的 Linux 预览版；0.1.0–0.1.3 为本地开发与打包记录。
 0.1.4 is this repository's first public Linux preview; 0.1.0–0.1.3 are local development builds.
 
+
+## android-v0.1.0 - 2026-11-08
+
+### 中文
+
+Android 正式签名 APK，最低 Android 9 / API 28，版本 0.1.0，versionCode 3。
+
+- 手机保留完整独立资料库，可离线记录、编辑日记与素材，整理文章、查看回顾；五栏导航和中英文/深浅主题。
+- 配置多个命名服务节点，支持密码登录、手动/自动同步、完整性与冲突处理；模型密钥单独保存在手机，不随资料同步。
+- 手机 Agent、远端 DSH 会话、人设与记忆、插件/自动化/外部接入管理，以及 Markdown 导入导出、完整备份和分享收件箱。
+- 修复素材保存误传展示字段、草稿代次复用和旧待确认草稿恢复后无法进入编辑页的问题；恢复原请求重试，避免重复保存。
+
+直接安装 APK；已有相同签名正式版请覆盖升级，不需要卸载。`.probe` 调试应用使用不同数据目录，不会自动迁移。同步请使用 Linux 0.1.8、Windows 0.1.7 预览包或当前仓库源码的独立服务。旧 Linux 0.1.7 不含此次同步接口；连接局域网服务时手机与电脑需网络互通。
+
+**验证：** 源码回归 134 项通过，含编辑组件浏览器回归；Android release JVM 测试 19 项通过。同签名正式 APK 已在现用真机覆盖升级，原有编辑恢复/保存、页面切换及局域网同步通过：待同步 0、冲突 0、副本完整。未宣称所有 Android 设备、长期后台运行或真实模型供应商流程已验收。
+
+### English
+
+Release-signed Android APK, Android 9/API 28+, version 0.1.0, versionCode 3. Includes a complete local library, offline editing, named server nodes, manual/automatic sync, local/remote agents, settings and transfer workflows. Fixes rejected material updates and inaccessible pending edit drafts.
+
+Upgrade over the existing release-signed app; do not uninstall to update. Debug `.probe` storage is separate. Use the standalone service from Linux 0.1.8, Windows 0.1.7 Preview or current source; older Linux 0.1.7 lacks these sync endpoints.
+
+Validation: 134 source regressions and 19 release JVM tests passed. The current phone passed signed upgrade, pending draft recovery/save, navigation and LAN sync with zero pending operations/conflicts and a complete replica. Other devices, long-running background behavior and real model-provider workflows are not claimed as fully tested.
+
+## windows-v0.1.7 - 2026-11-08
+
+### 中文
+
+首个 Windows x64 预览安装包，应用内版本保留已构建的 0.1.7。本平台独立使用 `windows-v0.1.7` 标签，与此前 Linux `v0.1.7` 安装包范围不同。
+
+- 包含拾文客户端、独立服务、Node、DSH 和支持 Android 同步的拾文插件。
+- 本机服务与局域网服务连接、密码认证；修复 Windows Node 路径、ESM 文件 URL 与已有资料库插件 junction 迁移。
+- NSIS 安装程序包含 Microsoft 官方签名的 Visual C++ x64 运行库，安装需要管理员权限。拾文安装程序本身未代码签名，可能显示未知发布者。
+
+**验证：** Windows 10 虚拟机首次/覆盖安装、隔离测试资料库迁移、独立服务启停通过；DSH 原生运行时及 DOCX/XLSX/PPTX 转 PDF 冒烟测试通过。完整图形界面、多机型和其他 Windows 版本尚未逐项验收，未调用真实模型。
+
+下载 `.exe`，升级前退出拾文并停止本机独立服务。Windows 包不包含开发者资料或模型凭据；与 Android 连接时需开放可达的局域网服务地址。
+
+### English
+
+First Windows x64 preview installer, retaining the built application version 0.1.7. The platform-specific `windows-v0.1.7` tag is distinct from the earlier Linux `v0.1.7` package. Includes the desktop client, standalone service, Node, DSH, Android sync endpoints and the Microsoft-signed Visual C++ x64 redistributable.
+
+Administrator installation is required. The Shiwen installer is unsigned. First/upgrade installation, isolated test-library relocation, service lifecycle, native runtime and Office-to-PDF smoke tests passed in a Windows 10 VM. Full GUI workflows and other Windows environments remain unverified. Stop the local service and quit the app before upgrading. No personal data or model credentials are bundled.
+
+## 0.1.8 - 2026-11-08
+
+### 中文
+
+Linux x64 预览版，配套 Android 0.1.0 的同步服务更新。
+
+- 服务端加入完整资料库同步、分页与分块传输、幂等写入回执、历史与来源、冲突和恢复协议。
+- 为 Android 提供人设快照、远端 DSH 会话和插件/自动化/外部接入管理接口，复用已认证的工作台会话。
+- 保留既有 Web、桌面与外部 Agent 的资料入口和来源统计，补充同步活动记录；修复服务停止时的连接关闭竞态。
+
+升级前退出客户端并停止旧独立服务，再安装 `.deb` 并重新启动。安装不预装或替换个人资料。资料库增加同步结构，旧程序不应继续并发操作同一库。Android 保存本地副本，PC/Web 仍连接服务端资料库，不是全端去中心化同步。
+
+```sh
+sha256sum -c SHA256SUMS-0.1.8.txt
+sudo apt install ./shiwen-dsh_0.1.8_amd64.deb
+```
+
+**验证：** 134 项源码回归通过；Linux 打包服务的启动/复用/停止与临时真实服务的同步、会话接口验收通过。不代表全新发行版系统安装或真实模型流程已验收。
+
+### English
+
+Linux x64 preview with service endpoints for Android 0.1.0: full-library synchronization, paged/chunked transfers, idempotent receipts, history/provenance, conflict recovery, agent profiles and remote DSH sessions/management.
+
+Stop the existing service and quit the app before installing the `.deb`, then restart. No personal data is bundled or replaced. Android has its own local replica; PC/Web still use the service's library. Validation covers 134 source regressions, packaged service lifecycle and isolated real-host sync/session checks, not all Linux distributions or real model-provider workflows.
+
+## 0.2.0-dev.3 - 2026-11-08
+
+### 中文
+
+DSH 插件预览包，要求 DSH 0.2.2-alpha.3 / Node.js >=24.9。
+
+- 与 Linux 0.1.8 共用资料库、同步活动与工作台代码，加入 Android 同步、人设、远程会话和管理接口。
+- 仍保留 DSH 原生对话与模型配置，主题/皮皮可选；插件不包含 Electron、Node 或拾文独立服务。
+- 认证由 DSH 宿主负责。Android 密码登录请使用拾文独立服务/桌面包，不能把此 tgz 当作完整服务安装包。
+
+先停止目标 DSH 实例，再安装到原 profile 后重启；停用/卸载保留资料。
+
+```sh
+sha256sum -c SHA256SUMS-0.2.0-dev.3.txt
+dsh plugin --profile web add ./dsh-shiwen-0.2.0-dev.3.tgz --ignore-scripts
+dsh web --no-open
+```
+
+**验证：** 134 项源码回归通过；实际 tgz 在隔离原生 DSH 中完成安装、认证、资料读写/MCP、重启持久化和卸载重装验收。未调用真实模型，未验证所有 Windows/macOS 原生 DSH 宿主。
+
+### English
+
+Plugin preview for DSH 0.2.2-alpha.3 / Node.js >=24.9, sharing Linux 0.1.8 library/workbench code and adding Android sync, profile and remote-session/management endpoints. Native chat/model configuration are preserved; appearance and persona remain opt-in.
+
+The tarball excludes Electron, Node and the Shiwen standalone service. Stock DSH owns authentication; use Shiwen's standalone service/desktop package for Android password login. Stop the host, install into the same profile and restart. Actual tarball installation, auth, records/MCP, restart persistence and uninstall/reinstall retention passed in an isolated DSH host; no real models were called.
+
 ## 0.2.0-dev.2 - 2026-11-06
 
 ### 中文
