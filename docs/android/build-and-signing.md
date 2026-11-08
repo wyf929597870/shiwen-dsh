@@ -58,7 +58,7 @@ adb shell am instrument --user 0 -w io.github.wyf929597870.shiwen.probe.test/and
 
 正式 APK 发布前须用 Android SDK 的 `apksigner verify --verbose --print-certs` 校验签名，并生成 SHA-256 校验文件。首次上线还须验证从前一版本覆盖升级后资料库、草稿和凭据仍能读取；仅通过编译不足以证明升级安全。
 
-当前源码 `versionName=0.1.0`、`versionCode=3`。正式构建使用发布签名；调试构建仍使用独立的 `.probe` 应用 ID 和 `-debug` 版本后缀。
+当前源码 `versionName=0.1.1`、`versionCode=4`。正式构建使用发布签名；调试构建仍使用独立的 `.probe` 应用 ID 和 `-debug` 版本后缀。
 
 ## CI
 

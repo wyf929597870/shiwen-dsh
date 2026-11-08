@@ -22,6 +22,7 @@ const labels={
   retained:['已保留为历史分支','Kept as a history branch'],
   merged:['已采用','Applied'],discarded:['未合并，历史保留','Not merged; history kept'],
 };
+const EMPTY_ATTACHMENTS=Object.freeze([]);
 const label=value=>labels[value]?t(...labels[value]):String(value||'—');
 const number=value=>Number(value||0).toLocaleString();
 const countLabel=(value)=>value==null?t('尚未提供','Not available'):number(value);
@@ -131,7 +132,7 @@ export function RecoveryPanel({node,libraryId,onBack,onStateChange}){
     </section>}
     {candidates.map(item=><button className="management-row" key={item.branchId} disabled={busy} onClick={()=>readBranch(item)}><strong>{item.title||item.recordId}</strong><span>{label(item.classification)} · {item.sourceHead?.revision!=null?`${t('来源版本','Source revision')} ${item.sourceHead.revision}`:''}</span></button>)}
     {cursor&&<button className="chip" disabled={busy} onClick={()=>run(()=>loadCandidates(false))}>{t('加载更多','Load more')}</button>}
-    {branch&&<section className="settings-card"><div className="settings-heading"><h2>{branch.record?.title}</h2><button className="text" disabled={busy} onClick={()=>{setSelected(null);setBranch(null);}}>{t('关闭','Close')}</button></div><p className="secondary">{branch.record?.contentDay} · {t('历史版本','Historical versions')} {branch.versions?.length||0} · {t('编辑活动','Edit activities')} {branch.activities?.length||0} · {t('附件','Attachments')} {branch.attachments?.length||0}</p><MarkdownView markdown={branch.record?.markdown||''}/>
+    {branch&&<section className="settings-card"><div className="settings-heading"><h2>{branch.record?.title}</h2><button className="text" disabled={busy} onClick={()=>{setSelected(null);setBranch(null);}}>{t('关闭','Close')}</button></div><p className="secondary">{branch.record?.contentDay} · {t('历史版本','Historical versions')} {branch.versions?.length||0} · {t('编辑活动','Edit activities')} {branch.activities?.length||0} · {t('附件','Attachments')} {branch.attachments?.length||0}</p><MarkdownView markdown={branch.record?.markdown||''} libraryId={libraryId} recordId={branch.record?.id||branch.record?.recordId||selected?.recordId} branchId={branch.branchId||selected?.branchId} attachmentDescriptors={branch.record?.attachmentDescriptors||EMPTY_ATTACHMENTS} branchAttachments={branch.attachments||EMPTY_ATTACHMENTS}/>
       <div className="node-actions"><button className="primary" disabled={busy||unknown} onClick={()=>decide('use-branch')}>{t('采用这个版本','Apply this version')}</button><button className="chip" disabled={busy||unknown} onClick={()=>decide('retain-branch')}>{t('保留为历史分支','Keep as history')}</button><button className="text" disabled={busy||unknown} onClick={()=>decide('discard')}>{t('不合并，保留历史','Do not merge; keep history')}</button></div>
     </section>}
     {unknown&&<p className="notice">{t('操作结果待核对。请刷新原任务状态，不要重复提交。','The result needs verification. Refresh the existing task instead of submitting again.')}</p>}

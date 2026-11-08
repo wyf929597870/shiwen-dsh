@@ -14,7 +14,51 @@ import java.util.concurrent.Callable
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.security.MessageDigest
+
+internal data class LibraryArchiveFile(val file: File, val byteLength: Long, val sha256: String)
+
+internal fun archiveFileInfo(file: File, maximum: Long): LibraryArchiveFile {
+    check(file.isFile) { "ARCHIVE_FILE_MISSING" }
+    val length = file.length()
+    require(length in 1..maximum) { "ARCHIVE_ENTRY_TOO_LARGE" }
+    val digest = MessageDigest.getInstance("SHA-256")
+    FileInputStream(file).use { input ->
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        var total = 0L
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            total += count
+            require(total <= maximum) { "ARCHIVE_ENTRY_TOO_LARGE" }
+            digest.update(buffer, 0, count)
+        }
+        check(total == length) { "ARCHIVE_FILE_CHANGED" }
+    }
+    return LibraryArchiveFile(file, length, digest.digest().joinToString("") { "%02x".format(it) })
+}
+
+internal fun copyArchiveFile(source: LibraryArchiveFile, target: File, maximum: Long): LibraryArchiveFile {
+    val digest = MessageDigest.getInstance("SHA-256")
+    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+    var total = 0L
+    FileInputStream(source.file).use { input -> FileOutputStream(target).use { output ->
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            total += count
+            require(total <= maximum) { "ARCHIVE_ENTRY_TOO_LARGE" }
+            digest.update(buffer, 0, count)
+            output.write(buffer, 0, count)
+        }
+        output.fd.sync()
+    } }
+    val hash = digest.digest().joinToString("") { "%02x".format(it) }
+    check(total == source.byteLength && hash == source.sha256) { "ARCHIVE_FILE_INTEGRITY_FAILED" }
+    return LibraryArchiveFile(target, total, hash)
+}
 
 data class LibraryContext(val libraryId: String, val pageGeneration: Long, val role: String,
     val integrity: String, val deviceId: String)
@@ -61,12 +105,15 @@ class LibraryRepository internal constructor(
 
     /** requestId+fingerprint make a lost bridge acknowledgement safely replayable. */
     fun create(requestId: String, input: JSONObject, generation: Long, allowLegacyReceipt: Boolean = false,
-        activityAction: String = "write", attachment: LibraryAttachment? = null): LibraryRecord {
+        activityAction: String = "write", attachment: LibraryAttachment? = null,
+        stagedAttachments: List<StagedLibraryAttachment> = emptyList()): LibraryRecord {
         UUID.fromString(requestId)
         require(generation >= 0)
         require(activityAction in setOf("write", "import", "copy", "restore", "resolve")) { "INVALID_ACTIVITY_ACTION" }
         val normalized = validateRecord(input)
+        validateStagedAttachments(normalized, stagedAttachments)
         val fingerprint = Canonical.hash(mapOf("record" to plain(normalized), "generation" to generation))
+        publishStagedFiles(stagedAttachments)
         return db.runInTransaction(Callable {
             dao.receipt(requestId)?.let { receipt ->
                 val legacyMatch = allowLegacyReceipt && receipt.fingerprint.startsWith("p0-legacy:") &&
@@ -100,6 +147,7 @@ class LibraryRepository internal constructor(
                 ZoneId.systemDefault().id, Canonical.hash(mapOf("markdown" to "", "segments" to emptyList<Any>())), afterHash,
                 sources.toString(), activityAction, authorship(sources), if (activityAction in setOf("import", "copy")) 0 else WritingDelta.count(markdown), 0, null)
             dao.insertRecord(record); attachment?.let { dao.putAttachment(it.copy(recordId = recordId)) }
+            persistStagedRows(recordId, stagedAttachments)
             val versionDocument = wireRecord(record).put("provenance", normalized.optJSONObject("provenance") ?: JSONObject.NULL)
             dao.insertVersion(LibraryVersion(versionId, recordId, 1, markdown, title, now, "create", changeId, null,
                 versionDocument.toString(), sources.toString(), "[]"))
@@ -139,7 +187,8 @@ class LibraryRepository internal constructor(
     fun saveLegacyDraft(draft: ProbeDraft): LibraryRecord = saveApprovedDraft(draft).let { read(it.id) }
 
     fun update(id: String, expectedRevision: Long, requestId: String, patch: JSONObject,
-        rebaseBase: LibraryRemoteHead? = null, activityAction: String = "write", resolveConflictId: String? = null): LibraryRecord {
+        rebaseBase: LibraryRemoteHead? = null, activityAction: String = "write", resolveConflictId: String? = null,
+        stagedAttachments: List<StagedLibraryAttachment> = emptyList()): LibraryRecord {
         UUID.fromString(requestId)
         require(activityAction in setOf("write", "import", "copy", "restore", "resolve")) { "INVALID_ACTIVITY_ACTION" }
         val current = read(id)
@@ -170,6 +219,19 @@ class LibraryRepository internal constructor(
             fields.put("sources", sources)
         }
         validateRecord(fields)
+        validateStagedAttachments(fields, stagedAttachments)
+        if (patch.has("attachmentDescriptors")) {
+            val stagedIds = stagedAttachments.map { it.id }.toSet()
+            val available = dao.attachments(id).associateBy { it.id }
+            val descriptors = fields.getJSONArray("attachmentDescriptors")
+            for (index in 0 until descriptors.length()) {
+                val descriptor = descriptors.getJSONObject(index)
+                if (descriptor.getString("id") in stagedIds) continue
+                val stored = checkNotNull(available[descriptor.getString("id")]) { "ATTACHMENT_NOT_FOUND" }
+                check(stored.hash.equals(descriptor.getString("hash"), ignoreCase = true) &&
+                    stored.byteLength == descriptor.getLong("byteLength") && stored.name == descriptor.getString("name")) { "ATTACHMENT_DESCRIPTOR_MISMATCH" }
+            }
+        }
         val now = Instant.now().toString(); val markdown = fields.optString("markdown")
         val revision = current.revision + 1; val change = UUID.randomUUID().toString(); val version = UUID.randomUUID().toString()
         val requestedDeleted = fields.optBoolean("deleted")
@@ -189,6 +251,7 @@ class LibraryRepository internal constructor(
             contentDay = nullable(fields, "contentDay"), dateBasis = fields.optString("dateBasis"), url = nullable(fields, "url"),
             annotation = nullable(fields, "annotation"), stage = nullable(fields, "stage"),
             sourceIdsJson = fields.optJSONArray("sourceIds")?.toString() ?: "[]", sourcesJson = fields.optJSONArray("sources")?.toString() ?: current.sourcesJson,
+            attachmentDescriptorsJson = fields.optJSONArray("attachmentDescriptors")?.toString() ?: current.attachmentDescriptorsJson,
             updatedAt = now, deleted = fields.optBoolean("deleted"), versionId = version, changeId = change,
             baseVersionId = operationBase.versionId, serverRevision = operationBase.serverRevision,
             localGeneration = current.localGeneration + 1, revision = revision,
@@ -200,6 +263,7 @@ class LibraryRepository internal constructor(
             contentHash(updated.markdown, JSONArray(updated.sourcesJson)), updated.sourcesJson, effectiveActivityAction,
             authorship(JSONArray(updated.sourcesJson)), if (effectiveActivityAction == "resolve") 0 else addedChars(current.markdown, updated.markdown),
             if (effectiveActivityAction == "resolve") 0 else removedChars(current.markdown, updated.markdown), null)
+        publishStagedFiles(stagedAttachments)
         db.runInTransaction(Callable {
             dao.receipt(requestId)?.let { prior ->
                 check(prior.fingerprint == fingerprint) { "REQUEST_REUSED" }
@@ -207,6 +271,7 @@ class LibraryRepository internal constructor(
             }
             check(dao.record(id)?.revision == expectedRevision) { "RECORD_REVISION_CONFLICT" }
             dao.updateRecord(updated)
+            persistStagedRows(id, stagedAttachments)
             fields.optJSONObject("provenance")?.let { dao.putProvenance(LibraryProvenance(id, it.toString())) }
             dao.clearLinks(id)
             (fields.optJSONArray("sourceIds") ?: JSONArray()).let { sourceIds ->
@@ -415,6 +480,17 @@ class LibraryRepository internal constructor(
         return file.readBytes()
     }
 
+    internal fun attachmentArchiveFile(attachmentId: String): LibraryArchiveFile {
+        val row = dao.attachmentsNotDownloaded().firstOrNull { it.id == attachmentId }
+            ?: dao.allAttachments().firstOrNull { it.id == attachmentId } ?: error("ATTACHMENT_NOT_FOUND")
+        val relative = row.localRelativePath ?: error("ATTACHMENT_NOT_AVAILABLE")
+        require(relative == "attachments/${row.hash.lowercase()}") { "ATTACHMENT_PATH_INVALID" }
+        val file = File(app.filesDir, "libraries/$libraryId/$relative")
+        val payload = archiveFileInfo(file, row.byteLength)
+        check(payload.byteLength == row.byteLength && payload.sha256 == row.hash.lowercase()) { "ATTACHMENT_INTEGRITY_FAILED" }
+        return payload
+    }
+
     fun branchAttachmentBytes(branchId: String, attachmentId: String): ByteArray {
         UUID.fromString(branchId)
         val row = checkNotNull(dao.branchAttachment(branchId, attachmentId)) { "BRANCH_ATTACHMENT_NOT_FOUND" }
@@ -423,6 +499,17 @@ class LibraryRepository internal constructor(
         val file = File(app.filesDir, "libraries/$libraryId/$relative")
         check(file.isFile && file.length() == row.byteLength && sha256(file.readBytes()) == row.hash.lowercase()) { "BRANCH_ATTACHMENT_INTEGRITY_FAILED" }
         return file.readBytes()
+    }
+
+    internal fun branchAttachmentArchiveFile(branchId: String, attachmentId: String): LibraryArchiveFile {
+        UUID.fromString(branchId)
+        val row = checkNotNull(dao.branchAttachment(branchId, attachmentId)) { "BRANCH_ATTACHMENT_NOT_FOUND" }
+        val relative = row.localRelativePath ?: error("BRANCH_ATTACHMENT_NOT_AVAILABLE")
+        require(relative == "branches/$branchId/attachments/${row.hash.lowercase()}") { "BRANCH_ATTACHMENT_PATH_INVALID" }
+        val file = File(app.filesDir, "libraries/$libraryId/$relative")
+        val payload = archiveFileInfo(file, row.byteLength)
+        check(payload.byteLength == row.byteLength && payload.sha256 == row.hash.lowercase()) { "BRANCH_ATTACHMENT_INTEGRITY_FAILED" }
+        return payload
     }
 
     private fun storeAttachmentFile(id: String, name: String, createdAt: String, hash: String, bytes: ByteArray) {
@@ -436,6 +523,40 @@ class LibraryRepository internal constructor(
         val temp = File(dir, ".$hash.import.part")
         temp.writeBytes(bytes)
         check(temp.renameTo(target)) { "ATTACHMENT_STORE_FAILED" }
+    }
+
+    private fun validateStagedAttachments(record: JSONObject, staged: List<StagedLibraryAttachment>) {
+        require(staged.size <= 10 && staged.sumOf { it.byteLength } <= 32L * 1024 * 1024) { "TOO_MANY_IMAGES_SELECTED" }
+        val unique = staged.associateBy { it.id }
+        require(unique.size == staged.size) { "ATTACHMENT_STAGE_DUPLICATE" }
+        val descriptors = record.optJSONArray("attachmentDescriptors") ?: JSONArray()
+        val described = (0 until descriptors.length()).associate { index ->
+            val item = descriptors.getJSONObject(index)
+            item.getString("id") to item
+        }
+        require(described.size == descriptors.length()) { "ATTACHMENT_DESCRIPTOR_DUPLICATE" }
+        for (item in staged) {
+            val descriptor = checkNotNull(described[item.id]) { "ATTACHMENT_DESCRIPTOR_MISSING" }
+            check(descriptor.optString("name") == item.name &&
+                descriptor.optString("hash").equals(item.hash, ignoreCase = true) &&
+                descriptor.optLong("byteLength", -1) == item.byteLength) { "ATTACHMENT_DESCRIPTOR_MISMATCH" }
+            check(item.byteLength == item.bytes.size.toLong() &&
+                LibraryAttachmentDraftStore.sha256(item.bytes) == item.hash &&
+                LibraryAttachmentDraftStore.imageMime(item.bytes) == item.mimeType) { "ATTACHMENT_STAGE_INTEGRITY_FAILED" }
+        }
+    }
+
+    /** Publish content-addressed files before the Room transaction; failures can leave only an unreferenced file. */
+    private fun publishStagedFiles(staged: List<StagedLibraryAttachment>) {
+        for (item in staged) {
+            storeAttachmentFile(item.id, item.name, Instant.now().toString(), item.hash, item.bytes)
+        }
+    }
+
+    private fun persistStagedRows(recordId: String, staged: List<StagedLibraryAttachment>) {
+        val now = Instant.now().toString()
+        for (item in staged) dao.putAttachment(LibraryAttachment(item.id, recordId, item.name, now, item.hash,
+            item.byteLength, "attachments/${item.hash}", true, false))
     }
 
     private fun sanitizeFileName(value: String): String {
@@ -499,6 +620,25 @@ class LibraryRepository internal constructor(
     }
 
     fun restoreArchiveSnapshot(snapshot: JSONObject, attachmentBytes: Map<String, ByteArray>,
+        draftAttachmentBytes: Map<String, ByteArray> = emptyMap(),
+        restoreRequestId: String? = null, restoreFingerprint: String? = null) {
+        val tempRoot = File(app.cacheDir, "archive-bytes-${UUID.randomUUID()}").apply { check(mkdirs()) }
+        try {
+            fun spill(values: Map<String, ByteArray>, subdir: String): Map<String, LibraryArchiveFile> {
+                val dir = File(tempRoot, subdir).apply { mkdirs() }
+                return values.mapValues { (id, bytes) ->
+                    val file = File(dir, UUID.randomUUID().toString())
+                    file.writeBytes(bytes)
+                    archiveFileInfo(file, bytes.size.toLong())
+                }
+            }
+            restoreArchiveSnapshotFromFiles(snapshot, spill(attachmentBytes, "record"), spill(draftAttachmentBytes, "draft"),
+                restoreRequestId, restoreFingerprint)
+        } finally { tempRoot.deleteRecursively() }
+    }
+
+    internal fun restoreArchiveSnapshotFromFiles(snapshot: JSONObject, attachmentFiles: Map<String, LibraryArchiveFile>,
+        draftAttachmentFiles: Map<String, LibraryArchiveFile>,
         restoreRequestId: String? = null, restoreFingerprint: String? = null) {
         check(snapshot.optInt("formatVersion") in listOf(1, 2)) { "ARCHIVE_VERSION_UNSUPPORTED" }
         check(snapshot.optString("libraryId") == libraryId) { "ARCHIVE_LIBRARY_MISMATCH" }
@@ -518,6 +658,12 @@ class LibraryRepository internal constructor(
         val conflicts = snapshot.optJSONArray("conflicts") ?: JSONArray()
         val clientArchive = snapshot.optJSONObject("clientArchive")?.let { JSONObject(it.toString()) }
         clientArchive?.let(LibraryClientArchive::validate)
+        val draftDescriptors = clientArchive?.optJSONArray("draftAttachments") ?: JSONArray()
+        val draftReferences = clientArchive?.optJSONArray("editorDrafts")
+            ?.let(LibraryClientArchive::draftAttachmentReferences).orEmpty()
+        val draftIds = (0 until draftDescriptors.length()).map { draftDescriptors.getJSONObject(it).getString("id") }.toSet()
+        require(draftIds.size == draftDescriptors.length() && draftAttachmentFiles.keys == draftIds &&
+            draftReferences.keys == draftIds) { "ARCHIVE_DRAFT_ATTACHMENT_SET_MISMATCH" }
         check(dao.recordCount() == 0 && dao.allVersions().isEmpty() && dao.allActivities().isEmpty() && dao.allHeads().isEmpty() &&
             dao.allAttachments().isEmpty() && dao.allProvenance().isEmpty() && dao.allConflicts().isEmpty() && dao.allBranches().isEmpty() &&
             dao.allBranchAttachments().isEmpty() && dao.allOutbox().isEmpty() && dao.allReceipts().isEmpty() && dao.allDrafts().isEmpty() &&
@@ -567,7 +713,7 @@ class LibraryRepository internal constructor(
                 require("$branchId/$attachmentId" in branchAttachmentIds) { "ARCHIVE_BRANCH_ATTACHMENT_REFERENCE_INVALID" }
             }
         }
-        require(attachmentBytes.keys == attachmentIds + branchAttachmentIds) { "ARCHIVE_ATTACHMENT_SET_MISMATCH" }
+        require(attachmentFiles.keys == attachmentIds + branchAttachmentIds) { "ARCHIVE_ATTACHMENT_SET_MISMATCH" }
         val conflictIds = (0 until conflicts.length()).map { conflicts.getJSONObject(it).getString("id") }.toSet()
         require(conflictIds.size == conflicts.length() && (0 until conflicts.length()).all { i ->
             val item = conflicts.getJSONObject(i); item.getString("recordId") in recordIds && item.optString("state").isNotBlank()
@@ -586,34 +732,56 @@ class LibraryRepository internal constructor(
         }) { "ARCHIVE_RECEIPT_INVALID" }
         val staged = mutableListOf<Triple<File, File, Boolean>>()
         val createdTargets = mutableListOf<File>()
+        val createdDraftTokens = mutableListOf<Pair<String, String>>()
+        val stagedTargets = mutableSetOf<File>()
+        val stagedBranch = mutableListOf<Triple<File, File, Boolean>>()
+        try {
         for (i in 0 until attachments.length()) {
             val descriptor = attachments.getJSONObject(i); val id = descriptor.getString("id")
-            val bytes = checkNotNull(attachmentBytes[id]) { "ARCHIVE_ATTACHMENT_MISSING" }
-            check(bytes.size.toLong() == descriptor.getLong("byteLength") && sha256(bytes) == descriptor.getString("hash").lowercase()) { "ARCHIVE_ATTACHMENT_HASH_MISMATCH" }
+            val payload = checkNotNull(attachmentFiles[id]) { "ARCHIVE_ATTACHMENT_MISSING" }
             val hash = descriptor.getString("hash").lowercase(); require(hash.matches(Regex("[a-f0-9]{64}")))
+            check(payload.byteLength == descriptor.getLong("byteLength") && payload.sha256 == hash &&
+                archiveFileInfo(payload.file, LibraryImportExport.MAX_BACKUP_BYTES) == payload) { "ARCHIVE_ATTACHMENT_HASH_MISMATCH" }
             val dir = File(app.filesDir, "libraries/$libraryId/attachments").apply { mkdirs() }
-            val tmp = File(dir, ".$hash.restore.part"); val dest = File(dir, hash)
-            tmp.writeBytes(bytes)
-            if (dest.exists()) check(dest.length() == bytes.size.toLong() && sha256(dest.readBytes()) == hash) { "ARCHIVE_ATTACHMENT_TARGET_MISMATCH" }
+            val tmp = File(dir, ".$hash.restore-${UUID.randomUUID()}.part"); val dest = File(dir, hash)
+            if (!stagedTargets.add(dest)) continue
             staged.add(Triple(tmp, dest, !dest.exists()))
+            copyArchiveFile(payload, tmp, LibraryImportExport.MAX_BACKUP_BYTES)
+            if (dest.exists()) {
+                val existing = archiveFileInfo(dest, LibraryImportExport.MAX_BACKUP_BYTES)
+                check(existing.byteLength == payload.byteLength && existing.sha256 == hash) { "ARCHIVE_ATTACHMENT_TARGET_MISMATCH" }
+            }
         }
-        val stagedBranch = mutableListOf<Triple<File, File, Boolean>>()
         for (i in 0 until branchAttachments.length()) {
             val descriptor = branchAttachments.getJSONObject(i)
             val branchId = descriptor.getString("branchId")
             UUID.fromString(branchId)
             val id = descriptor.getString("attachmentId")
             val key = "$branchId/$id"
-            val bytes = checkNotNull(attachmentBytes[key]) { "ARCHIVE_ATTACHMENT_MISSING" }
-            check(bytes.size.toLong() == descriptor.getLong("byteLength") && sha256(bytes) == descriptor.getString("hash").lowercase()) { "ARCHIVE_ATTACHMENT_HASH_MISMATCH" }
+            val payload = checkNotNull(attachmentFiles[key]) { "ARCHIVE_ATTACHMENT_MISSING" }
             val hash = descriptor.getString("hash").lowercase(); require(hash.matches(Regex("[a-f0-9]{64}")))
+            check(payload.byteLength == descriptor.getLong("byteLength") && payload.sha256 == hash &&
+                archiveFileInfo(payload.file, LibraryImportExport.MAX_BACKUP_BYTES) == payload) { "ARCHIVE_ATTACHMENT_HASH_MISMATCH" }
             val dir = File(app.filesDir, "libraries/$libraryId/branches/$branchId/attachments").apply { mkdirs() }
-            val tmp = File(dir, ".$hash.restore.part"); val dest = File(dir, hash)
-            tmp.writeBytes(bytes)
-            if (dest.exists()) check(dest.length() == bytes.size.toLong() && sha256(dest.readBytes()) == hash) { "ARCHIVE_ATTACHMENT_TARGET_MISMATCH" }
+            val tmp = File(dir, ".$hash.restore-${UUID.randomUUID()}.part"); val dest = File(dir, hash)
+            if (!stagedTargets.add(dest)) continue
             stagedBranch.add(Triple(tmp, dest, !dest.exists()))
+            copyArchiveFile(payload, tmp, LibraryImportExport.MAX_BACKUP_BYTES)
+            if (dest.exists()) {
+                val existing = archiveFileInfo(dest, LibraryImportExport.MAX_BACKUP_BYTES)
+                check(existing.byteLength == payload.byteLength && existing.sha256 == hash) { "ARCHIVE_ATTACHMENT_TARGET_MISMATCH" }
+            }
         }
-        try {
+            val draftStore = LibraryAttachmentDraftStore(app, libraryId)
+            for (i in 0 until draftDescriptors.length()) {
+                val descriptor = draftDescriptors.getJSONObject(i)
+                val token = descriptor.getString("id")
+                val payload = checkNotNull(draftAttachmentFiles[token]) { "ARCHIVE_DRAFT_ATTACHMENT_MISSING" }
+                if (draftStore.restoreFromFile(token, descriptor.getString("name"), descriptor.getString("hash"),
+                        descriptor.getLong("byteLength"), descriptor.getString("mimeType"), payload)) {
+                    createdDraftTokens += token to descriptor.getString("hash")
+                }
+            }
             staged.forEach { (tmp, target, shouldCreate) ->
                 if (shouldCreate) { check(tmp.renameTo(target)) { "ARCHIVE_ATTACHMENT_STORE_FAILED" }; createdTargets.add(target) }
                 else tmp.delete()
@@ -666,6 +834,8 @@ class LibraryRepository internal constructor(
             }
         } catch (e: Exception) {
             staged.forEach { it.first.delete() }; stagedBranch.forEach { it.first.delete() }; createdTargets.forEach { it.delete() }
+            val draftStore = LibraryAttachmentDraftStore(app, libraryId)
+            createdDraftTokens.forEach { (id, hash) -> runCatching { draftStore.deleteRestored(id, hash) } }
             throw e
         }
     }
@@ -852,14 +1022,30 @@ class LibraryManager(context: Context, private val namespace: String = "shiwen-l
 
     @Synchronized fun restoreArchive(snapshot: JSONObject, attachmentBytes: Map<String, ByteArray>,
         name: String = "恢复的资料库", requestId: String? = null, fingerprint: String? = null,
-        asNewLibrary: Boolean = false): LibraryRepository {
+        asNewLibrary: Boolean = false, draftAttachmentBytes: Map<String, ByteArray> = emptyMap()): LibraryRepository {
+        val tempRoot = File(app.cacheDir, "restore-bytes-${UUID.randomUUID()}").apply { check(mkdirs()) }
+        try {
+            fun spill(values: Map<String, ByteArray>, dirName: String) = values.mapValues { (_, bytes) ->
+                val dir = File(tempRoot, dirName).apply { mkdirs() }
+                val file = File(dir, UUID.randomUUID().toString())
+                file.writeBytes(bytes)
+                archiveFileInfo(file, LibraryImportExport.MAX_BACKUP_BYTES)
+            }
+            return restoreArchiveFiles(snapshot, spill(attachmentBytes, "attachments"), name, requestId, fingerprint,
+                asNewLibrary, spill(draftAttachmentBytes, "draft-attachments"))
+        } finally { tempRoot.deleteRecursively() }
+    }
+
+    @Synchronized internal fun restoreArchiveFiles(snapshot: JSONObject, attachmentFiles: Map<String, LibraryArchiveFile>,
+        name: String = "恢复的资料库", requestId: String? = null, fingerprint: String? = null,
+        asNewLibrary: Boolean = false, draftAttachmentFiles: Map<String, LibraryArchiveFile> = emptyMap()): LibraryRepository {
         recoverRestoreReservations()
         require(name.isNotBlank() && name.trim().length <= 80) { "INVALID_LIBRARY_NAME" }
         val sourceLibraryId = snapshot.optString("libraryId")
         UUID.fromString(sourceLibraryId)
         val stableRequestId = requestId ?: UUID.randomUUID().toString()
         UUID.fromString(stableRequestId)
-        val stableFingerprint = fingerprint ?: defaultRestoreFingerprint(snapshot, attachmentBytes, name.trim(), asNewLibrary)
+        val stableFingerprint = fingerprint ?: defaultRestoreFingerprint(snapshot, attachmentFiles, draftAttachmentFiles, name.trim(), asNewLibrary)
         require(stableFingerprint.matches(Regex("[a-f0-9]{64}"))) { "RESTORE_FINGERPRINT_INVALID" }
         val lock = restoreLocks.computeIfAbsent("$namespace:$stableRequestId") { java.util.concurrent.locks.ReentrantLock() }
         check(lock.tryLock()) { "RESTORE_ALREADY_RUNNING" }
@@ -909,7 +1095,8 @@ class LibraryManager(context: Context, private val namespace: String = "shiwen-l
             val repo = open(row)
             try {
                 restoreFaultInjector("after-reservation")
-                repo.restoreArchiveSnapshot(targetSnapshot, attachmentBytes, stableRequestId, stableFingerprint)
+                repo.restoreArchiveSnapshotFromFiles(targetSnapshot, attachmentFiles, draftAttachmentFiles,
+                    stableRequestId, stableFingerprint)
                 restoreFaultInjector("after-data-commit")
                 registry.runInTransaction {
                     val currentReservation = checkNotNull(registry.dao().restoreReservation(stableRequestId)) { "RESTORE_RESERVATION_MISSING" }
@@ -980,12 +1167,12 @@ class LibraryManager(context: Context, private val namespace: String = "shiwen-l
 
     private fun restoreDatabaseName(requestId: String) = "shiwen-restore-$requestId.sqlite"
 
-    private fun defaultRestoreFingerprint(snapshot: JSONObject, attachmentBytes: Map<String, ByteArray>,
+    private fun defaultRestoreFingerprint(snapshot: JSONObject, attachmentFiles: Map<String, LibraryArchiveFile>,
+        draftAttachmentFiles: Map<String, LibraryArchiveFile>,
         name: String, asNewLibrary: Boolean): String {
-        val attachmentDigests = attachmentBytes.toSortedMap().mapValues { (_, bytes) ->
-            MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
-        }
+        val attachmentDigests = attachmentFiles.toSortedMap().mapValues { (_, file) -> file.sha256 }
         return Canonical.hash(mapOf("snapshot" to snapshot.toString(), "attachmentDigests" to attachmentDigests,
+            "draftAttachmentDigests" to draftAttachmentFiles.toSortedMap().mapValues { (_, file) -> file.sha256 },
             "name" to name, "asNewLibrary" to asNewLibrary))
     }
 

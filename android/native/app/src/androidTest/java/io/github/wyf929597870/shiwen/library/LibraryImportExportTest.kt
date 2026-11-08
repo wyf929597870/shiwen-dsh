@@ -16,6 +16,9 @@ import java.io.ByteArrayOutputStream
 import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import java.util.zip.ZipInputStream
+import java.io.ByteArrayInputStream
+import java.security.MessageDigest
 
 @RunWith(AndroidJUnit4::class)
 class LibraryImportExportTest {
@@ -49,6 +52,41 @@ class LibraryImportExportTest {
     private fun input(markdown: String) = JSONObject().put("kind", "reference").put("title", "Archive record")
         .put("markdown", markdown).put("origin", "external").put("processing", "original")
         .put("sources", JSONArray().put(JSONObject().put("text", markdown).put("origin", "external")))
+
+    @Test fun portableMarkdownExportIncludesReferencedImage() = withRepositories { source, _ ->
+        val image = byteArrayOf(137.toByte(), 80, 78, 71, 13, 10, 26, 10, 0, 1)
+        val row = source.importMarkdown(UUID.randomUUID().toString(), "Image", "body", originalName = "image.png", originalBytes = image)
+        val id = JSONArray(row.attachmentDescriptorsJson).getJSONObject(0).getString("id")
+        source.update(row.id, row.revision, UUID.randomUUID().toString(), JSONObject().put("markdown", "![alt](attachment:$id)"))
+        val archive = LibraryImportExport(LibraryFileTransfer(ApplicationProvider.getApplicationContext())).exportRecordWithImages(source, row.id)
+        val entries = mutableMapOf<String, ByteArray>()
+        ZipInputStream(ByteArrayInputStream(archive.file.readBytes())).use { zip ->
+            while (true) { val entry = zip.nextEntry ?: break; entries[entry.name] = zip.readBytes(); zip.closeEntry() }
+        }
+        assertEquals(image.toList(), entries["images/$id.png"]?.toList())
+        assertTrue(entries.values.any { it.toString(Charsets.UTF_8).contains("![alt](images/$id.png)") })
+    }
+
+    @Test fun restoreDistinctAttachmentsWithIdenticalBytes() = withRepositories { source, target ->
+        val data = "same attachment bytes".toByteArray()
+        val first = source.importMarkdown(UUID.randomUUID().toString(), "First", "first", originalName = "first.md", originalBytes = data)
+        val second = source.importMarkdown(UUID.randomUUID().toString(), "Second", "second", originalName = "second.md", originalBytes = data)
+        val firstId = JSONArray(first.attachmentDescriptorsJson).getJSONObject(0).getString("id")
+        val secondId = JSONArray(second.attachmentDescriptorsJson).getJSONObject(0).getString("id")
+        val snapshot = source.archiveSnapshot()
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val sourceFiles = File(context.filesDir, "libraries/${source.libraryId}")
+        val heldFiles = File(context.cacheDir, "archive-duplicate-${UUID.randomUUID()}")
+        assertTrue(sourceFiles.renameTo(heldFiles))
+        try {
+            target.restoreArchiveSnapshot(snapshot, mapOf(firstId to data, secondId to data))
+            assertEquals(data.toList(), target.attachmentBytes(firstId).toList())
+            assertEquals(data.toList(), target.attachmentBytes(secondId).toList())
+        } finally {
+            sourceFiles.deleteRecursively()
+            assertTrue(heldFiles.renameTo(sourceFiles))
+        }
+    }
 
     @Test fun encryptedBackupsAuthenticateBeforeRestoreAndRejectIterationDowngrade() {
         val original = "# private archive".toByteArray()
@@ -119,6 +157,156 @@ class LibraryImportExportTest {
             File(context.filesDir, "libraries/${source.libraryId}").deleteRecursively()
             if (movedSourceFiles) assertTrue("Could not restore isolated source files", heldSourceFiles.renameTo(sourceFiles))
         }
+    }
+
+    @Test fun backupRestoresStagedDraftImagesForOriginalAndNewLibraryWithoutChangingToken() = withRepositories { source, _ ->
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val token = UUID.randomUUID().toString()
+        val bytes = byteArrayOf(137.toByte(), 80, 78, 71, 13, 10, 26, 10, 1, 2, 3)
+        val staged = LibraryAttachmentDraftStore(context, source.libraryId).stage("draft image.png", bytes)
+        // Move the staged bytes to the requested token before creating the durable editor draft.
+        val generatedId = staged.getString("id")
+        val generatedFile = File(context.filesDir, "libraries/${source.libraryId}/attachment-drafts/$generatedId")
+        val tokenFile = File(context.filesDir, "libraries/${source.libraryId}/attachment-drafts/$token")
+        assertTrue(generatedFile.renameTo(tokenFile))
+        val descriptor = JSONObject(staged.toString()).put("id", token)
+        val form = JSONObject().put("title", "Draft with image").put("markdown", "![draft](attachment:$token)")
+            .put("attachmentDescriptors", JSONArray().put(descriptor)).put("stagedAttachments", JSONArray().put(descriptor))
+        val content = JSONObject().put("form", form).put("selectedId", JSONObject.NULL)
+            .put("creating", true).put("editing", true)
+        val requestId = UUID.randomUUID().toString()
+        val drafts = RecordEditorDraftStore(context)
+        drafts.save(source.libraryId, "materials", requestId, 1, content)
+        try {
+            val codec = LibraryImportExport(LibraryFileTransfer(context))
+            val backup = codec.createBackup(source, includeConversations = false)
+            codec.decodeBackup(backup).use { decoded ->
+                assertEquals(bytes.toList(), decoded.draftAttachmentFiles[token]?.file?.readBytes()?.toList())
+            }
+
+            // Simulate restore to the original library identity on a clean client draft store.
+            drafts.clearLibraryForTest(source.libraryId)
+            val sourceDirectory = File(context.filesDir, "libraries/${source.libraryId}")
+            val heldDirectory = File(context.cacheDir, "held-draft-stage-${UUID.randomUUID()}")
+            assertTrue(sourceDirectory.renameTo(heldDirectory))
+            val namespace = "draft-image-restore-${UUID.randomUUID()}"
+            val manager = LibraryManager(context, namespace, "$namespace-legacy")
+            var newLibraryId: String? = null
+            try {
+                val original = codec.restoreBackup(manager, backup, "Restored original",
+                    requestId = UUID.randomUUID().toString())
+                assertEquals(source.libraryId, original.libraryId)
+                val originalRepo = manager.openLibrary(original.libraryId)
+                LibraryClientArchive(context).restoreDrafts(originalRepo)
+                val restored = drafts.read(original.libraryId, "materials").getJSONObject("draft")
+                    .getJSONObject("content").getJSONObject("form")
+                assertEquals(token, restored.getJSONArray("stagedAttachments").getJSONObject(0).getString("id"))
+                assertEquals(bytes.toList(), LibraryAttachmentDraftStore(context, original.libraryId)
+                    .read(token, "draft image.png").bytes.toList())
+
+                val imported = codec.restoreBackup(manager, backup, "Imported new library", asNewLibrary = true,
+                    requestId = UUID.randomUUID().toString())
+                newLibraryId = imported.libraryId
+                val importedRepo = manager.openLibrary(imported.libraryId)
+                LibraryClientArchive(context).restoreDrafts(importedRepo)
+                val importedDraft = drafts.read(imported.libraryId, "materials").getJSONObject("draft")
+                    .getJSONObject("content").getJSONObject("form")
+                assertEquals(token, importedDraft.getJSONArray("stagedAttachments").getJSONObject(0).getString("id"))
+                assertEquals(bytes.toList(), LibraryAttachmentDraftStore(context, imported.libraryId)
+                    .read(token, "draft image.png").bytes.toList())
+            } finally {
+                manager.closeForTest()
+                File(context.filesDir, "libraries/${source.libraryId}").deleteRecursively()
+                newLibraryId?.let { File(context.filesDir, "libraries/$it").deleteRecursively(); drafts.clearLibraryForTest(it) }
+                assertTrue(heldDirectory.renameTo(sourceDirectory))
+            }
+        } finally {
+            drafts.clearLibraryForTest(source.libraryId)
+            drafts.close()
+            LibraryAttachmentDraftStore(context, source.libraryId).delete(token)
+        }
+    }
+
+    @Test fun v1BackupWithoutDraftAttachmentManifestRemainsReadable() = withRepositories { source, _ ->
+        val codec = LibraryImportExport(LibraryFileTransfer(ApplicationProvider.getApplicationContext()))
+        val current = codec.createBackup(source, includeConversations = false)
+        val input = linkedMapOf<String, ByteArray>()
+        ZipInputStream(ByteArrayInputStream(current.readBytes())).use { zip ->
+            while (true) { val entry = zip.nextEntry ?: break; input[entry.name] = zip.readBytes(); zip.closeEntry() }
+        }
+        val manifest = JSONObject(input.getValue("manifest.json").toString(Charsets.UTF_8))
+            .put("formatVersion", 1).also { it.remove("draftAttachments") }
+        val snapshot = JSONObject(input.getValue("snapshot.json").toString(Charsets.UTF_8))
+        snapshot.optJSONObject("clientArchive")?.remove("draftAttachments")
+        val snapshotBytes = snapshot.toString().toByteArray(Charsets.UTF_8)
+        manifest.put("snapshotSha256", MessageDigest.getInstance("SHA-256").digest(snapshotBytes)
+            .joinToString("") { "%02x".format(it) })
+        val legacyEntries = input.filterKeys { it.startsWith("attachments/") }.toMutableMap().apply {
+            put("manifest.json", manifest.toString().toByteArray(Charsets.UTF_8))
+            put("snapshot.json", snapshotBytes)
+        }
+        val decoded = codec.decodeBackup(zip(*legacyEntries.map { it.key to it.value }.toTypedArray()))
+        decoded.use { assertTrue(it.draftAttachmentFiles.isEmpty()) }
+    }
+
+    @Test fun v3RejectsMissingHistoryReferencesWhileLegacyArchiveReturnsWarning() = withRepositories { source, _ ->
+        source.create(UUID.randomUUID().toString(), input("clean body"), 1)
+        val codec = LibraryImportExport(LibraryFileTransfer(ApplicationProvider.getApplicationContext()))
+        val archiveFile = codec.createBackup(source, includeConversations = false)
+        val entries = linkedMapOf<String, ByteArray>()
+        ZipInputStream(ByteArrayInputStream(archiveFile.readBytes())).use { zip ->
+            while (true) { val entry = zip.nextEntry ?: break; entries[entry.name] = zip.readBytes(); zip.closeEntry() }
+        }
+        archiveFile.delete()
+        val snapshot = JSONObject(entries.getValue("snapshot.json").toString(Charsets.UTF_8))
+        val missing = UUID.randomUUID().toString()
+        val literalAndCode = "attachment:$missing\n\n`![inline](attachment:$missing)`\n\n~~~md\n![fenced](attachment:$missing)\n~~~"
+        snapshot.getJSONArray("records").getJSONObject(0).put("markdown", literalAndCode)
+        val versions = snapshot.getJSONArray("versions")
+        for (i in 0 until versions.length()) versions.getJSONObject(i).put("markdown", literalAndCode)
+        var snapshotBytes = snapshot.toString().toByteArray(Charsets.UTF_8)
+        val manifest = JSONObject(entries.getValue("manifest.json").toString(Charsets.UTF_8))
+            .put("snapshotSha256", MessageDigest.getInstance("SHA-256").digest(snapshotBytes)
+                .joinToString("") { "%02x".format(it) })
+        entries["snapshot.json"] = snapshotBytes
+        entries["manifest.json"] = manifest.toString().toByteArray(Charsets.UTF_8)
+        codec.decodeBackup(zip(*entries.map { it.key to it.value }.toTypedArray())).use { assertTrue(it.warnings.isEmpty()) }
+        versions.getJSONObject(0).put("markdown", "![missing](attachment:$missing)")
+        snapshotBytes = snapshot.toString().toByteArray(Charsets.UTF_8)
+        manifest.put("snapshotSha256", MessageDigest.getInstance("SHA-256").digest(snapshotBytes)
+            .joinToString("") { "%02x".format(it) })
+        entries["snapshot.json"] = snapshotBytes
+        entries["manifest.json"] = manifest.toString().toByteArray(Charsets.UTF_8)
+        assertEquals("ARCHIVE_ATTACHMENT_REFERENCE_MISSING", assertThrows(IllegalStateException::class.java) {
+            codec.decodeBackup(zip(*entries.map { it.key to it.value }.toTypedArray()))
+        }.message)
+        manifest.put("formatVersion", 2)
+        entries["manifest.json"] = manifest.toString().toByteArray(Charsets.UTF_8)
+        codec.decodeBackup(zip(*entries.map { it.key to it.value }.toTypedArray())).use { legacy ->
+            assertTrue(legacy.warnings.any { it.startsWith("ARCHIVE_LEGACY_MISSING_ATTACHMENT:") && it.contains(missing) })
+        }
+    }
+
+    @Test fun restoringDraftTokenNeverOverwritesDifferentExistingBytes() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val libraryId = UUID.randomUUID().toString()
+        val store = LibraryAttachmentDraftStore(context, libraryId)
+        val token = UUID.randomUUID().toString()
+        val existing = byteArrayOf(137.toByte(), 80, 78, 71, 13, 10, 26, 10, 1)
+        val incoming = byteArrayOf(137.toByte(), 80, 78, 71, 13, 10, 26, 10, 2)
+        val staged = store.stage("draft.png", existing)
+        val generatedId = staged.getString("id")
+        val generatedFile = File(context.filesDir, "libraries/$libraryId/attachment-drafts/$generatedId")
+        val tokenFile = File(context.filesDir, "libraries/$libraryId/attachment-drafts/$token")
+        assertTrue(generatedFile.renameTo(tokenFile))
+        try {
+            val error = assertThrows(IllegalStateException::class.java) {
+                store.restore(token, "draft.png", LibraryAttachmentDraftStore.sha256(incoming), incoming.size.toLong(),
+                    "image/png", incoming)
+            }
+            assertEquals("ATTACHMENT_STAGE_TARGET_MISMATCH", error.message)
+            assertEquals(existing.toList(), store.read(token, "draft.png").bytes.toList())
+        } finally { store.delete(token); File(context.filesDir, "libraries/$libraryId").deleteRecursively() }
     }
 
     private fun zip(vararg entries: Pair<String, ByteArray>): ByteArray = ByteArrayOutputStream().use { output ->

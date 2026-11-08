@@ -21,10 +21,19 @@ export function readDoc(doc, fallback='personal') {
   if(JSON.stringify(doc).length>2000000) throw new Error('单条内容超过大小限制');
   visit(doc); return {text:text.trim(),groups};
 }
-export const count = s => [...s.replace(/\s/g,'')].length;
+const withoutImageReferences = s => {
+ let fence=null;
+ return s.split('\n').map(line=>{
+  const marker=/^\s{0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+  if(marker){if(!fence)fence=marker;else if(marker[0]===fence[0]&&marker.length>=fence.length&&line.trim()===marker)fence=null;return line;}
+  if(fence)return line;
+  return line.replace(/(`+)([^`]*?)\1|!\[[^\r\n]*?\]\(attachment:[a-f0-9-]{36}\)/gi,match=>match.startsWith('`')?match:'');
+ }).join('\n');
+};
+export const count = s => [...withoutImageReferences(s).replace(/\s/g,'')].length;
 export function changes(before,after) {
   let added=0, removed=0;
-  for(const part of diffChars(before,after)) {if(part.added) added+=count(part.value); if(part.removed) removed+=count(part.value);}
+  for(const part of diffChars(withoutImageReferences(before),withoutImageReferences(after))) {if(part.added) added+=count(part.value); if(part.removed) removed+=count(part.value);}
   return {added,removed};
 }
 export function dateKey(value, timeZone=Intl.DateTimeFormat().resolvedOptions().timeZone) {

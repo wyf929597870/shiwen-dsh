@@ -6,6 +6,10 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertThrows
 import org.junit.Test
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.security.MessageDigest
 
 class LibraryArchiveCryptoTest {
     @Test fun portableEncryptionRoundTripsAndRejectsWrongPasswordOrTampering() {
@@ -36,5 +40,30 @@ class LibraryArchiveCryptoTest {
         assertEquals("BACKUP_PASSWORD_LENGTH_INVALID", assertThrows(IllegalArgumentException::class.java) {
             LibraryArchiveCrypto.encrypt(byteArrayOf(1), "short".toCharArray())
         }.message)
+    }
+
+    @Test fun fileEncryptionStreamsArchivesLargerThanTwentyMiB() {
+        val plain = File.createTempFile("shiwen-large-archive-", ".zip")
+        val encrypted = File.createTempFile("shiwen-large-archive-", ".shiwen")
+        val restored = File.createTempFile("shiwen-large-archive-", ".restored")
+        try {
+            val block = ByteArray(256 * 1024) { (it * 31).toByte() }
+            FileOutputStream(plain).use { output -> repeat(100) { output.write(block) } }
+            val expected = digest(plain)
+            LibraryArchiveCrypto.encryptFile(plain, encrypted, "large backup password".toCharArray(), 64L * 1024 * 1024)
+            assertTrue(LibraryArchiveCrypto.isEncrypted(encrypted))
+            LibraryArchiveCrypto.decryptFile(encrypted, restored, "large backup password".toCharArray(), 64L * 1024 * 1024)
+            assertEquals(plain.length(), restored.length())
+            assertEquals(expected, digest(restored))
+        } finally { plain.delete(); encrypted.delete(); restored.delete() }
+    }
+
+    private fun digest(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        FileInputStream(file).use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) { val count = input.read(buffer); if (count < 0) break; digest.update(buffer, 0, count) }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 }

@@ -5,6 +5,14 @@ import org.junit.Test
 import java.util.Base64
 
 class WritingDeltaTest {
+    @Test fun imageReferencesDoNotAddWritingCharacters() {
+        val image = "![说明](attachment:01234567-89ab-cdef-0123-456789abcdef)"
+        assertEquals(0, WritingDelta.count(image))
+        assertEquals(WritingDelta.Counts(0, 0), WritingDelta.between("原文", "原文$image"))
+        assertEquals(WritingDelta.Counts(1, 0), WritingDelta.between("原文$image", "原文补$image"))
+        assertEquals(true, WritingDelta.count("```\n$image\n```") > 0)
+        assertEquals(true, WritingDelta.count("`$image`") > 0)
+    }
     @Test fun unicodeAndWhitespaceCountsMatchDesktopDiffFixtures() {
         val lines=javaClass.classLoader!!.getResourceAsStream("writing-delta.tsv")!!.bufferedReader().readLines()
         for((index,line) in lines.withIndex()){

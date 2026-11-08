@@ -2,12 +2,14 @@
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {dirname,resolve} from 'node:path';
 import {parseArgs} from 'node:util';
+import {createHash,randomUUID} from 'node:crypto';
+import {basename} from 'node:path';
 import {createClient,dataRoot} from './client.mjs';
 import {definitions} from './contracts.mjs';
-const {values,positionals}=parseArgs({allowPositionals:true,options:{root:{type:'string'},'token-file':{type:'string'},input:{type:'string'},help:{type:'boolean'}}});
+const {values,positionals}=parseArgs({allowPositionals:true,options:{root:{type:'string'},'token-file':{type:'string'},input:{type:'string'},purpose:{type:'string'},record:{type:'string'},help:{type:'boolean'}}});
 const inputText=async()=>{let body='';for await(const chunk of process.stdin){body+=chunk;if(Buffer.byteLength(body)>8*1024*1024)throw Error('输入过大');}return body;};
 async function main(){
- if(values.help||!positionals.length){console.log('Usage: shiwen-bridge [--root DATA_ROOT] [--token-file FILE] tools | call TOOL [--input JSON_FILE] | mcp | configure\ncall reads a JSON object from stdin when --input is omitted.\nconfigure reads a token from stdin and writes --token-file (new file only).');return;}
+ if(values.help||!positionals.length){console.log('Usage: shiwen-bridge [--root DATA_ROOT] [--token-file FILE] tools | call TOOL [--input JSON_FILE] | upload-image FILE [--purpose create|update] [--record ID] | mcp | configure\ncall reads a JSON object from stdin when --input is omitted.\nconfigure reads a token from stdin and writes --token-file (new file only).');return;}
  const [command,name]=positionals;
  if(command==='configure'){
   if(!values['token-file'])throw Error('configure 需要 --token-file');
@@ -15,6 +17,14 @@ async function main(){
   const path=resolve(values['token-file']);await mkdir(dirname(path),{recursive:true,mode:0o700});await writeFile(path,token+'\n',{mode:0o600,flag:'wx'});console.log('Credential file created.');return;
  }
  const request=createClient({root:values.root?resolve(values.root):dataRoot(),tokenFile:values['token-file']??process.env.SHIWEN_TOKEN_FILE});
+ if(command==='upload-image'){
+  if(!name)throw Error('请提供图片文件');
+  const bytes=await readFile(resolve(name));if(!bytes.length||bytes.length>8*1024*1024)throw Error('图片大小超出限制');
+  const uploadId=randomUUID(),purpose=values.purpose??'create',digest=createHash('sha256').update(bytes).digest('hex');
+  const begin=(await request('/v1/tools/call',{name:'shiwen_image_begin',arguments:{uploadId,purpose,...(values.record?{recordId:values.record}:{}),name:basename(name),byteLength:bytes.length,digest}})).result;
+  for(const part of begin.missingParts){const start=part*begin.partBytes;await request('/v1/tools/call',{name:'shiwen_image_part',arguments:{uploadId,part,dataBase64:bytes.subarray(start,start+begin.partBytes).toString('base64')}});}
+  console.log(JSON.stringify((await request('/v1/tools/call',{name:'shiwen_image_status',arguments:{uploadId}})).result,null,2));return;
+ }
  if(command==='tools'){console.log(JSON.stringify(await request('/v1/tools'),null,2));return;}
  if(command==='call'){
   if(!name)throw Error('请提供工具名称');

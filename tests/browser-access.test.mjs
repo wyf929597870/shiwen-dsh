@@ -2,12 +2,34 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {browserAccess} from '../plugins/workbench/src/browser-access.mjs';
 import {apply as workbench} from '../plugins/workbench/src/index.mjs';
+import {createStore} from '../plugins/library/legacy/store.mjs';
+import {plainDoc} from '../plugins/library/legacy/content.mjs';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
 
 function context(server={host:'127.0.0.1',port:12345,protocol:'http:'}){
  return {get:name=>name==='webServer'?server:{name:'desktop'},
   shiwenLibrary:{paths:{library:'/synthetic/library'}},
   connection:{authenticatedUrl:url=>url+'?token=test-only'}};
 }
+test('workbench image save retry survives a later edit',async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'shiwen-workbench-replay-')),store=createStore(join(dir,'library.sqlite'));t.after(()=>{store.close();rmSync(dir,{recursive:true,force:true});});
+ const browserPeer={},ctx=context();let route;ctx.shiwenLibrary=store;ctx.effect=fn=>fn();ctx.connection={browserPeer,admit:()=>({peer:browserPeer}),fetch:{register:value=>{route=value;return()=>{};}}};workbench(ctx);
+ const invoke=async(method,args)=>{const response=await route.fetch(new Request('http://localhost/api/shiwen',{method:'POST',body:JSON.stringify({method,args})}));return {status:response.status,...await response.json()};};
+ const row=store.save({kind:'reference',origin:'external',body:'Original'}),image=store.stageWorkbenchImage({name:'x.png',data:Buffer.from('89504e470d0a1a0a00010203','hex').toString('base64')});
+ const args={id:row.id,revision:row.revision,kind:'reference',title:'Image',body:`Original\n![x](attachment:${image.id})`,stage:'draft',imageIds:[image.id],requestId:'replay-after-edit'};
+ const first=await invoke('saveMarkdown',args);assert.equal(first.status,200);
+ store.save({id:row.id,revision:first.result.revision,doc:plainDoc('Original','ai')});
+ const retry=await invoke('saveMarkdown',args);assert.equal(retry.status,200,retry.error);assert.equal(retry.result.id,first.result.id);
+ const changed=await invoke('saveMarkdown',{...args,body:'different'});assert.equal(changed.status,400);assert.match(changed.error,/不同内容/);
+ const missing=await invoke('saveMarkdown',{kind:'reference',body:'![x](attachment:unknown)'});assert.equal(missing.status,400);assert.match(missing.error,/图片不存在/);
+ const example=await invoke('saveMarkdown',{kind:'reference',body:'`![x](attachment:unknown)`'});assert.equal(example.status,200);
+ const legacy=store.save({kind:'reference',body:'![x](attachment:unknown)'});const legacyEdit=await invoke('saveMarkdown',{id:legacy.id,revision:legacy.revision,kind:'reference',body:'![x](attachment:unknown)\nkeep editing'});assert.equal(legacyEdit.status,200);
+ const restored=createStore(join(dir,'restore.sqlite'));t.after(()=>restored.close());restored.restoreBackup(store.exportBackup());
+ const requestPayload={id:args.id,revision:args.revision,kind:args.kind,title:args.title,body:args.body,stage:args.stage,sourceIds:args.sourceIds,imageIds:args.imageIds};
+ assert.equal(restored.workbenchImageReceipt({requestId:args.requestId,requestPayload}).id,first.result.id);
+});
 test('浏览器入口复用 Host 地址；只有显式请求登录地址时返回凭据',()=>{
  const ctx=context(),status=browserAccess(ctx);
  assert.equal(status.url,'http://127.0.0.1:12345/');
@@ -52,6 +74,9 @@ test('登录地址仅发给 DSH 浏览器 Peer，拒绝 API Peer 与伪造身份
   assert.equal(denied.response.headers.get('cache-control'),'no-store');
   assert.equal('result' in denied.body,false);assert.equal(JSON.stringify(denied.body).includes('token='),false);
   assert.equal(issued,1);
+ }
+ for(const [method,args] of [['readImage',{}],['stageImage',{}],['workbenchDraft',{}],['discardStagedImages',{}],['saveMarkdown',{imageIds:['test']}]]){
+  const denied=await invoke(method,args);assert.equal(denied.response.status,403);
  }
  const status=await invoke('browserStatus');assert.equal(status.response.status,200);
  assert.equal('loginUrl' in status.body.result,false);assert.equal(issued,1);

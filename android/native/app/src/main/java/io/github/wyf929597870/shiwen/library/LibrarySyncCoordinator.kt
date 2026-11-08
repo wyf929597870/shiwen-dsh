@@ -245,7 +245,10 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
             row = row.copy(appliedCursor = persistedCursor, cursor = persistedCursor)
             manager.update(row)
         }
-        pushOutbox(repo, nodeId, configRevision, epoch, operationId)
+        val identity = rpc(nodeId, configRevision, "identity", JSONObject().put("protocolVersion", PROTOCOL_VERSION).put("deviceId", repo.deviceId))
+        check(identity.optString("libraryId") == repo.libraryId && identity.optString("epoch") == epoch) { "SYNC_IDENTITY_CHANGED" }
+        val stagedAttachments = identity.optJSONObject("capabilities")?.optBoolean("stagedRecordAttachments") == true
+        pushOutbox(repo, nodeId, configRevision, epoch, operationId, stagedAttachments)
         var cursor = row.cursor ?: "0"
         var count = 0
         while (true) {
@@ -261,6 +264,8 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
                 if (versionRef != null) event.put("version", downloadPayloadObject(repo, nodeId, configRevision, epoch, versionRef))
                 val activityRef = event.optJSONObject("activitiesRef")
                 if (activityRef != null) event.put("activities", downloadPayloadArray(repo, nodeId, configRevision, epoch, activityRef))
+                val provenanceRef = event.optJSONObject("provenanceRef")
+                if (provenanceRef != null) event.put("provenance", downloadPayloadObject(repo, nodeId, configRevision, epoch, provenanceRef))
                 resolvedEvents.add(event)
             }
             cursor = page.get("nextCursor").toString()
@@ -287,7 +292,7 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
         putProgress(repo, operationId, "completed", "finalize", count, null, null)
     }
 
-    private fun pushOutbox(repo: LibraryRepository, nodeId: String, revision: String, epoch: String, operationId: String) {
+    private fun pushOutbox(repo: LibraryRepository, nodeId: String, revision: String, epoch: String, operationId: String, stagedAttachments: Boolean) {
         repairKnownRejectedAttachmentDescriptors(repo)
         // Send a record's offline edits in dependency order. Before each POST, persist
         // the exact immutable body and mark it unknown so a lost ACK is resolved via
@@ -323,7 +328,7 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
 
             row = rebaseUnsentChild(repo, row)
             if (row.state == "blocked-dependency") continue
-            uploadAttachmentsForRecord(repo, nodeId, revision, epoch, row.recordId)
+            uploadAttachmentsForRecord(repo, nodeId, revision, epoch, row.recordId, JSONObject(row.payloadJson), stagedAttachments)
             row = row.copy(state = "unknown", attempts = row.attempts + 1, lastError = null)
             repo.dao.updateOutbox(row)
             val operation = JSONObject(row.payloadJson)
@@ -546,17 +551,24 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
     private fun stableConflictId(libraryId: String, operationId: String, revision: Long, changeId: String?): String =
         UUID.nameUUIDFromBytes("$libraryId\n$operationId\n$revision\n${changeId.orEmpty()}".toByteArray(Charsets.UTF_8)).toString()
 
-    private fun uploadAttachmentsForRecord(repo: LibraryRepository, nodeId: String, revision: String, epoch: String, recordId: String) {
-        val attachments = repo.dao.attachments(recordId).filterNot { it.uploaded }
+    private fun uploadAttachmentsForRecord(repo: LibraryRepository, nodeId: String, revision: String, epoch: String, recordId: String,
+        operation: JSONObject, stagedAttachments: Boolean) {
+        val descriptors = operation.getJSONObject("payload").optJSONArray("attachmentDescriptors") ?: JSONArray()
+        val required = (0 until descriptors.length()).map { descriptors.getJSONObject(it).getString("id") }.toSet()
+        val attachments = repo.dao.attachments(recordId).filter { !it.uploaded && (!stagedAttachments || it.id in required) }
+        val markdown = operation.getJSONObject("payload").optString("markdown")
+        if (!stagedAttachments && attachments.any { it.id in required && markdown.contains("attachment:${it.id}", ignoreCase = true) })
+            error("IMAGE_SYNC_SERVER_UPGRADE_REQUIRED")
         for (item in attachments) {
             check(item.downloaded && item.localRelativePath != null) { "ATTACHMENT_NOT_AVAILABLE" }
             val bytes = repo.attachmentBytes(item.id)
             val digest = sha256(bytes)
             check(bytes.size.toLong() == item.byteLength && digest == item.hash.lowercase()) { "ATTACHMENT_HASH_MISMATCH" }
-            val uploadId = UUID.nameUUIDFromBytes("${repo.libraryId}\n$nodeId\n${item.id}\n$digest".toByteArray(Charsets.UTF_8)).toString()
+            val mode = if (stagedAttachments) "\nstaged-v1" else ""
+            val uploadId = UUID.nameUUIDFromBytes("${repo.libraryId}\n$nodeId\n${item.id}\n$digest$mode".toByteArray(Charsets.UTF_8)).toString()
             val begin = rpc(nodeId, revision, "blobBegin", JSONObject().put("libraryId", repo.libraryId).put("epoch", epoch)
                 .put("deviceId", repo.deviceId).put("recordId", recordId).put("attachmentId", item.id).put("name", item.name)
-                .put("byteLength", item.byteLength).put("digest", digest).put("uploadId", uploadId))
+                .put("byteLength", item.byteLength).put("digest", digest).put("uploadId", uploadId).put("stageOnly", stagedAttachments))
             check(begin.optString("uploadId") == uploadId && begin.optLong("byteLength") == item.byteLength &&
                 begin.optString("digest") == digest) { "ATTACHMENT_UPLOAD_MISMATCH" }
             val partBytes = begin.optInt("partBytes", 0)
@@ -578,7 +590,9 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
                 .put("attachmentId", item.id).put("name", item.name))
             check(committed.optString("attachmentId") == item.id && committed.optString("recordId") == recordId &&
                 committed.optString("digest") == digest && committed.optLong("byteLength") == item.byteLength) { "ATTACHMENT_COMMIT_UNKNOWN" }
-            repo.dao.putAttachment(item.copy(uploaded = true))
+            // A staged upload is not durable record state until its operation commits.
+            // Keep it retryable if the staged transfer expires before the push succeeds.
+            if (!stagedAttachments || !committed.optBoolean("staged")) repo.dao.putAttachment(item.copy(uploaded = true))
         }
     }
 

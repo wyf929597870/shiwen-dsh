@@ -9,10 +9,23 @@ internal object WritingDelta {
     private data class Trail(val kind: String, val length: Int, val previous: Trail?)
     private data class Path(var oldPosition: Int, val added: Int, val removed: Int, var trail: Trail? = null)
     private data class Result(val counts: Counts, val changes: List<Change>)
-    fun count(value: String): Int = value.codePoints().filter { !space(it) }.count().toInt()
+    private val imageOrCode = Regex("(`+)([^`]*?)\\1|!\\[[^\\r\\n]*?]\\(attachment:[a-f0-9-]{36}\\)", RegexOption.IGNORE_CASE)
+    private val fenceStart = Regex("^\\s{0,3}(`{3,}|~{3,})")
+    private fun withoutImageReferences(value: String): String {
+        var fence: String? = null
+        return value.split('\n').joinToString("\n") { line ->
+            val marker = fenceStart.find(line)?.groupValues?.get(1)
+            if (marker != null) {
+                val active = fence
+                if (active == null) fence = marker else if (marker[0] == active[0] && marker.length >= active.length && line.trim() == marker) fence = null
+                line
+            } else if (fence != null) line else imageOrCode.replace(line) { match -> if (match.value.startsWith('`')) match.value else "" }
+        }
+    }
+    fun count(value: String): Int = withoutImageReferences(value).codePoints().filter { !space(it) }.count().toInt()
     private fun space(value: Int) = value in 9..13 || value == 32 || value == 160 || value == 5760 ||
         value in 8192..8202 || value in setOf(8232,8233,8239,8287,12288,65279)
-    fun between(before: String, after: String): Counts = calculate(before,after,false).counts
+    fun between(before: String, after: String): Counts = calculate(withoutImageReferences(before),withoutImageReferences(after),false).counts
     fun changes(before: String, after: String): List<Change> = calculate(before,after,true).changes
     private fun calculate(before: String, after: String, withChanges: Boolean): Result {
         if(before==after)return Result(Counts(0,0),if(withChanges)listOf(Change("equal",before)) else emptyList())

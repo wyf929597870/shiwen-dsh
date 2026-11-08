@@ -13,7 +13,8 @@ import {createRemoteSessionsAdapter} from '../../mobile/src/remote-sessions-adap
 import {createMobileSyncAdapter} from '../../mobile/src/sync-adapter.mjs';
 export const inject=['connection','shiwenLibrary','sessionQuery','shiwenExternal'];
 const ownerMethods=new Set(['mobileAgentProfile','agentState','agentDocumentSave','memorySave','memoryDelete','memoryDecide',
-  'externalStatus','externalClientCreate','externalClientRevoke','mobileManagement','mobileSync','mobileSessions']);
+  'externalStatus','externalClientCreate','externalClientRevoke','mobileManagement','mobileSync','mobileSessions',
+  'readImage','stageImage','discardStagedImages','workbenchDraft']);
 export function apply(ctx){
   const management=createManagementAdapter(ctx);
   const mobileSessions=createRemoteSessionsAdapter({ctx,library:ctx.shiwenLibrary});
@@ -24,7 +25,7 @@ export function apply(ctx){
     let method,args;
     try{
       ({method,args}=await request.json());
-      if(ownerMethods.has(method)){
+      if(ownerMethods.has(method)||(method==='saveMarkdown'&&args?.imageIds?.length)){
         const admission=ctx.connection.admit(request);
         if('rejection' in admission||admission.peer!==ctx.connection.browserPeer){
           return Response.json({error:'Authenticated owner session required'},
@@ -80,12 +81,33 @@ export function apply(ctx){
       }else if(method==='readMarkdown'){
         const row=library.get(args.id);if(!row||row.deleted)throw new Error('记录不存在');
         result={...row,markdown:markdownSource(row.doc),dshSources:library.dshSources({id:row.id})};
+      }else if(method==='readImage'){
+        const row=library.get(args.id);if(!row||row.deleted)throw new Error('记录不存在');
+        const image=library.attachment({id:args.attachmentId});
+        const mapped=row.importInfo?.links?.some(link=>link.attachment===args.attachmentId);
+        if(!image||(image.record!==row.id&&!mapped))throw new Error('图片不存在');
+        const bytes=Buffer.from(image.data,'base64');if(bytes.length>8*1024*1024)throw new Error('图片过大');
+        const mime=bytes.subarray(0,8).equals(Buffer.from('89504e470d0a1a0a','hex'))?'image/png':bytes[0]===255&&bytes[1]===216&&bytes[2]===255?'image/jpeg':/^GIF8[79]a$/.test(bytes.subarray(0,6).toString('ascii'))?'image/gif':bytes.subarray(0,4).toString('ascii')==='RIFF'&&bytes.subarray(8,12).toString('ascii')==='WEBP'?'image/webp':null;
+        if(!mime)throw new Error('图片格式不支持');result={mime,dataBase64:bytes.toString('base64')};
+      }else if(method==='stageImage'){
+        result=library.stageWorkbenchImage({name:args.name,data:args.dataBase64});
+      }else if(method==='discardStagedImages'){
+        result=library.discardWorkbenchImages({ids:args.ids});
+      }else if(method==='workbenchDraft'){
+        result=library.workbenchDraft(args);
       }else if(method==='saveMarkdown'){
-        const row=args.id?library.get(args.id):null;
-        if(args.id&&(!row||row.deleted))throw new Error('记录不存在');
-        if(typeof args.body!=='string'||args.body.length>1000000)throw new Error('正文无效或过长');
-        const doc=row?updateMarkdownDoc(row.doc,args.body,'personal',row.origin):plainDoc(args.body,'personal');
-        result=library.save({id:args.id,revision:args.revision,kind:args.kind,title:args.title,stage:args.stage,sourceIds:args.sourceIds,doc});
+        const requestPayload={id:args.id,revision:args.revision,kind:args.kind,title:args.title,body:args.body,stage:args.stage,sourceIds:args.sourceIds,imageIds:args.imageIds};
+        const replay=args.imageIds?.length?library.workbenchImageReceipt({requestId:args.requestId,requestPayload}):null;
+        if(replay)result=replay;
+        else{
+          const row=args.id?library.get(args.id):null;
+          if(args.id&&(!row||row.deleted))throw new Error('记录不存在');
+          if(typeof args.body!=='string'||args.body.length>1000000)throw new Error('正文无效或过长');
+          library.validateWorkbenchImages({id:args.id,body:args.body,imageIds:args.imageIds??[]});
+          const doc=row?updateMarkdownDoc(row.doc,args.body,'personal',row.origin):plainDoc(args.body,'personal');
+          const input={id:args.id,revision:args.revision,kind:args.kind,title:args.title,stage:args.stage,sourceIds:args.sourceIds,doc};
+          result=args.imageIds?.length?library.saveWorkbenchMarkdown(input,args.imageIds,args.requestId,requestPayload):library.save(input);
+        }
       }else{
         if(!['snapshot','review','draft','editingDraft','versions','restoreVersion','remove','restoreRemoved','updateRecord','importDate','recordDate','searchRecords','agentState','agentDocumentSave','memorySave','memoryDelete','memoryDecide'].includes(method))throw new Error('未知操作');
         result=library[method](args);

@@ -35,7 +35,7 @@ export class MobileSyncAdapter {
   beginUpload(kind,request){
     const ctx=this.context(request),byteLength=int(request.byteLength,0,limits.maxCanonicalOperationBytes),digest=text(request.digest,'digest',64);
     let metadata={};
-    if(kind==='blob')metadata={recordId:text(request.recordId,'recordId',100),attachmentId:text(request.attachmentId,'attachmentId',100),name:text(request.name,'name',500)};
+    if(kind==='blob')metadata={recordId:text(request.recordId,'recordId',100),attachmentId:text(request.attachmentId,'attachmentId',100),name:text(request.name,'name',500),...(request.stageOnly===true?{stageOnly:true}:{})};
     const status=this.chunks().begin(ctx,{uploadId:request.uploadId,kind,byteLength,digest,metadata});
     return {uploadId:status.uploadId,partBytes:status.partBytes,byteLength:status.byteLength,digest:status.digest,missingParts:status.missingParts};
   }
@@ -94,6 +94,7 @@ export class MobileSyncAdapter {
         for(const event of page.events){if(event.record&&Buffer.byteLength(canonicalJSON(event.record))>limits.maxInlineBytes){event.recordRef=this.publishPayload(ctx,event.record,{sourceAction:'changesRecord',seq:event.seq,changeId:event.changeId});event.record=null;}
           if(event.version&&Buffer.byteLength(canonicalJSON(event.version))>limits.maxInlineBytes){event.versionRef=this.publishPayload(ctx,event.version,{sourceAction:'changesVersion',seq:event.seq,changeId:event.changeId});event.version=null;}
           if(event.activities&&Buffer.byteLength(canonicalJSON(event.activities))>limits.maxInlineBytes){event.activitiesRef=this.publishPayload(ctx,event.activities,{sourceAction:'changesActivities',seq:event.seq,changeId:event.changeId});event.activities=null;}
+          if(event.provenance&&Buffer.byteLength(canonicalJSON(event.provenance))>limits.maxInlineBytes){event.provenanceRef=this.publishPayload(ctx,event.provenance,{sourceAction:'changesProvenance',seq:event.seq,changeId:event.changeId});event.provenance=null;}
         }
         return page;
       }
@@ -102,7 +103,9 @@ export class MobileSyncAdapter {
         for(const key of ['record','version'])if(Buffer.byteLength(canonicalJSON(head[key]))>limits.maxInlineBytes){head[`${key}Ref`]=this.publishPayload(ctx,head[key],{sourceAction:`recordHead:${key}`,recordId:request.recordId});head[key]=null;}
         return head;
       }
-      return sync[action](request);
+      const result=sync[action](request);
+      if(action==='identity')result.capabilities={...result.capabilities,stagedRecordAttachments:true};
+      return result;
     }
     if(setupActions.has(action)){
       const sync=this.syncStore();if(typeof sync[action]!=='function')fail('VALIDATION_ERROR',{field:'action'});
@@ -121,7 +124,7 @@ export class MobileSyncAdapter {
     if(action==='blobCommit'){
       const ctx=this.context(request),uploadId=text(request.uploadId,'uploadId'),chunk=this.chunks(),transfer=chunk.commit(ctx,uploadId),data=chunk.readBytes(ctx,uploadId,{kind:'blob'}),metadata=data.metadata;
       if(metadata.recordId!==request.recordId||metadata.attachmentId!==request.attachmentId||metadata.name!==request.name)fail('OPERATION_REUSED');
-      const result=this.syncStore().putAttachment({...request,attachmentId:metadata.attachmentId,recordId:metadata.recordId,name:metadata.name,bytes:data.bytes,digest:transfer.digest});
+      const result=this.syncStore().putAttachment({...request,attachmentId:metadata.attachmentId,recordId:metadata.recordId,name:metadata.name,stageOnly:metadata.stageOnly===true,bytes:data.bytes,digest:transfer.digest});
       return {...transfer,...result};
     }
     if(action==='blobDownload')return this.syncStore().attachmentChunk(request);

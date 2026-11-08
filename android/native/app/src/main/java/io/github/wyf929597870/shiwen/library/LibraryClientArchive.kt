@@ -16,6 +16,16 @@ internal class LibraryClientArchive(context: Context) {
         val drafts = RecordEditorDraftStore(app)
         val result = try { JSONObject().put("version", 1).put("editorDrafts", drafts.archive(repo.libraryId)) }
             finally { drafts.close() }
+        val references = draftAttachmentReferences(result.getJSONArray("editorDrafts"))
+        val store = LibraryAttachmentDraftStore(app, repo.libraryId)
+        val staged = JSONArray()
+        references.forEach { (id, expected) ->
+            val file = store.read(id, expected.getString("name"))
+            check(file.hash == expected.getString("hash") && file.byteLength == expected.getLong("byteLength") &&
+                file.mimeType == expected.getString("mimeType")) { "DRAFT_ATTACHMENT_METADATA_MISMATCH" }
+            staged.put(expected)
+        }
+        result.put("draftAttachments", staged)
         if (includeConversations) {
             val agent = AgentTaskStore(app, repo.libraryId)
             try {
@@ -50,7 +60,7 @@ internal class LibraryClientArchive(context: Context) {
     companion object {
         fun validate(archive: JSONObject) {
             require(archive.optInt("version") == 1 && archive.toString().length <= 24 * 1024 * 1024) { "CLIENT_ARCHIVE_INVALID" }
-            require(archive.keys().asSequence().all { it in setOf("version", "editorDrafts", "agentArchive") }) { "CLIENT_ARCHIVE_UNEXPECTED_FIELD" }
+            require(archive.keys().asSequence().all { it in setOf("version", "editorDrafts", "agentArchive", "draftAttachments") }) { "CLIENT_ARCHIVE_UNEXPECTED_FIELD" }
             val drafts = archive.getJSONArray("editorDrafts")
             require(drafts.length() <= 3) { "CLIENT_ARCHIVE_DRAFT_INVALID" }
             val slots = mutableSetOf<String>()
@@ -65,6 +75,25 @@ internal class LibraryClientArchive(context: Context) {
                     require(id != null && pending.optString("requestId") == id && pending.optLong("localGeneration", -1) == row.getLong("localGeneration") &&
                         pending.optString("action") in setOf("create", "update", "delete", "restore") && pending.length() <= 16 && pending.toString().length <= 2_000_000) { "CLIENT_ARCHIVE_DRAFT_INVALID" }
                 }
+            }
+            archive.optJSONArray("draftAttachments")?.let { staged ->
+                val ids = mutableSetOf<String>()
+                for (i in 0 until staged.length()) {
+                    val item = staged.getJSONObject(i)
+                    val id = item.getString("id")
+                    UUID.fromString(id)
+                    require(ids.add(id) && LibraryAttachmentDraftStore.safeName(item.getString("name")) == item.getString("name") &&
+                        item.getString("hash").matches(Regex("[a-f0-9]{64}")) &&
+                        item.getLong("byteLength") in 1..LibraryAttachmentDraftStore.MAX_IMAGE_BYTES.toLong() &&
+                        item.getString("mimeType") in setOf("image/png", "image/jpeg", "image/gif", "image/webp")) {
+                        "CLIENT_ARCHIVE_DRAFT_ATTACHMENT_INVALID"
+                    }
+                }
+                val references = draftAttachmentReferences(drafts)
+                require(ids == references.keys && (0 until staged.length()).all { index ->
+                    val descriptor = staged.getJSONObject(index)
+                    references[descriptor.getString("id")]?.toString() == descriptor.toString()
+                }) { "CLIENT_ARCHIVE_DRAFT_ATTACHMENT_MISMATCH" }
             }
             archive.optJSONObject("agentArchive")?.let { agent ->
                 val conversations = agent.getJSONArray("conversations"); val tasks = agent.getJSONArray("tasks"); val agentDrafts = agent.getJSONArray("drafts")
@@ -89,6 +118,51 @@ internal class LibraryClientArchive(context: Context) {
                     row.getString("input"); row.getBoolean("saveOriginal"); row.getString("kind")
                 }
             }
+        }
+
+        /** Extract only editor staging tokens, never committed attachment descriptors. */
+        fun draftAttachmentReferences(drafts: JSONArray): Map<String, JSONObject> {
+            val references = linkedMapOf<String, JSONObject>()
+            for (i in 0 until drafts.length()) {
+                val row = drafts.getJSONObject(i)
+                val form = row.optJSONObject("content")?.optJSONObject("form")
+                val metadata = linkedMapOf<String, JSONObject>()
+                fun collect(array: JSONArray?) {
+                    if (array == null) return
+                    for (index in 0 until array.length()) {
+                        val item = array.getJSONObject(index)
+                        val id = item.optString("id")
+                        if (id.isBlank()) continue
+                        val normalized = JSONObject().put("id", id).put("name", item.optString("name"))
+                            .put("hash", item.optString("hash")).put("byteLength", item.optLong("byteLength", -1))
+                            .put("mimeType", item.optString("mimeType"))
+                        val prior = metadata.putIfAbsent(id, normalized)
+                        require(prior == null || prior.toString() == normalized.toString()) { "CLIENT_ARCHIVE_DRAFT_ATTACHMENT_MISMATCH" }
+                    }
+                }
+                collect(form?.optJSONArray("stagedAttachments"))
+                val pending = row.optJSONObject("pendingMutation")
+                val frozenRecord = pending?.optJSONObject("record") ?: pending?.optJSONObject("patch")
+                collect(frozenRecord?.optJSONArray("attachmentDescriptors"))
+                val ids = linkedSetOf<String>()
+                form?.optJSONArray("stagedAttachments")?.let { array ->
+                    for (index in 0 until array.length()) ids += array.getJSONObject(index).getString("id")
+                }
+                pending?.optJSONArray("stagedAttachmentIds")?.let { array ->
+                    for (index in 0 until array.length()) ids += array.getString(index)
+                }
+                for (id in ids) {
+                    UUID.fromString(id)
+                    val descriptor = metadata[id] ?: error("CLIENT_ARCHIVE_DRAFT_ATTACHMENT_METADATA_MISSING")
+                    require(descriptor.optString("name").isNotBlank() && descriptor.optString("hash").isNotBlank() &&
+                        descriptor.optLong("byteLength", -1) > 0 && descriptor.optString("mimeType").isNotBlank()) {
+                        "CLIENT_ARCHIVE_DRAFT_ATTACHMENT_METADATA_MISSING"
+                    }
+                    val previous = references.putIfAbsent(id, descriptor)
+                    require(previous == null || previous.toString() == descriptor.toString()) { "CLIENT_ARCHIVE_DRAFT_ATTACHMENT_MISMATCH" }
+                }
+            }
+            return references
         }
     }
 }

@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {call} from '../bridge/library.mjs';
 import {MarkdownView} from './MarkdownView.jsx';
+import {attachmentImageIds} from './markdown-renderer.mjs';
 import {checkArticle} from '../../plugins/workbench/src/preflight.mjs';
 import {useI18n} from './i18n.js';
 import './record-translations.mjs';
@@ -18,7 +19,7 @@ const dateText = (value,t) => value ? String(value).slice(0,10) : t('日期待�
 const byteText=value=>{const bytes=Number(value||0);return bytes<1024?`${bytes} B`:bytes<1024**2?`${(bytes/1024).toFixed(1)} KB`:`${(bytes/1024**2).toFixed(1)} MB`;};
 const newId = () => crypto.randomUUID();
 const localDay=()=>{const date=new Date();return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;};
-const newMaterial = () => ({title:'',markdown:'',kind:'journal',origin:'personal',processing:'original',contentDay:localDay(),dateBasis:'用户在手机记录',url:'',annotation:'',stage:'draft',sourceIds:[],sources:[]});
+const newMaterial = () => ({title:'',markdown:'',kind:'journal',origin:'personal',processing:'original',contentDay:localDay(),dateBasis:'用户在手机记录',url:'',annotation:'',stage:'draft',sourceIds:[],sources:[],attachmentDescriptors:[],stagedAttachments:[]});
 
 function reconcileSources(segments, before, after, origin) {
   if (before === after) return segments;
@@ -50,6 +51,7 @@ export function RecordPanel({libraryId, libraries=[], mode='materials', onPageSt
   const [copyTarget,setCopyTarget]=useState('');
   const [versions,setVersions] = useState([]), [versionCursor,setVersionCursor] = useState(null), [showVersions,setShowVersions] = useState(false);
   const [saveRequest,setSaveRequest] = useState(null),[pendingMutation,setPendingMutation]=useState(null),[uncertain,setUncertain]=useState(false),[pendingAction,setPendingAction]=useState(null),[draftReady,setDraftReady]=useState(false),[pendingDurable,setPendingDurable]=useState(false);
+  const markdownInput=useRef(null);
   const generationRef=useRef(0),requestRef=useRef(null),formRef=useRef(form),selectedRef=useRef(selected),creatingRef=useRef(creating),editingRef=useRef(editing),pendingMutationRef=useRef(pendingMutation),pendingActionRef=useRef(pendingAction);
   formRef.current=form;selectedRef.current=selected;creatingRef.current=creating;editingRef.current=editing;pendingMutationRef.current=pendingMutation;pendingActionRef.current=pendingAction;
   const dirty = Boolean(editing && selected && form && JSON.stringify(form)!==JSON.stringify(selected) || creating && form && JSON.stringify(form)!==JSON.stringify({...newMaterial(),kind:articles?'article':'journal'}));
@@ -129,7 +131,12 @@ export function RecordPanel({libraryId, libraries=[], mode='materials', onPageSt
   const exportSelected=()=>runTransfer(async()=>{
     const result=await call('recordExport',{libraryId,id:selected.id});
     if(result?.cancelled)return;
-    setHint(t('Markdown 已导出。','Markdown exported.'));
+    setHint(t('Markdown 已导出；此文件不包含图片。','Markdown exported; this file does not include images.'));
+  });
+  const exportSelectedWithImages=()=>runTransfer(async()=>{
+    const result=await call('recordExportWithImages',{libraryId,id:selected.id});
+    if(result?.cancelled)return;
+    setHint(t('Markdown 与库内图片已打包；网络图片仍依赖原地址。','Markdown and library images were exported; remote images still depend on their original URLs.'));
   });
   const shareSelected=()=>runTransfer(async()=>{
     const result=await call('recordShare',{libraryId,id:selected.id});
@@ -150,8 +157,19 @@ export function RecordPanel({libraryId, libraries=[], mode='materials', onPageSt
     setHint(`${t('已复制到另一资料库','Copied to another library')} · ${result.record?.title||selected.title}`);
     setCopyTarget('');
   });
+  const copySelectedWithImages=()=>runTransfer(async()=>{
+    if(!copyTarget||copyTarget===libraryId||!selected)return;
+    if(!window.confirm(t('复制正文和库内图片到目标资料库？跨库记录关联不会复制。','Copy this record and its library images? Cross-library record links are not copied.')))return;
+    const key=`shiwen-copy-images:${libraryId}:${selected.id}:${copyTarget}`;
+    const requestId=localStorage.getItem(key)||newId();localStorage.setItem(key,requestId);
+    const result=await call('recordCopyWithImages',{libraryId,id:selected.id,targetLibraryId:copyTarget,requestId});
+    localStorage.removeItem(key);setHint(`${t('已复制正文和图片','Copied body and images')} · ${result.record?.title||selected.title}`);setCopyTarget('');
+  });
   const clearDraft=async()=>{
-    if(requestRef.current){await enqueueRecordDraft(draftKey,()=>call('recordDraftAcknowledge',{libraryId,slot,requestId:requestRef.current,localGeneration:generationRef.current}));generationRef.current+=1;}
+    const stagedIds=(formRef.current?.stagedAttachments||[]).map(item=>item.id);
+    let cleared=false;
+    if(requestRef.current){const ack=await enqueueRecordDraft(draftKey,()=>call('recordDraftAcknowledge',{libraryId,slot,requestId:requestRef.current,localGeneration:generationRef.current}));cleared=Boolean(ack.cleared);generationRef.current+=1;}
+    if(cleared&&stagedIds.length)call('attachmentStageDelete',{libraryId,ids:stagedIds}).catch(()=>{});
     requestRef.current=null;pendingMutationRef.current=null;pendingActionRef.current=null;setSaveRequest(null);setPendingMutation(null);setPendingAction(null);setUncertain(false);setPendingDurable(false);formRef.current=null;setForm(null);
   };
   const read=async id=>{
@@ -193,20 +211,23 @@ export function RecordPanel({libraryId, libraries=[], mode='materials', onPageSt
   };
   const doSave=async()=>{
     if(!form||busy||(!uncertain&&!form.markdown.trim()))return;
+    if(!pendingMutationRef.current){const existing=new Set([...(selected?.attachmentDescriptors||[]),...attachments,...(form.stagedAttachments||[])].map(item=>item.id));const old=attachmentImageIds(selected?.markdown);if([...attachmentImageIds(form.markdown)].some(id=>!existing.has(id)&&!old.has(id))){setError(t('正文引用的图片不存在，请重新插入图片。','An image referenced in the text is missing. Insert it again.'));return;}}
     setBusy(true);setError('');setHint('');
-    const frozen=pendingMutationRef.current||(()=>{const requestId=requestRef.current||saveRequest||newId();requestRef.current=requestId;setSaveRequest(requestId);generationRef.current+=1;const record={...recordInput(form),kind:articles?'article':form.kind,sourceIds:articles?form.sourceIds||[]:[],sources:form.sources?.length?form.sources:[{text:form.markdown,origin:form.origin||'personal'}]};return {action:creating?'create':'update',requestId,record,create:creating,id:selected?.id,expectedRevision:selected?.revision,localGeneration:generationRef.current};})();
+    const frozen=pendingMutationRef.current||(()=>{const requestId=requestRef.current||saveRequest||newId();requestRef.current=requestId;setSaveRequest(requestId);generationRef.current+=1;const allStagedAttachments=form.stagedAttachments||[],references=attachmentImageIds(form.markdown);const staged=allStagedAttachments.filter(item=>references.has(item.id));const stagedIds=staged.map(item=>item.id);const descriptors=[...(selected?.attachmentDescriptors||[]),...staged];const record={...recordInput(form),kind:articles?'article':form.kind,sourceIds:articles?form.sourceIds||[]:[],sources:form.sources?.length?form.sources:[{text:form.markdown,origin:form.origin||'personal'}],...(staged.length?{attachmentDescriptors:descriptors.map(({id,name,hash,byteLength})=>({id,name,hash,byteLength}))}:{})};return {action:creating?'create':'update',requestId,record,stagedAttachmentIds:stagedIds,allStagedAttachments,create:creating,id:selected?.id,expectedRevision:selected?.revision,localGeneration:generationRef.current};})();
     if(!pendingMutationRef.current){pendingMutationRef.current=frozen;setPendingMutation(frozen);}
     let persisted=Boolean(uncertain);
     try{
-      await persistDraft(draftContent({form:frozen.record,selectedId:frozen.id??null,creating:frozen.create,editing:true,pendingAction:null}),frozen.requestId,frozen.localGeneration,frozen);
+      const draftForm=frozen.allStagedAttachments?{...frozen.record,stagedAttachments:frozen.allStagedAttachments}:frozen.record;
+      await persistDraft(draftContent({form:draftForm,selectedId:frozen.id??null,creating:frozen.create,editing:true,pendingAction:null}),frozen.requestId,frozen.localGeneration,frozen);
       persisted=true;setPendingDurable(true);
       const result=frozen.create
-        ? await call('recordCreate',{libraryId,requestId:frozen.requestId,localGeneration:frozen.localGeneration,record:frozen.record})
-        : await call('recordUpdate',{libraryId,id:frozen.id,expectedRevision:frozen.expectedRevision,requestId:frozen.requestId,localGeneration:frozen.localGeneration,patch:frozen.record});
+        ? await call('recordCreate',{libraryId,requestId:frozen.requestId,localGeneration:frozen.localGeneration,record:frozen.record,stagedAttachmentIds:frozen.stagedAttachmentIds||[]})
+        : await call('recordUpdate',{libraryId,id:frozen.id,expectedRevision:frozen.expectedRevision,requestId:frozen.requestId,localGeneration:frozen.localGeneration,patch:frozen.record,stagedAttachmentIds:frozen.stagedAttachmentIds||[]});
       const fresh=result.record;
       if(!fresh?.id||fresh.revision==null)throw new Error(t('保存回执缺少记录版本；内容保留，请刷新后核对。','The save receipt has no record revision. Content is preserved; refresh and check the result.'));
       const ack=await enqueueRecordDraft(draftKey,()=>call('recordDraftAcknowledge',{libraryId,slot,requestId:frozen.requestId,localGeneration:frozen.localGeneration}));
       if(!ack.cleared)throw new Error(t('保存成功但草稿回执尚未确认；保留原请求并再次核对。','Saved, but the draft receipt is not confirmed. Keep the original request and check again.'));
+      const stagedIds=(frozen.allStagedAttachments||[]).map(item=>item.id);if(!stagedIds.length)stagedIds.push(...(frozen.stagedAttachmentIds||[]));if(stagedIds.length)call('attachmentStageDelete',{libraryId,ids:stagedIds}).catch(()=>{});
       requestRef.current=null;pendingMutationRef.current=null;generationRef.current=frozen.localGeneration+1;selectedRef.current=fresh;formRef.current={...fresh};creatingRef.current=false;editingRef.current=false;
       setSelected(fresh);setForm({...fresh});setCreating(false);setEditing(false);setSaveRequest(null);setPendingMutation(null);setUncertain(false);setPendingDurable(false);
       setHint(result.syncState==='local-only'?t('已保存在此设备，等待同步。','Saved on this device; waiting to sync.'):t('已保存到当前资料库。','Saved to the current library.'));
@@ -246,6 +267,22 @@ export function RecordPanel({libraryId, libraries=[], mode='materials', onPageSt
   const loadVersions=async(reset=true)=>{if(!selected)return;setBusy(true);try{const page=await call('recordVersions',{libraryId,id:selected.id,cursor:reset?undefined:versionCursor});setVersions(old=>reset?page.items:[...old,...page.items]);setVersionCursor(page.nextCursor??null);}catch(e){setError(String(e.message||e));}finally{setBusy(false);}};
   const checks=useMemo(()=>checkArticle({title:form?.title,body:form?.markdown,sourceIds:form?.sourceIds}).map(item=>({label:t(({title:'有标题',body:'正文完整',structure:'文章结构',sources:'已关联来源',private:item.ok?'未发现常见敏感信息格式':'发现疑似敏感信息，请检查'})[item.id]||item.id),ok:item.ok})),[form,t]);
   const setField=(key,value)=>change(key,value);
+  const insertImages=()=>runTransfer(async()=>{
+    const result=await call('attachmentPick',{libraryId});
+    if(result?.cancelled||!result?.items?.length)return;
+    const items=result.items,input=markdownInput.current,before=formRef.current?.markdown||'';
+    const start=input?.selectionStart??before.length,end=input?.selectionEnd??before.length;
+    const snippets=items.map(item=>{
+      const alt=String(item.name||'image').replace(/\.[^.]+$/,'').replace(/[\\\]]/g,'_');
+      return `![${alt}](attachment:${item.id})`;
+    });
+    const insertion=`${start>0&&before[start-1]!=='\n'?'\n\n':''}${snippets.join('\n\n')}${end<before.length&&before[end]!=='\n'?'\n\n':''}`;
+    setField('markdown',before.slice(0,start)+insertion+before.slice(end));
+    const additions=items.map(({id,name,hash,byteLength,mimeType})=>({id,name,hash,byteLength,mimeType}));
+    setField('attachmentDescriptors',[...(formRef.current?.attachmentDescriptors||[]),...additions]);
+    setField('stagedAttachments',[...(formRef.current?.stagedAttachments||[]),...additions]);
+    requestAnimationFrame(()=>{input?.focus();const cursor=start+insertion.length;input?.setSelectionRange(cursor,cursor);});
+  });
   return <section className="record-page" aria-label={t(articles?'创作':'素材')}>
     {!detailOpen&&<><header className="record-page-head"><div>{onBack&&<button className="text" onClick={onBack}>‹ {t('返回')}</button>}</div><div className="record-header-actions"><button className="primary" disabled={busy||!draftReady} onClick={startNew}>＋ {t(articles?'新建文章':'新建记录')}</button></div></header>
     <div className="record-search"><input type="search" value={query} placeholder={t('搜索标题和正文')} onChange={e=>setQuery(e.target.value)} aria-label={t('搜索标题和正文')}/>{!articles&&<select value={kind} onChange={e=>setKind(e.target.value)} aria-label={t('按类型筛选')}><option value="">{t('全部类型')}</option>{kinds.map(item=><option key={item} value={item}>{kindName(item,t)}</option>)}</select>}<label className="deleted-filter"><input type="checkbox" checked={showDeleted} onChange={e=>setShowDeleted(e.target.checked)}/>{t('回收站')}</label></div></>}
@@ -254,14 +291,14 @@ export function RecordPanel({libraryId, libraries=[], mode='materials', onPageSt
         {loading&&<p className="secondary">{t('更新中','Loading')}…</p>}
         {rows.map(row=><button key={row.id} className="record-list-row" aria-current={selected?.id===row.id?'true':undefined} onClick={()=>read(row.id)}><strong>{row.title||t('未命名')}</strong><span>{dateText(row.contentDay,t)}</span>{row.syncState&&row.syncState!=='synced'&&<small>{t(row.syncState==='conflict'?'有冲突':row.syncState==='pending'?'待同步':'本机资料')}</small>}</button>)}
         {!rows.length&&!loading&&<p className="empty-state">{query?t('没有匹配的记录。'):t('这里还没有内容。')}</p>}
-        {more&&<button className="chip record-more" disabled={loading} onClick={()=>load(false)}>{t('加载更多')}</button>}
+        {more&&<button className="chip record-more" disabled={loading} onClick={()=>load(false)}>{t('更多历史版本')}</button>}
       </div>}
       <div className="record-detail">
         {detailOpen&&<button className="text record-back-list" onClick={leaveDetail}>‹ {t('返回列表','Back to list')}</button>}
         {editing&&form ? <>
           <div className="record-detail-head"><strong>{t(creating?'新建':articles?'编辑文章':'编辑记录')}</strong><div><button className="chip" disabled={busy||uncertain} onClick={leaveDetail}> {t('取消')}</button><button className="primary" disabled={busy||(!uncertain&&!form.markdown.trim())} onClick={doSave}>{busy?t('保存中…'):uncertain?t('再次核对保存结果'):t('保存')}</button></div></div>
           <label>{t('标题')}<input value={form.title||''} maxLength={200} disabled={busy||uncertain} onChange={e=>setField('title',e.target.value)}/></label>
-          <label>{t('正文 · Markdown')}<textarea className="record-editor" value={form.markdown||''} disabled={busy||uncertain} onChange={e=>setField('markdown',e.target.value)} spellCheck="false"/></label>
+          <label>{t('正文 · Markdown')}<button type="button" className="chip record-image-insert" disabled={busy||uncertain} onClick={insertImages}>{t('插入图片','Insert image')}</button><textarea ref={markdownInput} className="record-editor" value={form.markdown||''} disabled={busy||uncertain} onChange={e=>setField('markdown',e.target.value)} spellCheck="false"/></label>
           <details className="record-metadata"><summary>{t('记录信息','Details')}</summary>
           {!articles&&<div className="record-form-grid"><label>{t('类型')}<select value={form.kind} disabled={busy||uncertain} onChange={e=>setField('kind',e.target.value)}>{kinds.map(item=><option key={item} value={item}>{kindName(item,t)}</option>)}</select></label><label>{t('内容来源')}<select value={form.origin||'personal'} disabled={busy||uncertain} onChange={e=>setField('origin',e.target.value)}><option value="personal">{t('自己书写')}</option><option value="external">{t('外部资料')}</option><option value="ai">{t('AI 内容')}</option><option value="translation">{t('译文')}</option><option value="unknown">{t('来源待确认')}</option></select></label></div>}
           {articles&&<><div className="record-form-grid"><label>{t('文章状态')}<select value={form.stage||'draft'} disabled={busy||uncertain} onChange={e=>setField('stage',e.target.value)}><option value="idea">{t('想法')}</option><option value="draft">{t('草稿')}</option><option value="revision">{t('修改中')}</option><option value="final">{t('已定稿')}</option></select></label></div><details className="source-picker"><summary>{t('关联素材')} · {(form.sourceIds||[]).length}</summary><input type="search" aria-label={t('搜索素材','Search materials')} placeholder={t('搜索素材','Search materials')} value={sourceQuery} onChange={e=>{const value=e.target.value;setSourceQuery(value);loadSources(null,value);}}/><div className="source-results">{(form.sourceIds||[]).filter(id=>!sources.some(source=>source.id===id)).map(id=><label key={id}><input type="checkbox" checked disabled={busy||uncertain} onChange={()=>setField('sourceIds',form.sourceIds.filter(item=>item!==id))}/>{t('已关联来源（尚未加载或已删除）','Linked source (not loaded or deleted)')} · {id}</label>)}{sources.map(source=><label key={source.id}><input type="checkbox" disabled={busy||uncertain} checked={(form.sourceIds||[]).includes(source.id)} onChange={e=>setField('sourceIds',e.target.checked?[...(form.sourceIds||[]),source.id]:(form.sourceIds||[]).filter(id=>id!==source.id))}/>{source.title||t('未命名')} · {dateText(source.contentDay,t)}</label>)}{sourceLoading&&<p>{t('正在读取素材…','Loading materials…')}</p>}{sourceError&&<p className="error">{t('读取素材失败','Could not load materials')}: {sourceError} <button type="button" onClick={()=>loadSources(sourceRetry,sourceQuery)}>{t('重试','Retry')}</button></p>}{!sources.length&&!sourceLoading&&!sourceError&&<p className="secondary">{t('暂无可关联素材。','No materials to link.')}</p>}</div>{sourceCursor&&!sourceError&&<button type="button" className="chip" disabled={sourceLoading} onClick={()=>loadSources(sourceCursor,sourceQuery)}>{t('加载更多','Load more')}</button>}</details><details className="publication-check"><summary>{t('发布前检查')} · {checks.filter(x=>!x.ok).length} {t('项待处理')}</summary>{checks.map(check=><p key={check.label} className={check.ok?'check-ok':'check-pending'}>{check.ok?'✓':'○'}　{check.label}</p>)}<p className="secondary">{t('仅检查常见格式，仍需作者人工复核。','Checks common patterns only; review the article yourself.')}</p></details></>}
@@ -271,17 +308,17 @@ export function RecordPanel({libraryId, libraries=[], mode='materials', onPageSt
           <label>{t('备注')}<textarea value={form.annotation||''} maxLength={10000} disabled={busy||uncertain} onChange={e=>setField('annotation',e.target.value)}/></label>
           </details>
         </> : selected ? <>
-          <div className="record-detail-head"><div><span className="state-pill">{kindName(selected.kind,t)}</span><span className="state-pill">{originName(selected.origin,t)}</span></div><div>{pendingAction?.type==='delete'?<button className="chip danger" disabled={busy} onClick={remove}>{t('再次核对删除')}</button>:pendingAction?.type==='restore'?<button className="chip" disabled={busy} onClick={restore}>{t('再次核对恢复')}</button>:selected.deleted?<button className="chip" disabled={busy} onClick={restore}>{t('恢复')}</button>:<><button className="chip" disabled={busy} onClick={()=>startEdit(selected)}>{t('编辑')}</button><details className="record-actions"><summary>{t('更多','More')}</summary><button className="chip" disabled={busy} onClick={exportSelected}>{t('导出 Markdown','Export Markdown')}</button><button className="chip" disabled={busy} onClick={shareSelected}>{t('分享','Share')}</button><button className="chip danger" disabled={busy} onClick={remove}>{t('删除')}</button></details></>}</div></div>
+          <div className="record-detail-head"><div><span className="state-pill">{kindName(selected.kind,t)}</span><span className="state-pill">{originName(selected.origin,t)}</span></div><div>{pendingAction?.type==='delete'?<button className="chip danger" disabled={busy} onClick={remove}>{t('再次核对删除')}</button>:pendingAction?.type==='restore'?<button className="chip" disabled={busy} onClick={restore}>{t('再次核对恢复')}</button>:selected.deleted?<button className="chip" disabled={busy} onClick={restore}>{t('恢复')}</button>:<><button className="chip" disabled={busy} onClick={()=>startEdit(selected)}>{t('编辑')}</button><details className="record-actions"><summary>{t('更多','More')}</summary><button className="chip" disabled={busy} onClick={exportSelected}>{t('导出 Markdown','Export Markdown')}</button><button className="chip" disabled={busy} onClick={exportSelectedWithImages}>{t('导出 Markdown 与图片','Export Markdown with images')}</button><button className="chip" disabled={busy} onClick={shareSelected}>{t('分享','Share')}</button><button className="chip danger" disabled={busy} onClick={remove}>{t('删除')}</button></details></>}</div></div>
           <h2>{selected.title||t('未命名')}</h2><p className="secondary record-date">{t('内容日期')}：{dateText(selected.contentDay,t)} · {t('记录于')} {dateText(selected.createdAt,t)}{selected.updatedAt&&` · ${t('更新于')} ${dateText(selected.updatedAt,t)}`}</p>
           {selected.url&&<p className="record-source"><span>{t('来源链接')}</span>{safeHttp(selected.url)?<a href={safeHttp(selected.url)} target="_blank" rel="noreferrer">{selected.url}</a>:<span>{selected.url}</span>}</p>}
           {selected.dateBasis&&<p className="record-source"><span>{t('日期说明')}</span>{selected.dateBasis}</p>}{selected.annotation&&<p className="record-source"><span>{t('备注')}</span>{selected.annotation}</p>}
           {selected.deleted&&<p className="conflict-callout">{t('此记录在回收站中，恢复后会回到当前资料库。')}</p>}
-          <MarkdownView markdown={selected.markdown}/>
+          <MarkdownView markdown={selected.markdown} libraryId={libraryId} recordId={selected.id} attachmentDescriptors={attachments}/>
           {selected.sources?.length>0&&<details className="source-picker"><summary>{t('正文来源')} · {selected.sources.length}</summary>{selected.sources.map((segment,index)=><div className="source-segment" key={`${index}-${segment.sourceRef||''}`}><strong>{originName(segment.origin,t)}</strong>{segment.sourceRef&&<span>{segment.sourceRef}</span>}<p>{segment.text?.length>220?`${segment.text.slice(0,220)}…`:segment.text}</p></div>)}</details>}
           {attachments.length>0&&<details className="source-picker"><summary>{t('原件与附件')} · {attachments.length}</summary>{attachments.map(file=><div className="attachment-row" key={file.id}><div><strong>{file.name}</strong><span>{byteText(file.byteLength)} · {file.available===false?t('尚未下载'):t('已保存在资料库')}</span></div><div className="node-actions">{file.available!==false&&<><button className="chip" disabled={busy} onClick={()=>openAttachment(file)}>{t('打开','Open')}</button><button className="chip" disabled={busy} onClick={()=>shareAttachment(file)}>{t('分享','Share')}</button></>}</div></div>)}</details>}
-          {!articles&&!selected.deleted&&libraries.some(item=>item.libraryId!==libraryId)&&<div className="record-copy-row"><label>{t('复制到资料库','Copy to library')}<select value={copyTarget} disabled={busy} onChange={e=>setCopyTarget(e.target.value)}><option value="">{t('选择目标资料库','Choose target library')}</option>{libraries.filter(item=>item.libraryId!==libraryId).map(item=><option key={item.libraryId} value={item.libraryId}>{item.name}</option>)}</select></label><button className="chip" disabled={busy||!copyTarget} onClick={copySelected}>{t('复制正文','Copy text')}</button></div>}
+          {!articles&&!selected.deleted&&libraries.some(item=>item.libraryId!==libraryId)&&<div className="record-copy-row"><label>{t('复制到资料库','Copy to library')}<select value={copyTarget} disabled={busy} onChange={e=>setCopyTarget(e.target.value)}><option value="">{t('选择目标资料库','Choose target library')}</option>{libraries.filter(item=>item.libraryId!==libraryId).map(item=><option key={item.libraryId} value={item.libraryId}>{item.name}</option>)}</select></label><button className="chip" disabled={busy||!copyTarget} onClick={copySelected}>{t('复制正文','Copy text')}</button><button className="chip" disabled={busy||!copyTarget} onClick={copySelectedWithImages}>{t('复制正文和图片','Copy with images')}</button></div>}
           {selected.sourceIds?.length>0&&<details className="source-picker" open><summary>{t('关联素材')} · {selected.sourceIds.length}</summary>{selected.sourceIds.map(id=><button key={id} className="source-link" onClick={()=>read(id)}>{sources.find(item=>item.id===id)?.title||id}</button>)}</details>}
-          <details className="record-versions" open={showVersions} onToggle={e=>{if(e.currentTarget.open&&!showVersions){setShowVersions(true);loadVersions(true);}}}><summary>{t('版本历史')}</summary>{versions.map((version,index)=><details key={version.versionId||index} className="version-row"><summary>{dateText(version.updatedAt||version.createdAt||version.occurredAt,t)} · {version.reason||'历史版本'}</summary>{version.markdown!=null&&<MarkdownView markdown={version.markdown}/>}</details>)}{versionCursor&&<button className="chip" onClick={()=>loadVersions(false)}>{t('更多历史版本')}</button>}</details>
+          <details className="record-versions" open={showVersions} onToggle={e=>{if(e.currentTarget.open&&!showVersions){setShowVersions(true);loadVersions(true);}}}><summary>{t('版本历史')}</summary>{versions.map((version,index)=><details key={version.versionId||index} className="version-row"><summary>{dateText(version.updatedAt||version.createdAt||version.occurredAt,t)} · {version.reason||'历史版本'}</summary>{version.markdown!=null&&<MarkdownView markdown={version.markdown} libraryId={libraryId} recordId={selected.id} attachmentDescriptors={[...(version.doc?.attachmentDescriptors||[]),...attachments]}/>}</details>)}{versionCursor&&<button className="chip" onClick={()=>loadVersions(false)}>{t('更多历史版本')}</button>}</details>
         </> : <div className="record-empty"><span>◇</span><p>{t('选择一条记录查看正文和来源。')}</p></div>}
       </div>
     </div>

@@ -1,80 +1,131 @@
-import React from 'react';
+import React, {useEffect, useRef} from 'react';
+import {renderMarkdownHtml} from './markdown-renderer.mjs';
+import {call, isNative} from '../bridge/library.mjs';
+import {useI18n} from './i18n.js';
 
-const safeUrl = value => {
-  try {
-    const url = new URL(value, 'https://shiwen.invalid');
-    return ['http:', 'https:', 'mailto:'].includes(url.protocol) ? value : null;
-  } catch { return null; }
-};
+const EMPTY_LIST = Object.freeze([]);
+const MAX_PAGE_IMAGE_BYTES = 16 * 1024 * 1024;
 
-function Inline({text}) {
-  const source = String(text ?? '');
-  const token = /(!?)\[([^\]]+)\]\(([^\s)]+)(?:\s+"[^"]*")?\)|`([^`]+)`|\*\*([^*]+)\*\*|__([^_]+)__|\*([^*]+)\*|_([^_]+)_/g;
-  const nodes = [];
-  let cursor = 0, match, key = 0;
-  while ((match = token.exec(source))) {
-    if (match.index > cursor) nodes.push(source.slice(cursor, match.index));
-    if (match[2] !== undefined) {
-      const href = safeUrl(match[3]);
-      if (match[1]) nodes.push(<span className="md-image-label" key={key++}>[图片：{match[2]}]</span>);
-      else if (href) nodes.push(<a key={key++} href={href} target="_blank" rel="noreferrer">{match[2]}</a>);
-      else nodes.push(match[2]);
-    } else if (match[4] !== undefined) nodes.push(<code key={key++}>{match[4]}</code>);
-    else if (match[5] !== undefined || match[6] !== undefined) nodes.push(<strong key={key++}>{match[5] ?? match[6]}</strong>);
-    else nodes.push(<em key={key++}>{match[7] ?? match[8]}</em>);
-    cursor = token.lastIndex;
-  }
-  if (cursor < source.length) nodes.push(source.slice(cursor));
-  return nodes;
-}
-
-function isList(line) { return /^\s*(?:[-+*]|\d+[.)])\s+/.test(line); }
-function listInfo(line) {
-  const m = line.match(/^(\s*)([-+*]|\d+[.)])\s+(.*)$/);
-  return m && {indent:m[1].length, ordered:/^\d/.test(m[2]), text:m[3]};
-}
-
-/** Safe, dependency-free Markdown reading view. Raw HTML is always rendered as text. */
-export function MarkdownView({markdown = ''}) {
-  const lines = String(markdown).replace(/\r\n?/g, '\n').split('\n');
-  const blocks = [];
-  let i = 0, key = 0;
-  while (i < lines.length) {
-    const line = lines[i];
-    if (!line.trim()) { i++; continue; }
-    const fence = line.match(/^\s*(```+|~~~+)(.*)$/);
-    if (fence) {
-      const code = [];
-      i++;
-      while (i < lines.length && !new RegExp(`^\\s*${fence[1][0]}{${fence[1].length},}\\s*$`).test(lines[i])) code.push(lines[i++]);
-      if (i < lines.length) i++;
-      blocks.push(<pre key={key++}><code>{code.join('\n')}</code></pre>);
-      continue;
-    }
-    const heading = line.match(/^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/);
-    if (heading) {
-      const Level = `h${heading[1].length}`;
-      blocks.push(<Level key={key++}><Inline text={heading[2]}/></Level>); i++; continue;
-    }
-    if (/^\s{0,3}(?:---+|___+|\*\*\*+)\s*$/.test(line)) { blocks.push(<hr key={key++}/>); i++; continue; }
-    if (/^\s*>/.test(line)) {
-      const quote = [];
-      while (i < lines.length && /^\s*>/.test(lines[i])) quote.push(lines[i++].replace(/^\s*>\s?/, ''));
-      blocks.push(<blockquote key={key++}><p>{quote.map((part,n)=><React.Fragment key={n}>{n>0&&<br/>}<Inline text={part}/></React.Fragment>)}</p></blockquote>);
-      continue;
-    }
-    if (isList(line)) {
-      const first = listInfo(line), items = [];
-      while (i < lines.length && isList(lines[i]) && listInfo(lines[i]).ordered === first.ordered) {
-        const info = listInfo(lines[i++]);
-        items.push(<li key={items.length}><Inline text={info.text}/></li>);
+export function MarkdownView({markdown = '', libraryId, recordId, branchId, attachmentDescriptors = EMPTY_LIST, branchAttachments = EMPTY_LIST}) {
+  const root = useRef(null);
+  const {language,t} = useI18n();
+  const rendered = renderMarkdownHtml(markdown,language);
+  const descriptorKey = JSON.stringify([attachmentDescriptors,branchAttachments]);
+  useEffect(() => {
+    const container = root.current;
+    if (!container) return;
+    container.innerHTML = rendered;
+    let active = true;
+    let viewer;
+    const allowZoom = image => {
+      image.tabIndex=0;image.setAttribute('role','button');
+      const open=()=>{if(!active||viewer)return;const dialog=document.createElement('dialog');viewer=dialog;dialog.className='md-image-viewer';
+        const close=document.createElement('button');close.type='button';close.textContent=t('关闭','Close');close.setAttribute('aria-label',t('关闭图片','Close image'));
+        const full=document.createElement('img');full.src=image.src;full.alt=image.alt;dialog.append(close,full);document.body.append(dialog);
+        close.addEventListener('click',()=>dialog.close());dialog.addEventListener('close',()=>{dialog.remove();if(viewer===dialog)viewer=null;});dialog.showModal();};
+      image.addEventListener('click',open);image.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();open();}});
+    };
+    const networkImages = [...container.querySelectorAll('.md-network-image[data-image-url]')];
+    for (const button of networkImages) button.addEventListener('click', () => {
+      let url;try { url = new URL(button.dataset.imageUrl); } catch { return; }
+      if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) return;
+      const image = document.createElement('img');image.className='md-attachment-image';image.alt=button.getAttribute('aria-label')||'';
+      allowZoom(image);
+      image.referrerPolicy='no-referrer';image.onerror=()=>{if(active&&image.isConnected)image.replaceWith(button);};
+      image.src=url.href;button.replaceWith(image);
+    });
+    const pending = [...container.querySelectorAll('.md-attachment-pending[data-attachment-id],.md-attachment-pending[data-image-target]')];
+    const maxImages = 20;
+    let loadedBytes = 0;
+    const loadedImages = [];
+    let loadOne;
+    const makeOnDemand = (placeholder, message) => {
+      placeholder.textContent = message;
+      placeholder.classList.add('md-image-missing','md-image-on-demand');
+      placeholder.tabIndex = 0; placeholder.setAttribute('role','button');
+      if (placeholder.dataset.onDemandBound) return;
+      placeholder.dataset.onDemandBound = 'true';
+      const load = () => {
+        if (!active || !placeholder.isConnected || placeholder.dataset.loading === 'true') return;
+        placeholder.dataset.loading = 'true';
+        void loadOne(placeholder, true).finally(() => { if(placeholder.isConnected) delete placeholder.dataset.loading; });
+      };
+      placeholder.addEventListener('click', load);
+      placeholder.addEventListener('keydown', event => { if(event.key==='Enter'||event.key===' '){event.preventDefault();load();} });
+    };
+    const releaseOldest = () => {
+      const old = loadedImages.shift();
+      if (!old || !old.image.isConnected) return;
+      if (viewer) { viewer.close(); viewer.remove(); viewer = null; }
+      old.image.src = '';
+      const placeholder = old.placeholder;
+      placeholder.textContent = t('图片已卸载以释放内存；点击可重新查看','Image unloaded to free memory; click to view again');
+      old.image.replaceWith(placeholder);
+      loadedBytes = Math.max(0, loadedBytes - old.byteLength);
+      makeOnDemand(placeholder, placeholder.textContent);
+    };
+    loadOne = async (placeholder, allowRelease = false) => {
+      const attachmentId = placeholder.dataset.attachmentId;
+      if (!isNative || !libraryId || !recordId) {
+        placeholder.textContent = t('图片不可用：没有当前资料库和记录上下文','Image unavailable: no library and record context');
+        placeholder.classList.add('md-image-missing'); return;
       }
-      const List = first.ordered ? 'ol' : 'ul';
-      blocks.push(<List key={key++}>{items}</List>); continue;
-    }
-    const para = [line.trim()]; i++;
-    while (i < lines.length && lines[i].trim() && !/^\s{0,3}(?:#{1,6}\s|>|```|~~~)/.test(lines[i]) && !isList(lines[i]) && !/^\s{0,3}(?:---+|___+|\*\*\*+)\s*$/.test(lines[i])) para.push(lines[i++].trim());
-    blocks.push(<p key={key++}>{para.map((part,n)=><React.Fragment key={n}>{n>0&&<br/>}<Inline text={part}/></React.Fragment>)}</p>);
-  }
-  return <div className="markdown-view">{blocks}</div>;
+      const descriptors = branchId ? [...branchAttachments, ...attachmentDescriptors] : attachmentDescriptors;
+      const descriptor = attachmentId ? descriptors.find(item => String(item?.id ?? item?.attachmentId) === attachmentId) : null;
+      const expectedHash = String(descriptor?.hash || '').toLowerCase();
+      const sourceTarget = placeholder.dataset.imageTarget;
+      if ((attachmentId && !/^[a-f0-9]{64}$/.test(expectedHash)) || (!attachmentId && (!sourceTarget || branchId))) {
+        placeholder.textContent = t('图片不可用：缺少附件身份校验信息','Image unavailable: attachment identity metadata is missing');
+        placeholder.classList.add('md-image-missing'); return;
+      }
+      try {
+        const result = await call('attachmentImageRead', {libraryId, recordId, ...(attachmentId ? {attachmentId, expectedHash} : {sourceTarget}), ...(branchId ? {branchId} : {})});
+        if (!active || !placeholder.isConnected) return;
+        if (expectedHash && String(result.sha256 || '').toLowerCase() !== expectedHash) throw Error('ATTACHMENT_HASH_MISMATCH');
+        if (!Number.isSafeInteger(result.byteLength) || result.byteLength < 1 || result.byteLength > MAX_PAGE_IMAGE_BYTES)
+          throw Error('MARKDOWN_IMAGE_TOO_LARGE');
+        if (loadedBytes + result.byteLength > MAX_PAGE_IMAGE_BYTES) {
+          if (!allowRelease) {
+            makeOnDemand(placeholder,t('图片需按需加载；点击查看时会先卸载较早图片','Image needs on-demand loading; earlier images will be unloaded when opened'));
+            return;
+          }
+          while (loadedImages.length && (loadedBytes + result.byteLength > MAX_PAGE_IMAGE_BYTES || loadedImages.length >= maxImages)) releaseOldest();
+        } else if (allowRelease && loadedImages.length >= maxImages) {
+          releaseOldest();
+        }
+        const image = document.createElement('img');
+        image.className = 'md-attachment-image'; image.alt = placeholder.getAttribute('aria-label') || '';
+        image.loading = 'lazy'; allowZoom(image);
+        image.src = `data:${result.mimeType};base64,${result.dataBase64}`;
+        const restore = placeholder.cloneNode(false);
+        restore.classList.remove('md-image-missing','md-image-on-demand'); delete restore.dataset.onDemandBound; delete restore.dataset.loading;
+        loadedImages.push({image, byteLength:result.byteLength, placeholder:restore});
+        loadedBytes += result.byteLength;
+        placeholder.replaceWith(image);
+      } catch (error) {
+        if (!active || !placeholder.isConnected) return;
+        const waiting = descriptor?.available === false || descriptor?.downloaded === false ||
+          ['ATTACHMENT_NOT_AVAILABLE','BRANCH_ATTACHMENT_NOT_AVAILABLE','BRANCH_ATTACHMENT_WAITING_FOR_DOWNLOAD'].includes(error?.message);
+        const message = waiting
+          ? t('图片待下载：此分支的附件尚未下载到本机','Image waiting for download: this branch attachment is not on this device')
+          : error?.message === 'MARKDOWN_IMAGE_TOO_LARGE'
+            ? t('图片超过单张大小限制，无法加载','Image exceeds the per-image loading limit')
+            : t('图片不可用：附件身份不匹配或缺失','Image unavailable: attachment identity mismatch or missing');
+        if (waiting) makeOnDemand(placeholder,message);
+        else { placeholder.textContent = message; placeholder.classList.add('md-image-missing'); }
+      }
+    };
+    const loadImages = async () => {
+      for (const [index, placeholder] of pending.entries()) {
+        if (index >= maxImages) {
+          makeOnDemand(placeholder,t('图片需按需加载；点击查看','Image available on demand; click to view'));
+          continue;
+        }
+        await loadOne(placeholder);
+      }
+    };
+    void loadImages();
+    return () => { active = false;if(viewer){viewer.close();viewer.remove();viewer=null;}loadedImages.forEach(item=>{item.image.src='';}); };
+  }, [rendered, markdown, libraryId, recordId, branchId, descriptorKey, language]);
+  return <div ref={root} className="markdown-view" dangerouslySetInnerHTML={{__html:rendered}}/>;
 }

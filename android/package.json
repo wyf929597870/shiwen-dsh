@@ -9,13 +9,15 @@
     "sync": "npm run build && cap sync android",
     "doctor": "node scripts/doctor.mjs",
     "android:debug": "npm run sync && cd native && ./gradlew assembleDebug",
-    "check:ui": "node scripts/check-ui-references.mjs"
+    "check:ui": "node scripts/check-ui-references.mjs",
+    "test:markdown": "node --test scripts/markdown-renderer.test.mjs"
   },
   "dependencies": {
     "@capacitor/android": "8.6.0",
     "@capacitor/core": "8.6.0",
     "react": "19.2.0",
-    "react-dom": "19.2.0"
+    "react-dom": "19.2.0",
+    "markdown-it": "^15.0.3"
   },
   "devDependencies": {
     "@capacitor/cli": "8.6.0",

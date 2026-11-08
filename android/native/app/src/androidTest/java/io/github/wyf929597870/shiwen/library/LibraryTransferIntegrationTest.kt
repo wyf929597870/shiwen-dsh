@@ -40,10 +40,13 @@ class LibraryTransferIntegrationTest {
             assertEquals(0L, LibraryReview(repo).read("1").getJSONObject("totals").getLong("added"))
             val historical = LibraryReview(repo).read("month", "2024-03").getJSONObject("totals")
             assertEquals(1, historical.getInt("historicalRecords"))
-            val backup = codec.decodeBackup(codec.createBackup(repo))
-            assertEquals(1, backup.snapshot.getJSONArray("records").length())
-            assertEquals(1, backup.attachmentBytes.size)
-            assertArrayEquals(raw.toByteArray(), backup.attachmentBytes.values.single())
+            val backupFile = codec.createBackup(repo)
+            codec.decodeBackup(backupFile).use { backup ->
+                assertEquals(1, backup.snapshot.getJSONArray("records").length())
+                assertEquals(1, backup.attachmentFiles.size)
+                assertArrayEquals(raw.toByteArray(), backup.attachmentFiles.values.single().file.readBytes())
+            }
+            backupFile.delete()
         } finally {
             manager.closeForTest()
             file.delete()

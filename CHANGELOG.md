@@ -3,6 +3,56 @@
 0.1.4 是本仓库首次公开的 Linux 预览版；0.1.0–0.1.3 为本地开发与打包记录。
 0.1.4 is this repository's first public Linux preview; 0.1.0–0.1.3 are local development builds.
 
+## android-v0.1.1 - 2026-11-08
+
+### 中文
+
+- 改进 Markdown 阅读，支持选择、保存、显示和放大库内图片，并接收系统分享的图片。
+- 图片随正文同步，支持跨库复制、图文导出、历史版本、完整备份和加密恢复；旧备份保留兼容处理。
+- 已使用同一正式签名在现用手机覆盖安装；隔离设备测试覆盖图片复制、分享、备份恢复和加密。图片同步需要更新后的服务端。
+
+### English
+
+- Improved Markdown reading, inline images and Android image sharing.
+- Images participate in synchronization, cross-library copies, exports, history and encrypted backups; legacy backup compatibility is retained.
+- Installed over the existing release-signed app on the current phone. Isolated device tests covered image copies, sharing and backup restoration. Image synchronization requires an updated service.
+
+## windows-v0.1.9 - 2026-11-08
+
+### 中文
+
+- Windows x64 预览安装包包含更新后的桌面工作台和图片同步服务；安装器未进行代码签名。
+- 与 Android 0.1.1、Linux 0.1.9 和插件 0.2.0-dev.4 配套。Windows 10 虚拟机隔离测试验证了打包服务的图片保存和读取；完整图形交互仍需进一步验证。
+
+### English
+
+- Windows x64 preview with the updated desktop workspace and image synchronization service; the installer is unsigned.
+- Matches Android 0.1.1, Linux 0.1.9 and plugin 0.2.0-dev.4. An isolated Windows 10 VM test verified image writes and reads through the packaged service; full GUI validation remains outstanding.
+
+## v0.1.9 - 2026-11-08
+
+### 中文
+
+- Linux 桌面和独立服务支持正文图片、图片同步、图文草稿及备份恢复。
+- 使用隔离资料库验证了从 0.1.8 打包服务升级、原记录读取、图片保存和重启后读取。
+
+### English
+
+- Linux desktop and standalone service add inline images, image synchronization, drafts and backup compatibility.
+- An isolated packaged-service upgrade from 0.1.8 verified existing records and image persistence across restart.
+
+## v0.2.0-dev.4 - 2026-11-08
+
+### 中文
+
+- DSH / Web 预览插件增加图片插入、读取和同步，外部接口支持分块传入图片。
+- 在隔离 Web 宿主中验证了安装、重启、卸载、重装和图片读取；需要 DSH 0.2.2-alpha.3 与 Node.js 24.9 或更高版本。
+
+### English
+
+- DSH / Web preview adds inline images, synchronization and chunked external image ingestion.
+- Isolated host tests covered install, restart, removal, reinstall and image reads. Requires DSH 0.2.2-alpha.3 and Node.js 24.9 or newer.
+
 
 ## android-v0.1.0 - 2026-11-08
 

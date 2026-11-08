@@ -87,7 +87,8 @@ export function LibraryTransferPanel({ready,libraryId,onPageStateChange,onLibrar
     if(result?.requestId&&result.requestId!==requestId)throw Error(t('恢复回执编号不匹配。原请求编号已保留，请勿新建请求。','The restore receipt ID does not match. The original request ID is preserved; do not start a new request.'));
     localStorage.removeItem(key);setPendingRestore(null);
     await onLibrariesRefresh?.();
-    setMessage(`${asNewLibrary?t('备份已作为新资料库导入','Backup imported as a new library'):t('原资料库已恢复','Original library restored')} · ${result?.name||result?.libraryId||''}`);
+    const warningCount=result?.warnings?.length||0;
+    setMessage(`${asNewLibrary?t('备份已作为新资料库导入','Backup imported as a new library'):t('原资料库已恢复','Original library restored')} · ${result?.name||result?.libraryId||''}${warningCount?` · ${t('旧备份中有附件引用缺失','The old backup contains missing attachment references')}：${warningCount}`:''}`);
   });
   return <section className="settings-card transfer-card">
     <p className="secondary">{t('导入 Markdown，或备份和恢复资料库。备份包含版本、来源与附件。','Import Markdown, or back up and restore your library. Backups include versions, sources, and attachments.')}</p>

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,rmSync} from 'node:fs';
+import {mkdtempSync,rmSync,writeFileSync,mkdirSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {randomUUID,createHash} from 'node:crypto';
@@ -9,8 +9,20 @@ import Database from '../plugins/library/legacy/sqlite.mjs';
 import {markdownSegments} from '../plugins/library/legacy/markdown.mjs';
 import {record as recordSchema} from '../contracts/mobile/v1/schema.mjs';
 import {contentHash,fingerprint} from '../plugins/library/src/sync/canonical.mjs';
+import {scanWiki} from '../plugins/library/legacy/wiki-import.mjs';
 
 function isolated(t){const dir=mkdtempSync(join(tmpdir(),'shiwen-sync-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));const store=createStore(join(dir,'library.sqlite'));t.after(()=>store.close());return store;}
+
+test('incremental wiki import carries image provenance and shared attachment identity',t=>{
+ const dir=mkdtempSync(join(tmpdir(),'shiwen-wiki-image-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));
+ mkdirSync(join(dir,'notes'));mkdirSync(join(dir,'images'));
+ writeFileSync(join(dir,'notes','note.md'),'![photo](../images/a.png)');writeFileSync(join(dir,'images','a.png'),Buffer.from('89504e470d0a1a0a','hex'));
+ const store=isolated(t),sync=store.mobileSync(),deviceId=randomUUID(),identity=sync.identity({protocolVersion:'1.0.0-draft.2',deviceId});
+ store.importWiki(scanWiki(dir));const events=sync.changes({libraryId:identity.libraryId,epoch:identity.epoch,deviceId,cursor:0,limit:100}).events;
+ const note=events.find(event=>event.provenance?.import?.sourceName==='notes/note.md');
+ assert.ok(note);const mapping=note.provenance.import.links[0];assert.equal(mapping.relativePath,'images/a.png');assert.ok(mapping.targetAttachmentId);
+ const asset=events.find(event=>event.record.attachmentDescriptors.some(item=>item.id===mapping.targetAttachmentId));assert.ok(asset);assert.notEqual(asset.recordId,note.recordId);
+});
 
 test('mobile sync identity is stable, bootstrap is paged and validates portable record DTOs',t=>{
   const store=isolated(t),saved=store.save({kind:'journal',title:'同步日记',body:'正文内容'});
@@ -89,6 +101,25 @@ test('new record attachment can be staged before create and is committed atomica
   const applied=sync.push({libraryId:identity.libraryId,epoch:identity.epoch,deviceId,operations:[{inlineBody:operation}]}).receipts[0];assert.equal(applied.status,'applied');
   const transfer=sync.attachmentChunk({libraryId:identity.libraryId,epoch:identity.epoch,deviceId,attachmentId,offset:0,byteLength:100});assert.equal(transfer.dataBase64,bytes.toString('base64'));
   const event=sync.changes({libraryId:identity.libraryId,epoch:identity.epoch,deviceId,cursor:0,limit:10}).events.find(item=>item.changeId===operation.changeId);assert.equal(event.record.attachmentDescriptors[0].id,attachmentId);assert.equal(event.record.attachmentDescriptors[0].hash,digest);
+});
+
+test('staging an attachment for an existing record does not change its revision',t=>{
+  const store=isolated(t),sync=store.mobileSync(),deviceId=randomUUID(),identity=sync.identity({protocolVersion:'1.0.0-draft.2',deviceId});
+  const record=store.save({kind:'journal',title:'Existing',body:'Body'}),attachmentId=randomUUID(),bytes=Buffer.from('image fixture'),digest=createHash('sha256').update(bytes).digest('hex');
+  const request={libraryId:identity.libraryId,epoch:identity.epoch,deviceId,recordId:record.id,attachmentId,name:'image.png',bytes,digest,stageOnly:true};
+  assert.equal(sync.putAttachment(request).staged,true);
+  assert.equal(store.get(record.id).revision,record.revision);
+  assert.equal(store.attachments({record:record.id}).length,0);
+  assert.equal(sync.putAttachment(request).alreadyPresent,true);
+  assert.throws(()=>sync.putAttachment({...request,name:'different.png'}));
+  const current=sync.recordHead({libraryId:identity.libraryId,epoch:identity.epoch,deviceId,recordId:record.id});
+  const markdown=`Body ![image](attachment:${attachmentId})`,payload={...current.record,markdown,sources:[{text:markdown,origin:'personal'}],attachmentDescriptors:[{id:attachmentId,hash:digest,byteLength:bytes.length,name:'image.png'}]};
+  const op={operationId:randomUUID(),recordId:record.id,changeId:randomUUID(),versionId:randomUUID(),baseVersionId:current.head.versionId,parentVersionIds:[current.head.versionId],originDeviceId:deviceId,action:'update',baseRevision:current.head.revision,localGeneration:2,occurredAt:new Date().toISOString(),timeZone:'UTC',payload,activities:[]};
+  const push={libraryId:identity.libraryId,epoch:identity.epoch,deviceId,operations:[{inlineBody:op}]};
+  assert.equal(sync.push(push).receipts[0].status,'applied');
+  assert.equal(sync.push(push).receipts[0].status,'applied');
+  assert.equal(store.attachments({record:record.id}).length,1);
+  assert.equal(store.get(record.id).revision,record.revision+1);
 });
 
 test('setup transfer keys same attachment ID separately for current record and retained branch',t=>{

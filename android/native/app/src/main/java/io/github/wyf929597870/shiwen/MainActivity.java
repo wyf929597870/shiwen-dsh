@@ -4,10 +4,12 @@ import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
     private boolean restoringActivity;
+    private static final java.util.concurrent.ExecutorService shareExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
     private final androidx.activity.OnBackPressedCallback backCallback = new androidx.activity.OnBackPressedCallback(true) {
         @Override public void handleOnBackPressed() { handleSystemBack(); }
     };
     @Override public void onCreate(android.os.Bundle state) {
+        shareExecutor.execute(() -> io.github.wyf929597870.shiwen.library.LibraryTemporaryCleanup.clean(getApplicationContext()));
         registerPlugin(io.github.wyf929597870.shiwen.probe.LibraryProbePlugin.class);
         restoringActivity = state != null;
         // Capacitor dispatches the launch Intent through onNewIntent during super.onCreate.
@@ -84,11 +86,20 @@ public class MainActivity extends BridgeActivity {
         if (!restoringActivity) acceptSharedText(intent);
     }
     private void acceptSharedText(android.content.Intent intent) {
-        try {
-            new io.github.wyf929597870.shiwen.library.ShareInboxStore(this, "shiwen-share-inbox").receive(intent);
-        } catch (Exception error) {
-            boolean english = "en".equals(getSharedPreferences("shiwen-appearance", MODE_PRIVATE).getString("language", "zh-CN"));
-            android.widget.Toast.makeText(this, english ? "Could not receive shared text. The inbox or text is too large." : "无法接收分享：待保存内容已满或文本过长。", android.widget.Toast.LENGTH_LONG).show();
-        }
+        final android.content.Context app = getApplicationContext();
+        shareExecutor.execute(() -> {
+            try {
+                boolean received = new io.github.wyf929597870.shiwen.library.ShareInboxStore(app, "shiwen-share-inbox").receive(intent);
+                if (received) runOnUiThread(() -> {
+                    if (!isFinishing() && bridge != null && bridge.getWebView() != null)
+                        bridge.getWebView().evaluateJavascript("window.dispatchEvent(new Event('shiwen-share-received'))", null);
+                });
+            } catch (Exception error) {
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                    boolean english = "en".equals(app.getSharedPreferences("shiwen-appearance", MODE_PRIVATE).getString("language", "zh-CN"));
+                    android.widget.Toast.makeText(app, english ? "Could not receive shared content." : "无法接收分享内容。", android.widget.Toast.LENGTH_LONG).show();
+                });
+            }
+        });
     }
 }

@@ -9,9 +9,42 @@ import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.UUID
+import java.io.File
+import androidx.core.content.FileProvider
+import org.json.JSONArray
 
 @RunWith(AndroidJUnit4::class)
 class ShareInboxStoreTest {
+    @Test fun sharedImageIsCopiedBeforeSourceDisappearsAndSavedOnce() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val namespace = "shared-image-${UUID.randomUUID()}"
+        val manager = LibraryManager(context, "$namespace-registry", "$namespace-legacy")
+        val target = manager.create("Image target")
+        val inbox = ShareInboxStore(context, namespace)
+        val source = File(context.cacheDir, "shiwen-transfers/${UUID.randomUUID()}.png")
+        source.parentFile!!.mkdirs()
+        val bytes = byteArrayOf(137.toByte(),80,78,71,13,10,26,10,0,1)
+        source.writeBytes(bytes)
+        try {
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", source)
+            assertTrue(inbox.receive(Intent(Intent.ACTION_SEND).setType("image/png").putExtra(Intent.EXTRA_STREAM, uri)))
+            assertTrue(source.delete())
+            val pending = inbox.list().getJSONArray("items").getJSONObject(0)
+            val input = JSONObject().put("kind", "reference").put("title", "Image").put("markdown", "")
+                .put("origin", "external").put("processing", "original")
+            val saved = inbox.save(pending.getString("id"), target, input)
+            val id = JSONArray(saved.attachmentDescriptorsJson).getJSONObject(0).getString("id")
+            assertTrue(saved.markdown.contains("attachment:$id"))
+            assertEquals(bytes.toList(), target.attachmentBytes(id).toList())
+            assertEquals(saved.id, inbox.save(pending.getString("id"), target, input).id)
+            assertEquals(1, target.dao.recordCount())
+        } finally {
+            source.delete(); manager.closeForTest()
+            context.getSharedPreferences(namespace, Context.MODE_PRIVATE).edit().clear().commit()
+            File(context.filesDir, "libraries/${target.libraryId}").deleteRecursively()
+            context.deleteDatabase("shiwen-library-${target.libraryId}.sqlite")
+        }
+    }
     @Test fun sharedTextWaitsForExplicitLibraryChoiceAndRetriesNeverDuplicate() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val namespace = "shared-fixture-${UUID.randomUUID()}"

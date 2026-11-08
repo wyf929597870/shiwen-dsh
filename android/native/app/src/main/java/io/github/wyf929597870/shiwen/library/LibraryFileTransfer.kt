@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.core.content.FileProvider
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -17,6 +18,10 @@ internal class LibraryFileTransfer(context: Context) {
 
     fun markdownImportIntent(): Intent = openDocumentIntent(
         mimeTypes = arrayOf("text/markdown", "text/plain", "text/x-markdown")
+    )
+
+    fun imageImportIntent(): Intent = openDocumentIntent(
+        mimeTypes = arrayOf("image/png", "image/jpeg", "image/webp", "image/gif")
     )
 
     fun backupImportIntent(): Intent = openDocumentIntent(
@@ -43,6 +48,14 @@ internal class LibraryFileTransfer(context: Context) {
         require(found.size <= MAX_SELECTED_FILES) { "TOO_MANY_FILES_SELECTED" }
         require(found.all { it.scheme == "content" }) { "INVALID_DOCUMENT_URI" }
         return found.toList()
+    }
+
+    fun displayName(uri: Uri): String {
+        require(uri.scheme == "content") { "INVALID_DOCUMENT_URI" }
+        val name = app.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0) else null
+        } ?: uri.lastPathSegment.orEmpty()
+        return safeFileName(name)
     }
 
     @Throws(IOException::class)

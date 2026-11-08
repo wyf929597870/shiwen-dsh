@@ -1,7 +1,8 @@
-import {externalDDL,externalStore} from './external-store.mjs';
+import {externalDDL,externalStore,imageType} from './external-store.mjs';
 import {agentDDL,createAgentStore,memoryDefaults} from './agent-store.mjs';
 import {migrateConversations,conversationStore} from './conversations.mjs';
 import {validDay} from './wiki-import.mjs';
+import {attachmentImageIds} from './image-references.mjs';
 import {importDDL,importWiki} from './import-store.mjs';
 import Database from './sqlite.mjs';
 import {randomUUID,createHash} from 'node:crypto';
@@ -34,6 +35,9 @@ export function createStore(path,{recover=true}={}) {
   CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY,thread TEXT NOT NULL,role TEXT NOT NULL,body TEXT NOT NULL,status TEXT NOT NULL,created TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY,thread TEXT NOT NULL,status TEXT NOT NULL,model TEXT NOT NULL,error TEXT NOT NULL DEFAULT '',created TEXT NOT NULL,updated TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS attachments(id TEXT PRIMARY KEY,record TEXT NOT NULL REFERENCES records(id),name TEXT NOT NULL,data TEXT NOT NULL,created TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS workbench_image_stages(id TEXT PRIMARY KEY,name TEXT NOT NULL,data TEXT NOT NULL,digest TEXT NOT NULL,created TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS workbench_image_receipts(id TEXT PRIMARY KEY,fingerprint TEXT NOT NULL,result TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS workbench_drafts(slot TEXT PRIMARY KEY,revision INTEGER NOT NULL,payload TEXT NOT NULL);
   CREATE INDEX IF NOT EXISTS edits_at ON edits(at); CREATE INDEX IF NOT EXISTS messages_thread ON messages(thread,created);`);
   if(!db.prepare('PRAGMA table_info(messages)').all().some(c=>c.name==='context'))db.exec("ALTER TABLE messages ADD COLUMN context TEXT NOT NULL DEFAULT '{}'");
   db.exec(importDDL);
@@ -256,7 +260,7 @@ export function createStore(path,{recover=true}={}) {
     };return inTransaction?operation():db.transaction(operation)();
   }
   // Shared mutation boundary. The trusted caller fixes the origin of newly added text.
-  function updateRecord(input,{addedOrigin='personal',operationId}={}) {
+  function updateRecord(input,{addedOrigin='personal',operationId,beforeSync}={}) {
     const fields=['kind','title','body','day','url','annotation','stage','sourceIds','origin'];
     if(!input||Object.keys(input).some(key=>!['id','revision',...fields].includes(key)))throw new Error('无效的修改字段');
     requireText(input.id,100);if(!Number.isInteger(input.revision)||input.revision<1)throw new Error('版本无效');
@@ -290,6 +294,7 @@ export function createStore(path,{recover=true}={}) {
         else db.prepare('INSERT INTO record_dates(record,day,basis) VALUES(?,?,?) ON CONFLICT(record) DO UPDATE SET day=excluded.day,basis=excluded.basis').run(old.id,day,'人工确认');
       }
       const record=get(old.id);
+      beforeSync?.(record);
       appendSyncChange(old.id,'update',{activityOrigin:addedOrigin});
       if(operationId)db.prepare('INSERT INTO operations VALUES(?,?)').run(operationId,JSON.stringify({fingerprint,record}));
       return record;
@@ -319,10 +324,10 @@ export function createStore(path,{recover=true}={}) {
     totals.net=totals.added-totals.removed;
     return {...range,totals,daily,historical:historical.map(decode),undated:records.filter(r=>!r.deleted&&(imported.has(r.id)?!imported.get(r.id).day&&imported.get(r.id).path!==':assets':recordDates.has(r.id)&&!recordDates.get(r.id).day)).length,edits:rows,articles:records.filter(x=>active.has(x.id)&&!x.deleted).map(decode),collected:collectedRecords.map(decode)};
   }
-  function exportBackup(){const payload={schema:12,created:stamp(),drafts:{capture:getSetting('captureDraft',''),origin:getSetting('captureDraftOrigin','personal'),editing:getSetting('editingDraft')},tables:{}};for(const table of ['records','links','versions','edits','memories','messages','runs','attachments','imports','agent_documents','agent_sessions','memory_events','conversations','conversation_sources','conversation_drafts','record_sources','record_dates','agent_actions','dsh_record_sources','external_sources','sync_changes','sync_activities','sync_receipts','sync_record_sources','sync_version_sources','sync_version_parents','sync_branches','sync_branch_blobs'])payload.tables[table]=db.prepare(`SELECT * FROM ${table}`).all();return JSON.stringify({format:'shiwen-backup',payload,sha256:createHash('sha256').update(JSON.stringify(payload)).digest('hex')});}
+  function exportBackup(){const payload={schema:13,created:stamp(),drafts:{capture:getSetting('captureDraft',''),origin:getSetting('captureDraftOrigin','personal'),editing:getSetting('editingDraft')},tables:{}};for(const table of ['records','links','versions','edits','memories','messages','runs','attachments','imports','agent_documents','agent_sessions','memory_events','conversations','conversation_sources','conversation_drafts','record_sources','record_dates','agent_actions','dsh_record_sources','external_sources','sync_changes','sync_activities','sync_receipts','sync_record_sources','sync_version_sources','sync_version_parents','sync_branches','sync_branch_blobs','workbench_image_stages','workbench_image_receipts','workbench_drafts'])payload.tables[table]=db.prepare(`SELECT * FROM ${table}`).all();return JSON.stringify({format:'shiwen-backup',payload,sha256:createHash('sha256').update(JSON.stringify(payload)).digest('hex')});}
   function restoreBackup(raw,{requireEmpty=false}={}){
     if(typeof raw!=='string'||raw.length>1000000000)throw new Error('备份文件过大或无效');
-    const b=parse(raw);if(b.format!=='shiwen-backup'||![1,2,3,4,5,6,7,8,9,10,11,12].includes(b.payload?.schema)||b.sha256!==createHash('sha256').update(JSON.stringify(b.payload)).digest('hex'))throw new Error('备份格式或校验不通过');
+    const b=parse(raw);if(b.format!=='shiwen-backup'||![1,2,3,4,5,6,7,8,9,10,11,12,13].includes(b.payload?.schema)||b.sha256!==createHash('sha256').update(JSON.stringify(b.payload)).digest('hex'))throw new Error('备份格式或校验不通过');
     if(b.payload.schema===1)for(const row of b.payload.tables.messages??[])row.context='{}';
     if(b.payload.schema<3)b.payload.tables.imports=[];
     if(b.payload.schema<4){for(const table of ['agent_documents','agent_sessions','memory_events','conversations','conversation_sources','conversation_drafts','record_sources','record_dates','agent_actions'])b.payload.tables[table]=[];for(const row of b.payload.tables.memories??[])Object.assign(row,{...memoryDefaults,...row,category:row.scope==='global'?(row.category??'memory'):'project'});}
@@ -334,8 +339,12 @@ export function createStore(path,{recover=true}={}) {
     if(b.payload.schema<10)b.payload.tables.sync_version_parents=[];
     if(b.payload.schema<11)for(const row of b.payload.tables.sync_changes??[])Object.assign(row,{operation_fingerprint:null});
     if(b.payload.schema<12)for(const table of ['sync_branches','sync_branch_blobs'])b.payload.tables[table]=[];
-    const tables=['records','links','versions','edits','memories','messages','runs','attachments','imports','agent_documents','agent_sessions','memory_events','conversations','conversation_sources','conversation_drafts','record_sources','record_dates','agent_actions','dsh_record_sources','external_sources','sync_changes','sync_activities','sync_receipts','sync_record_sources','sync_version_sources','sync_version_parents','sync_branches','sync_branch_blobs'];
+    if(b.payload.schema<13)for(const table of ['workbench_image_stages','workbench_image_receipts','workbench_drafts'])b.payload.tables[table]=[];
+    const tables=['records','links','versions','edits','memories','messages','runs','attachments','imports','agent_documents','agent_sessions','memory_events','conversations','conversation_sources','conversation_drafts','record_sources','record_dates','agent_actions','dsh_record_sources','external_sources','sync_changes','sync_activities','sync_receipts','sync_record_sources','sync_version_sources','sync_version_parents','sync_branches','sync_branch_blobs','workbench_image_stages','workbench_image_receipts','workbench_drafts'];
     for(const table of tables){if(!Array.isArray(b.payload.tables[table]))throw new Error('备份缺少数据表');const columns=db.prepare(`PRAGMA table_info(${table})`).all().map(x=>x.name);for(const row of b.payload.tables[table]){if(Object.keys(row).length!==columns.length||!columns.every(k=>Object.hasOwn(row,k)))throw new Error('备份字段不匹配');if(table==='records'){if(!kinds.includes(row.kind)||!origins.includes(row.origin))throw new Error('备份内容类型错误');readDoc(parse(row.doc),row.origin);}}}
+    for(const image of b.payload.tables.workbench_image_stages){const bytes=Buffer.from(image.data,'base64');if(!bytes.length||bytes.length>8*1024*1024||bytes.toString('base64')!==image.data||hash(bytes)!==image.digest)throw Error('备份暂存图片校验失败');imageType(bytes);}
+    const imageIds=new Set(b.payload.tables.workbench_image_stages.map(image=>image.id)),receiptIds=new Set(b.payload.tables.workbench_image_receipts.map(receipt=>receipt.id));
+    for(const row of b.payload.tables.workbench_drafts){const draft=parse(row.payload);if(!draft)continue;const committed=draft.pendingImageSave?.requestId&&receiptIds.has(draft.pendingImageSave.requestId);if(!Array.isArray(draft.stagedImages??[])||(!committed&&(draft.stagedImages??[]).some(id=>!imageIds.has(id))))throw Error('备份草稿图片缺失');}
     db.transaction(()=>{if(requireEmpty&&['records','memories','messages','runs','settings'].some(table=>db.prepare(`SELECT 1 FROM ${table} LIMIT 1`).get()))throw new Error('目标资料库已有内容，导入不会覆盖');for(const table of [...tables].reverse())db.prepare(`DELETE FROM ${table}`).run();db.prepare('DELETE FROM operations').run();db.prepare('DELETE FROM external_requests').run();db.prepare("DELETE FROM settings WHERE key IN ('captureDraft','captureDraftOrigin','editingDraft')").run();if(b.payload.drafts){setSetting('captureDraft',requireText(b.payload.drafts.capture,1000000));if(!origins.includes(b.payload.drafts.origin))throw new Error('草稿来源错误');setSetting('captureDraftOrigin',b.payload.drafts.origin);if(b.payload.drafts.editing){readDoc(b.payload.drafts.editing.doc);setSetting('editingDraft',b.payload.drafts.editing);}}for(const table of tables){const columns=db.prepare(`PRAGMA table_info(${table})`).all().map(x=>x.name);const insert=db.prepare(`INSERT INTO ${table} (${columns.join(',')}) VALUES (${columns.map(()=>'?').join(',')})`);for(const row of b.payload.tables[table])insert.run(...columns.map(k=>row[k]));}if(b.payload.schema<5)migrateConversations(db);db.prepare("UPDATE runs SET status='interrupted' WHERE status='running'").run();db.prepare("UPDATE messages SET status='interrupted' WHERE status='streaming'").run();
       db.prepare("UPDATE meta SET value=? WHERE key='sync_epoch'").run(randomUUID());
       for(const table of ['sync_acks','sync_snapshots','sync_manifests'])db.prepare(`DELETE FROM ${table}`).run();
@@ -392,6 +401,51 @@ export function createStore(path,{recover=true}={}) {
     addRun:({id,thread,model})=>{const at=stamp();db.prepare("INSERT INTO runs VALUES(?,?,'running',?,'',?,?)").run(id,thread,model,at,at);return true;},
     finishRun:({id,status,error=''})=>{db.prepare('UPDATE runs SET status=?,error=?,updated=? WHERE id=?').run(status,error,stamp(),id);return true;},
     getSetting:({key,fallback})=>getSetting(key,fallback),setSetting:({key,value})=>{setSetting(key,value);return true;},
+    stageWorkbenchImage:({name,data})=>{
+      requireText(name,200);requireText(data,12*1024*1024);const bytes=Buffer.from(data,'base64');
+      if(!bytes.length||bytes.length>8*1024*1024||bytes.toString('base64')!==data)throw Error('图片大小或编码无效');imageType(bytes);
+      const quota=db.prepare('SELECT COUNT(*) AS n,COALESCE(SUM(LENGTH(data)),0) AS bytes FROM workbench_image_stages').get();
+      if(quota.n>=100||quota.bytes+data.length>128*1024*1024)throw Error('图片暂存空间已满');
+      const id=randomUUID(),digest=hash(bytes);db.prepare('INSERT INTO workbench_image_stages VALUES(?,?,?,?,?)').run(id,name,data,digest,stamp());
+      return {id,name,digest,byteLength:bytes.length};
+    },
+    discardWorkbenchImages:({ids})=>{if(!Array.isArray(ids)||ids.length>100||ids.some(id=>typeof id!=='string'||id.length>100))throw Error('图片清单无效');return db.transaction(()=>{for(const id of ids)db.prepare('DELETE FROM workbench_image_stages WHERE id=?').run(id);return {discarded:ids.length};})();},
+    workbenchDraft:({slot,value,revision})=>{
+      if(!['library','articles'].includes(slot))throw Error('草稿类型无效');
+      if(value===undefined){const row=db.prepare('SELECT payload,revision FROM workbench_drafts WHERE slot=?').get(slot);return row?{revision:row.revision,value:parse(row.payload)}:null;}
+      if(!Number.isSafeInteger(revision)||revision<0)throw Error('草稿版本无效');
+      const payload=JSON.stringify(value);if(typeof payload!=='string'||payload.length>2200000)throw Error('草稿内容无效');
+      const old=db.prepare('SELECT revision,payload FROM workbench_drafts WHERE slot=?').get(slot);
+      if(old&&old.revision>revision)throw Error('草稿版本已更新');
+      if(old&&old.revision===revision&&old.payload!==payload)throw Error('草稿版本已用于不同内容');
+      db.prepare('INSERT INTO workbench_drafts VALUES(?,?,?) ON CONFLICT(slot) DO UPDATE SET revision=excluded.revision,payload=excluded.payload').run(slot,revision,payload);return {revision};
+    },
+    validateWorkbenchImages:({id,body,imageIds=[]})=>{
+      if(!Array.isArray(imageIds)||imageIds.length>20||new Set(imageIds).size!==imageIds.length)throw Error('图片清单无效');
+      const refs=attachmentImageIds(body),current=id?get(id):null,old=current?attachmentImageIds(markdownSource(current.doc)):new Set();
+      const owned=new Set(id?db.prepare('SELECT id FROM attachments WHERE record=?').all(id).map(item=>item.id):[]);
+      if(imageIds.some(image=>!refs.has(image)))throw Error('正文缺少图片引用');
+      if([...refs].some(image=>!owned.has(image)&&!imageIds.includes(image)&&!old.has(image)))throw Error('正文引用的图片不存在');
+    },
+    workbenchImageReceipt:({requestId,requestPayload})=>{
+      requireText(requestId,100);const receipt=db.prepare('SELECT * FROM workbench_image_receipts WHERE id=?').get(requestId);
+      if(!receipt||!receipt.fingerprint.startsWith('request:'))return null;
+      if(receipt.fingerprint!==`request:${hash(JSON.stringify(requestPayload))}`)throw Error('请求编号已用于不同内容');
+      return parse(receipt.result);
+    },
+    saveWorkbenchMarkdown:(input,imageIds=[],requestId,requestPayload)=>{
+      if(!Array.isArray(imageIds)||imageIds.length>20||new Set(imageIds).size!==imageIds.length)throw Error('图片清单无效');
+      requireText(requestId,100);if(!requestId)throw Error('缺少请求编号');
+      return db.transaction(()=>{
+        const receipt=db.prepare('SELECT * FROM workbench_image_receipts WHERE id=?').get(requestId);
+        const fingerprint=receipt&&!receipt.fingerprint.startsWith('request:')?hash(JSON.stringify([input,imageIds])):requestPayload===undefined?hash(JSON.stringify([input,imageIds])):`request:${hash(JSON.stringify(requestPayload))}`;
+        if(receipt){if(receipt.fingerprint!==fingerprint)throw Error('请求编号已用于不同内容');return parse(receipt.result);}
+        const body=markdownSource(input.doc);if(imageIds.some(id=>!body.includes(`attachment:${id}`)))throw Error('正文缺少图片引用');
+        const images=imageIds.map(id=>{const image=db.prepare('SELECT * FROM workbench_image_stages WHERE id=?').get(id);if(!image)throw Error('图片暂存已丢失');const bytes=Buffer.from(image.data,'base64');if(hash(bytes)!==image.digest)throw Error('图片完整性校验失败');imageType(bytes);return image;});
+        const result=save(input,{inTransaction:true,beforeSync:record=>{for(const image of images){db.prepare('INSERT INTO attachments VALUES(?,?,?,?,?)').run(image.id,record.id,image.name,image.data,stamp());db.prepare('DELETE FROM workbench_image_stages WHERE id=?').run(image.id);}}});
+        db.prepare('INSERT INTO workbench_image_receipts VALUES(?,?,?)').run(requestId,fingerprint,JSON.stringify(result));return result;
+      })();
+    },
     attachmentAdd:({record,name,data})=>{if(!get(record))throw new Error('先保存记录再添加附件');requireText(name,200);requireText(data,15000000);const id=randomUUID();db.transaction(()=>{db.prepare('INSERT INTO attachments VALUES(?,?,?,?,?)').run(id,record,name,data,stamp());bumpSyncRevision(record,'附件添加');appendSyncChange(record,'update',{createActivity:false,preserveSources:true});})();return id;},
     attachments:({record})=>db.prepare('SELECT id,name,created FROM attachments WHERE record=?').all(record),
     attachment:({id})=>db.prepare('SELECT * FROM attachments WHERE id=?').get(id),

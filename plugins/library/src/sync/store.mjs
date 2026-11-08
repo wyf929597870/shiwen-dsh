@@ -38,6 +38,23 @@ export function createMobileSyncStore({db,get,save,syncMeta,syncRecord,hash,appe
     return {type:'doc',content:paragraphs.map(content=>({type:'paragraph',content}))};
   };
   const recordRows=()=>db.prepare('SELECT id FROM records ORDER BY id').all().map(x=>syncRecord(x.id));
+  const recordProvenance=record=>{
+      const storedProvenance=db.prepare('SELECT payload FROM sync_provenance WHERE record_id=?').get(record.id);
+      if(storedProvenance)return parse(storedProvenance.payload);
+      const imp=db.prepare('SELECT path,day,date_basis,duplicate_of,metadata,links FROM imports WHERE record=?').get(record.id);
+      const sourceRows=db.prepare('SELECT s.source_record,s.source_message,s.source_role,s.source_revision,s.excerpt,m.thread AS source_session FROM record_sources s LEFT JOIN messages m ON m.id=s.source_message WHERE s.record=? ORDER BY s.rowid').all(record.id);
+      const dshRows=db.prepare('SELECT session_id,message_id,role,excerpt FROM dsh_record_sources WHERE record=? ORDER BY rowid').all(record.id);
+      const externalRows=db.prepare('SELECT client_name,action,session_id,message_id,at FROM external_sources WHERE record=? ORDER BY at,id').all(record.id);
+      const importData=imp?parse(imp.metadata):null,importLinks=imp?parse(imp.links):[];
+      const safeRelative=value=>typeof value==='string'&&!value.startsWith('/')&&!/^[a-zA-Z]:[\\/]|^[\\/]{2}/.test(value)&&!value.split(/[\\/]/).includes('..')?value:'';
+      const payload={recordId:record.id,...(imp?{import:{sourceName:safeRelative(imp.path),contentDay:imp.day,dateBasis:imp.date_basis,duplicateOf:imp.duplicate_of,
+        originalAttachmentId:importData?._import?.originalAttachment??null,dateCandidates:importData?._import?.dateCandidates??[],warnings:importData?._import?.warnings??[],
+        assetArchive:Boolean(importData?.assetArchive),files:(importData?.files??[]).filter(file=>typeof file.id==='string').map(file=>({attachmentId:file.id,relativePath:safeRelative(file.path),hash:file.sha256??'',byteLength:file.bytes??0})),
+        links:importLinks.map(link=>({kind:link.kind??'',label:link.label??'',targetRecordId:link.record??null,targetAttachmentId:link.attachment??null,relativePath:safeRelative(link.path)}))}}:{ }),
+        sources:[...sourceRows.map(row=>({kind:'conversation',sourceServerId:syncMeta('sync_server_id'),sessionId:row.source_session??null,messageId:row.source_message??null,sourceRecordId:row.source_record??null,role:row.source_role,revision:row.source_revision??null,excerpt:row.excerpt})),...dshRows.map(row=>({kind:'conversation',sourceServerId:syncMeta('sync_server_id'),sessionId:row.session_id,messageId:row.message_id,role:row.role,excerpt:row.excerpt}))],
+        externalSources:externalRows.map(row=>({sourceServerId:syncMeta('sync_server_id'),clientName:row.client_name,action:row.action,sessionId:row.session_id||null,messageId:row.message_id||null,occurredAt:row.at}))};
+      return payload.import||payload.sources.length||payload.externalSources.length?payload:null;
+  };
   const snapshotEntities=()=>{
     const records=recordRows();
     const heads=db.prepare('SELECT id,revision,deleted FROM records ORDER BY id').all().map(row=>{
@@ -62,24 +79,7 @@ export function createMobileSyncStore({db,get,save,syncMeta,syncRecord,hash,appe
     for(const row of db.prepare('SELECT id,record,name,data,created FROM attachments ORDER BY id').all()){
       const bytes=Buffer.from(row.data,'base64');attachments.push({id:row.id,recordId:row.record,name:row.name,createdAt:row.created,hash:hash(bytes),byteLength:bytes.length});
     }
-    const provenance=[];
-    for(const record of records){
-      const storedProvenance=db.prepare('SELECT payload FROM sync_provenance WHERE record_id=?').get(record.id);
-      if(storedProvenance){provenance.push(parse(storedProvenance.payload));continue;}
-      const imp=db.prepare('SELECT path,day,date_basis,duplicate_of,metadata,links FROM imports WHERE record=?').get(record.id);
-      const sourceRows=db.prepare('SELECT s.source_record,s.source_message,s.source_role,s.source_revision,s.excerpt,m.thread AS source_session FROM record_sources s LEFT JOIN messages m ON m.id=s.source_message WHERE s.record=? ORDER BY s.rowid').all(record.id);
-      const dshRows=db.prepare('SELECT session_id,message_id,role,excerpt FROM dsh_record_sources WHERE record=? ORDER BY rowid').all(record.id);
-      const externalRows=db.prepare('SELECT client_name,action,session_id,message_id,at FROM external_sources WHERE record=? ORDER BY at,id').all(record.id);
-      const importData=imp?parse(imp.metadata):null,importLinks=imp?parse(imp.links):[];
-      const safeRelative=value=>typeof value==='string'&&!value.startsWith('/')&&!/^[a-zA-Z]:[\\/]|^[\\/]{2}/.test(value)&&!value.split(/[\\/]/).includes('..')?value:'';
-      const payload={recordId:record.id,...(imp?{import:{sourceName:safeRelative(imp.path),contentDay:imp.day,dateBasis:imp.date_basis,duplicateOf:imp.duplicate_of,
-        originalAttachmentId:importData?._import?.originalAttachment??null,dateCandidates:importData?._import?.dateCandidates??[],warnings:importData?._import?.warnings??[],
-        assetArchive:Boolean(importData?.assetArchive),files:(importData?.files??[]).filter(file=>typeof file.id==='string').map(file=>({attachmentId:file.id,relativePath:safeRelative(file.path),hash:file.sha256??'',byteLength:file.bytes??0})),
-        links:importLinks.map(link=>({kind:link.kind??'',label:link.label??'',targetRecordId:link.record??null,targetAttachmentId:link.attachment??null,relativePath:safeRelative(link.path)}))}}:{ }),
-        sources:[...sourceRows.map(row=>({kind:'conversation',sourceServerId:syncMeta('sync_server_id'),sessionId:row.source_session??null,messageId:row.source_message??null,sourceRecordId:row.source_record??null,role:row.source_role,revision:row.source_revision??null,excerpt:row.excerpt})),...dshRows.map(row=>({kind:'conversation',sourceServerId:syncMeta('sync_server_id'),sessionId:row.session_id,messageId:row.message_id,role:row.role,excerpt:row.excerpt}))],
-        externalSources:externalRows.map(row=>({sourceServerId:syncMeta('sync_server_id'),clientName:row.client_name,action:row.action,sessionId:row.session_id||null,messageId:row.message_id||null,occurredAt:row.at}))};
-      if(payload.import||payload.sources.length||payload.externalSources.length)provenance.push(payload);
-    }
+    const provenance=records.map(recordProvenance).filter(Boolean);
     const branches=db.prepare('SELECT * FROM sync_branches ORDER BY created_at,branch_id').all().map(row=>{const value=parse(row.payload),blobs=db.prepare('SELECT attachment_id,name,digest,byte_length FROM sync_branch_blobs WHERE branch_id=? ORDER BY attachment_id').all(row.branch_id);return {...value,attachments:blobs.map(blob=>({id:blob.attachment_id,recordId:row.record_id,name:blob.name,createdAt:value.createdAt,hash:blob.digest,byteLength:blob.byte_length,branchId:row.branch_id}))};});
     for(const branch of branches)attachments.push(...branch.attachments);
     return {records,heads,versions,activities,links,attachments,provenance,branches};
@@ -527,7 +527,7 @@ export function createMobileSyncStore({db,get,save,syncMeta,syncRecord,hash,appe
             sources:storedSources?.markdown===markdown?parse(storedSources.sources):markdownSegments(doc,record.origin??'unknown'),
             parentVersionIds:parents?parse(parents.parents):[],title:storedVersion.title,createdAt:storedVersion.at,reason:storedVersion.reason};
         }
-        return {seq:row.seq,changeId:row.change_id,recordId:row.record_id,versionId:row.version_id,action:row.action,revision:row.revision,record,version,activities,links:parse(row.links)};
+        return {seq:row.seq,changeId:row.change_id,recordId:row.record_id,versionId:row.version_id,action:row.action,revision:row.revision,record,version,activities,links:parse(row.links),provenance:recordProvenance(record)};
       });
       const nextCursor=events.length?events.at(-1).seq:cursor;
       return {events,nextCursor,hasMore:nextCursor<highWatermark,highWatermark};
@@ -616,12 +616,15 @@ export function createMobileSyncStore({db,get,save,syncMeta,syncRecord,hash,appe
       return {appliedCursor,completeCursor,acknowledgedAt:at};
     },
     progress(){return db.prepare('SELECT device_id AS deviceId,applied_cursor AS appliedCursor,complete_cursor AS completeCursor,manifest_digest AS manifestDigest,acknowledged_at AS acknowledgedAt FROM sync_acks ORDER BY acknowledged_at DESC').all();},
-    putAttachment({libraryId:requestedLibrary,epoch:requestedEpoch,deviceId,recordId,attachmentId,name,bytes,digest}={}){
+    putAttachment({libraryId:requestedLibrary,epoch:requestedEpoch,deviceId,recordId,attachmentId,name,bytes,digest,stageOnly=false}={}){
       assertLibrary({libraryId:requestedLibrary,epoch:requestedEpoch});validateDevice(deviceId);
       if(!validUuid(attachmentId)||typeof recordId!=='string'||typeof name!=='string'||name.length>500||!Buffer.isBuffer(bytes)||bytes.length>limits.maxCanonicalOperationBytes||hash(bytes)!==digest)fail('VALIDATION_ERROR');
       return db.transaction(()=>{
         const record=get(recordId);
-        if(!record){
+        if(!record || stageOnly){
+          if(record?.deleted)fail('DEPENDENCY_MISSING',{recordId});
+          const existing=db.prepare('SELECT record,name,data FROM attachments WHERE id=?').get(attachmentId);
+          if(existing){if(existing.record!==recordId||existing.name!==name||hash(Buffer.from(existing.data,'base64'))!==digest)fail('OPERATION_REUSED');return {attachmentId,recordId,digest,byteLength:bytes.length,alreadyPresent:true,staged:false};}
           db.prepare("DELETE FROM sync_staged_blobs WHERE created_at<?").run(new Date(Date.now()-7*24*60*60*1000).toISOString());
           const old=db.prepare('SELECT record_id,name,digest,byte_length,data FROM sync_staged_blobs WHERE owner_id=? AND device_id=? AND attachment_id=?').get(ownerId,deviceId,attachmentId);
           if(old){if(old.record_id!==recordId||old.name!==name||old.digest!==digest||old.byte_length!==bytes.length||!Buffer.from(old.data).equals(bytes))fail('OPERATION_REUSED');return {attachmentId,recordId,digest,byteLength:bytes.length,alreadyPresent:true,staged:true};}

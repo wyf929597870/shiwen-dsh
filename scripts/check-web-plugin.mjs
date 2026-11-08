@@ -20,7 +20,7 @@ const defaults=[{id:'workspace-controller',config:{documentsDirectory:join(data,
 const appearance=JSON.parse(JSON.stringify([{id:'shiwen-theme',disabled:false},{id:'ui-brand-official',disabled:true},{id:'shiwen-personal-context',disabled:false},{id:'preset-shiwen',disabled:false},{id:'agent-preset-registry',config:{default:'shiwen'}}]));
 const pause=ms=>new Promise(done=>setTimeout(done,ms));
 async function until(fn){let last;for(let i=0;i<180;i++){try{const value=await fn();if(value)return value;}catch(error){last=error;}await pause(250);}throw last??Error('Web startup timed out');}
-let record,issued,receipt;
+let record,issued,receipt,imageId;
 const source={requestId:'web-plugin-mcp-retry',kind:'idea',origin:'personal',body:'通过 Web 插件保存的个人想法',day:'2026-10-15'};
 for(let round=0;round<4;round++){
  if(round===2){
@@ -65,13 +65,15 @@ for(let round=0;round<4;round++){
   }
   if(round===0){
    assert.equal((await rpc('snapshot')).records.length,0);
-   record=await rpc('saveMarkdown',{kind:'journal',title:'Web 插件验收日记',body:'# 标题\n\n我的原始日记。'});
+   const image=await rpc('stageImage',{name:'fixture.png',dataBase64:Buffer.from('89504e470d0a1a0a00010203','hex').toString('base64')});imageId=image.id;
+   record=await rpc('saveMarkdown',{kind:'journal',title:'Web 插件验收日记',body:`# 标题\n\n我的原始日记。\n\n![图片](attachment:${imageId})`,imageIds:[imageId],requestId:'web-image-fixture'});
    record=await rpc('updateRecord',{id:record.id,revision:record.revision,day:'2026-10-12',origin:'personal'});
    issued=await rpc('externalClientCreate',{name:'Web acceptance MCP',scopes:['create','read']});
   }else{
    assert.equal((await rpc('readMarkdown',{id:record.id})).dateInfo.day,'2026-10-12');
    const logo=await fetch(base+'/shiwen-brand.png',{headers:{cookie}});assert.equal(logo.status,200);assert.equal(logo.headers.get('content-type'),'image/png');
   }
+  assert.equal((await rpc('readImage',{id:record.id,attachmentId:imageId})).dataBase64,Buffer.from('89504e470d0a1a0a00010203','hex').toString('base64'));
   const status=await rpc('externalStatus');assert.equal(status.root,join(env.DSH_HOME,'shiwen/web'));
   assert.equal(status.command,process.execPath);assert.ok(status.args[0].endsWith('integration/cli.mjs'));
   mcp=new Client({name:'shiwen-web-acceptance',version:'1.0.0'});

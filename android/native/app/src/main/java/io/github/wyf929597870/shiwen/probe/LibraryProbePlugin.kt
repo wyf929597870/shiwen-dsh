@@ -77,7 +77,15 @@ class LibraryProbePlugin : Plugin() {
         }
     }, call)
     @PluginMethod fun markdownImport(call: PluginCall) = beginTransfer(call, "markdownImport")
+    @PluginMethod fun attachmentPick(call: PluginCall) = beginTransfer(call, "attachmentPick")
+    @PluginMethod fun attachmentStageDelete(call: PluginCall) = run(call) {
+        val ids = call.getArray("ids") ?: org.json.JSONArray()
+        val store = io.github.wyf929597870.shiwen.library.LibraryAttachmentDraftStore(context, repository.libraryId)
+        for (index in 0 until ids.length()) store.delete(ids.getString(index))
+        JSObject().put("deleted", ids.length())
+    }
     @PluginMethod fun recordExport(call: PluginCall) = beginTransfer(call, "recordExport")
+    @PluginMethod fun recordExportWithImages(call: PluginCall) = beginTransfer(call, "recordExportWithImages")
     @PluginMethod fun libraryBackupExport(call: PluginCall) = beginTransfer(call, "libraryBackupExport")
     @PluginMethod fun libraryBackupRestore(call: PluginCall) = beginTransfer(call, "libraryBackupRestore")
     @ActivityCallback private fun fileTransferResult(call: PluginCall?, result: ActivityResult) = fileTransfers.onResult(call, result)
@@ -89,12 +97,94 @@ class LibraryProbePlugin : Plugin() {
         JSObject().put("record", json(row, true)).put("syncState", row.syncState)
             .put("receipt", JSObject().put("status", "applied").put("recordId", row.id))
     }
+    @PluginMethod fun recordCopyWithImages(call: PluginCall) = run(call) {
+        val target = libraryManager.openLibrary(call.getString("targetLibraryId") ?: error("TARGET_LIBRARY_REQUIRED"))
+        val row = io.github.wyf929597870.shiwen.library.LibraryImageCopy.copy(repository, target,
+            call.getString("id") ?: error("RECORD_ID_REQUIRED"), call.getString("requestId") ?: error("MISSING_REQUEST"))
+        JSObject().put("record", JSObject().put("id", row.id).put("title", row.title)).put("libraryId", target.libraryId)
+    }
     @PluginMethod fun recordShare(call: PluginCall) = shareFile(call, attachment = false, share = true)
     @PluginMethod fun attachmentOpen(call: PluginCall) = shareFile(call, attachment = true, share = false)
     @PluginMethod fun attachmentShare(call: PluginCall) = shareFile(call, attachment = true, share = true)
     @PluginMethod fun recordAttachments(call: PluginCall) = run(call) {
         val row = repository.read(call.getString("recordId") ?: error("RECORD_ID_REQUIRED"))
         JSObject().put("items", attachmentDescriptors(row))
+    }
+    @PluginMethod fun attachmentImageRead(call: PluginCall) = run(call) {
+        val recordId = call.getString("recordId") ?: error("RECORD_ID_REQUIRED")
+        val directId = call.getString("attachmentId")
+        val branchId = call.getString("branchId")
+        val expectedHash = call.getString("expectedHash")?.lowercase()
+        val target = call.getString("sourceTarget")
+        if (branchId == null) repository.read(recordId)
+        else if (repository.dao.branch(branchId) == null && repository.dao.record(recordId) == null)
+            error("BRANCH_ATTACHMENT_WAITING_FOR_DOWNLOAD")
+        if (directId != null) require(expectedHash?.matches(Regex("[a-f0-9]{64}")) == true) { "ATTACHMENT_HASH_REQUIRED" }
+        if (branchId != null) {
+            require(directId != null && target == null && expectedHash != null) { "BRANCH_ATTACHMENT_CONTEXT_REQUIRED" }
+            val branch = repository.dao.branch(branchId)
+            branch?.let { check(it.recordId == recordId) { "ATTACHMENT_CONTEXT_MISMATCH" } }
+            val branchAttachment = repository.dao.branchAttachment(branchId, directId)
+            val recordAttachment = repository.dao.attachments(recordId).firstOrNull { it.id == directId }
+            val selected = when {
+                branchAttachment != null && branch != null -> {
+                    check(branchAttachment.hash.equals(expectedHash, ignoreCase = true)) { "ATTACHMENT_HASH_MISMATCH" }
+                    check(branchAttachment.downloaded) { "BRANCH_ATTACHMENT_WAITING_FOR_DOWNLOAD" }
+                    null
+                }
+                branchAttachment != null -> error("BRANCH_ATTACHMENT_WAITING_FOR_DOWNLOAD")
+                recordAttachment != null && recordAttachment.hash.equals(expectedHash, ignoreCase = true) -> {
+                    check(recordAttachment.downloaded) { "ATTACHMENT_NOT_AVAILABLE" }
+                    recordAttachment
+                }
+                else -> error("BRANCH_ATTACHMENT_WAITING_FOR_DOWNLOAD")
+            }
+            val bytes = if (selected == null) repository.branchAttachmentBytes(branchId, directId)
+                else repository.attachmentBytes(directId)
+            check(bytes.size.toLong() == (branchAttachment?.byteLength ?: selected?.byteLength) &&
+                io.github.wyf929597870.shiwen.library.LibraryAttachmentDraftStore.sha256(bytes) == expectedHash) {
+                "ATTACHMENT_HASH_MISMATCH"
+            }
+            check(bytes.size in 1..8 * 1024 * 1024) { "IMAGE_TOO_LARGE" }
+            val mimeType = imageMime(bytes)
+            JSObject().put("mimeType", mimeType).put("byteLength", bytes.size).put("sha256", expectedHash)
+                .put("dataBase64", android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP))
+        } else {
+        val mappedId = if (directId == null && !target.isNullOrBlank()) {
+            require(target.length <= 2048 && !target.startsWith("/") && !Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:").containsMatchIn(target)) { "INVALID_IMAGE_TARGET" }
+            val provenance = repository.dao.provenance(recordId)?.json?.let(::JSONObject)
+            val imported = provenance?.optJSONObject("import")
+            val links = imported?.optJSONArray("links") ?: org.json.JSONArray()
+            val original = android.net.Uri.decode(target).substringBefore('#').replace('\\', '/')
+            val base = imported?.optString("sourceName", "")?.substringBeforeLast('/', "") ?: ""
+            val normalized = java.nio.file.Paths.get(base, original).normalize().toString().replace('\\', '/')
+            require(!normalized.startsWith("../") && normalized != ".." && !normalized.startsWith("/")) { "INVALID_IMAGE_TARGET" }
+            val matches = (0 until links.length()).map { links.getJSONObject(it) }.filter {
+                it.optString("relativePath") == normalized || it.optString("relativePath") == original
+            }.mapNotNull { it.optString("targetAttachmentId").takeIf { value -> value.isNotBlank() && value != "null" } }.distinct()
+            matches.singleOrNull()
+        } else null
+        val attachmentId = directId ?: mappedId ?: error("ATTACHMENT_ID_REQUIRED")
+        val attachment = (if (mappedId != null) repository.dao.allAttachments() else repository.dao.attachments(recordId)).firstOrNull { it.id == attachmentId }
+            ?: error("ATTACHMENT_NOT_FOUND")
+        check(attachment.downloaded) { "ATTACHMENT_NOT_AVAILABLE" }
+        check(attachment.byteLength in 1..8L * 1024 * 1024) { "IMAGE_TOO_LARGE" }
+        if (expectedHash != null) check(attachment.hash.equals(expectedHash, ignoreCase = true)) { "ATTACHMENT_HASH_MISMATCH" }
+        val bytes = repository.attachmentBytes(attachmentId)
+        check(bytes.size.toLong() == attachment.byteLength && io.github.wyf929597870.shiwen.library.LibraryAttachmentDraftStore.sha256(bytes) == attachment.hash.lowercase()) {
+            "ATTACHMENT_HASH_MISMATCH"
+        }
+        JSObject().put("mimeType", imageMime(bytes)).put("byteLength", bytes.size).put("sha256", attachment.hash.lowercase())
+            .put("dataBase64", android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP))
+        }
+    }
+    private fun imageMime(bytes: ByteArray): String = when {
+        bytes.size >= 8 && bytes.copyOfRange(0, 8).contentEquals(byteArrayOf(137.toByte(), 80, 78, 71, 13, 10, 26, 10)) -> "image/png"
+        bytes.size >= 3 && bytes[0] == 0xff.toByte() && bytes[1] == 0xd8.toByte() && bytes[2] == 0xff.toByte() -> "image/jpeg"
+        bytes.size >= 6 && String(bytes, 0, 6, Charsets.US_ASCII) in setOf("GIF87a", "GIF89a") -> "image/gif"
+        bytes.size >= 12 && String(bytes, 0, 4, Charsets.US_ASCII) == "RIFF" &&
+            String(bytes, 8, 4, Charsets.US_ASCII) == "WEBP" -> "image/webp"
+        else -> error("IMAGE_FORMAT_UNSUPPORTED")
     }
     private fun shareFile(call: PluginCall, attachment: Boolean, share: Boolean) = trusted({
         val admitted = generation.get()
@@ -393,14 +483,18 @@ class LibraryProbePlugin : Plugin() {
     @PluginMethod fun recordCreate(call: PluginCall) = run(call) {
         val input = call.getObject("record") ?: error("RECORD_REQUIRED")
         val generation = call.data.opt("localGeneration") as? Number ?: error("INVALID_GENERATION")
-        val record = repository.create(call.getString("requestId") ?: error("MISSING_REQUEST"), input, generation.toLong())
+        val staged = stagedAttachments(call, input)
+        val record = repository.create(call.getString("requestId") ?: error("MISSING_REQUEST"), input,
+            generation.toLong(), stagedAttachments = staged)
         JSObject().put("record", json(record, true)).put("syncState", record.syncState)
             .put("receipt", JSObject().put("status", "applied").put("recordId", record.id))
     }
     @PluginMethod fun recordUpdate(call: PluginCall) = run(call) {
         val expected = call.data.opt("expectedRevision") as? Number ?: error("INVALID_REVISION")
+        val patch = call.getObject("patch") ?: error("RECORD_PATCH_REQUIRED")
+        val staged = stagedAttachments(call, patch)
         val record = repository.update(call.getString("id") ?: "", expected.toLong(), call.getString("requestId") ?: error("MISSING_REQUEST"),
-            call.getObject("patch") ?: error("RECORD_PATCH_REQUIRED"))
+            patch, stagedAttachments = staged)
         JSObject().put("record", json(record, true)).put("syncState", record.syncState)
     }
     @PluginMethod fun recordDelete(call: PluginCall) = run(call) {
@@ -777,5 +871,23 @@ class LibraryProbePlugin : Plugin() {
             val local = rows[descriptor.optString("id")]
             descriptor.put("available", local?.downloaded == true).put("synced", local?.uploaded == true)
         })
+    }
+    private fun stagedAttachments(call: PluginCall, record: JSONObject): List<io.github.wyf929597870.shiwen.library.StagedLibraryAttachment> {
+        val ids = call.data.optJSONArray("stagedAttachmentIds") ?: org.json.JSONArray()
+        require(ids.length() <= 10) { "TOO_MANY_IMAGES_SELECTED" }
+        val descriptors = record.optJSONArray("attachmentDescriptors") ?: org.json.JSONArray()
+        val byId = (0 until descriptors.length()).associate { index ->
+            val descriptor = descriptors.getJSONObject(index)
+            descriptor.getString("id") to descriptor.getString("name")
+        }
+        require(byId.size == descriptors.length()) { "ATTACHMENT_DESCRIPTOR_DUPLICATE" }
+        val store = io.github.wyf929597870.shiwen.library.LibraryAttachmentDraftStore(context, repository.libraryId)
+        val seen = mutableSetOf<String>()
+        return (0 until ids.length()).map { index ->
+            val id = ids.getString(index)
+            require(seen.add(id)) { "ATTACHMENT_STAGE_DUPLICATE" }
+            val name = byId[id] ?: error("ATTACHMENT_DESCRIPTOR_MISSING")
+            store.read(id, name)
+        }
     }
 }

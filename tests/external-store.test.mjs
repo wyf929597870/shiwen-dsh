@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {randomUUID,createHash} from 'node:crypto';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -7,9 +8,37 @@ import {createStore} from '../plugins/library/legacy/store.mjs';
 const setup=t=>{const dir=mkdtempSync(join(tmpdir(),'shiwen-ext-store-'));const store=createStore(join(dir,'library.sqlite'));t.after(()=>{store.close();rmSync(dir,{recursive:true,force:true});});return {store,dir};};
 const saveArgs={requestId:'save-1',kind:'journal',origin:'personal',body:'# 我的日记\n今天去散步',day:'2026-10-12',source:{sessionId:'external-conversation',messageId:'message-1'}};
 function client(store,scopes,name='WorkBuddy'){const issued=store.externalClientCreate({name,scopes});return {issued,identity:store.externalAuthenticate(issued.token)};}
+test('external image chunks commit with the record and remain idempotent',t=>{
+ const {store}=setup(t),{identity}=client(store,['create','read','update']),other=client(store,['create']).identity;
+ const bytes=Buffer.from('89504e470d0a1a0a00010203','hex'),digest=createHash('sha256').update(bytes).digest('hex'),uploadId=randomUUID();
+ const begin={uploadId,purpose:'create',name:'image.png',byteLength:bytes.length,digest};
+ assert.equal(store.externalCall(identity,'shiwen_image_begin',begin).ready,false);
+ assert.throws(()=>store.externalCall(other,'shiwen_image_part',{uploadId,part:0,dataBase64:bytes.toString('base64')}),/权限/);
+ assert.equal(store.externalCall(identity,'shiwen_image_part',{uploadId,part:0,dataBase64:bytes.toString('base64')}).ready,true);
+ const args={requestId:'image-save',kind:'reference',origin:'external',body:`![image](attachment:${uploadId})`,imageIds:[uploadId]};
+ assert.throws(()=>store.externalCall(identity,'shiwen_save',{...args,requestId:'image-in-code',body:'`'+args.body+'`'}),/正文缺少图片引用/);
+ assert.throws(()=>store.externalCall(identity,'shiwen_save',{...args,requestId:'missing-image',body:args.body+`\n![missing](attachment:${randomUUID()})`}),/图片不存在/);
+ const saved=store.externalCall(identity,'shiwen_save',args);
+ assert.deepEqual(store.externalCall(identity,'shiwen_save',args),saved);
+ assert.equal(store.externalCall(identity,'shiwen_image_read',{id:saved.id,attachmentId:uploadId}).dataBase64,bytes.toString('base64'));
+ const legacyMissing=randomUUID();const legacy=store.save({kind:'reference',body:`![old](attachment:${legacyMissing})`});
+ assert.doesNotThrow(()=>store.externalCall(identity,'shiwen_update',{requestId:'legacy-update',id:legacy.id,revision:legacy.revision,body:`![old](attachment:${legacyMissing})\ncontinued`}));
+ assert.doesNotThrow(()=>store.externalCall(identity,'shiwen_save',{requestId:'image-code-only',kind:'reference',origin:'external',body:`\`![example](attachment:${randomUUID()})\``}));
+ assert.equal(store.attachments({record:saved.id}).length,1);
+ const nextId=randomUUID();store.externalCall(identity,'shiwen_image_begin',{uploadId:nextId,purpose:'update',recordId:saved.id,name:'second.png',byteLength:bytes.length,digest});
+ store.externalCall(identity,'shiwen_image_part',{uploadId:nextId,part:0,dataBase64:bytes.toString('base64')});
+ const update={requestId:'image-update',id:saved.id,revision:saved.revision,body:`![new](attachment:${nextId})`,imageIds:[nextId]};
+ assert.throws(()=>store.externalCall(identity,'shiwen_update',{...update,revision:saved.revision+1}),/更新/);
+ assert.equal(store.attachments({record:saved.id}).length,1);
+ const edited=store.externalCall(identity,'shiwen_update',update);
+ assert.equal(edited.revision,saved.revision+1);
+ assert.deepEqual(store.externalCall(identity,'shiwen_update',update),edited);
+ assert.equal(store.attachments({record:saved.id}).length,2);
+ assert.equal(store.externalCall(identity,'shiwen_image_read',{id:saved.id,attachmentId:uploadId}).dataBase64,bytes.toString('base64'));
+});
 test('外部来源与作者分离、请求重试幂等、权限独立且可撤销',t=>{
  const {store}=setup(t),{issued,identity}=client(store,['create']);
- assert.deepEqual(store.externalCatalog(identity).map(x=>x.name),['shiwen_save','shiwen_collect']);
+ assert.deepEqual(store.externalCatalog(identity).map(x=>x.name),['shiwen_image_begin','shiwen_image_part','shiwen_image_status','shiwen_save','shiwen_collect']);
  const first=store.externalCall(identity,'shiwen_save',saveArgs);
  assert.equal(first.origin,'personal');assert.equal(first.client.name,'WorkBuddy');assert.equal(store.get(first.id).externalSources[0].session_id,saveArgs.source.sessionId);
  assert.deepEqual(store.externalCall(identity,'shiwen_save',{...saveArgs,source:{messageId:'message-1',sessionId:'external-conversation'}}),first);
@@ -21,7 +50,7 @@ test('外部来源与作者分离、请求重试幂等、权限独立且可撤�
 });
 test('授权更新、删除和恢复共用版本校验；出错操作原子回滚',t=>{
  const {store}=setup(t),{identity}=client(store,['create','read','update','delete']);
- assert.equal(store.externalCatalog(identity).length,8);
+ assert.equal(store.externalCatalog(identity).length,12);
  const initial=store.externalCall(identity,'shiwen_save',saveArgs);
  const updated=store.externalCall(identity,'shiwen_update',{requestId:'update-1',id:initial.id,revision:initial.revision,kind:'reference',origin:'external',url:'https://example.org'});
  assert.equal(updated.origin,'external');assert.equal(store.get(initial.id).externalSources.length,2);

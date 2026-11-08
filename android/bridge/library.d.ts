@@ -13,8 +13,10 @@ export interface Methods {
   libraryConnect: {args:{nodeId:string}; result:{libraryId:string;state:string;integrity?:string;operationId:string}};
   recordList: {args:{libraryId:string; query?:string; kind?:MobileRecordKind; excludeKind?:MobileRecordKind; cursor?:string|null; limit?:number; deleted?:boolean}; result:RecordPage};
   recordRead: {args:{libraryId:string; id:string}; result:MobileRecord};
-  recordCreate: {args:{libraryId:string; requestId:string; localGeneration:number; record:MobileRecordInput}; result:RecordMutationResult};
-  recordUpdate: {args:{libraryId:string; id:string; expectedRevision:number; requestId:string; localGeneration:number; patch:Partial<MobileRecordInput>}; result:RecordMutationResult};
+  recordCreate: {args:{libraryId:string; requestId:string; localGeneration:number; record:MobileRecordInput; stagedAttachmentIds?:string[]}; result:RecordMutationResult};
+  recordUpdate: {args:{libraryId:string; id:string; expectedRevision:number; requestId:string; localGeneration:number; patch:Partial<MobileRecordInput>; stagedAttachmentIds?:string[]}; result:RecordMutationResult};
+  attachmentPick: {args:{libraryId:string};result:{cancelled?:boolean;items:Array<{id:string;name:string;hash:string;byteLength:number;mimeType:string}>}};
+  attachmentStageDelete: {args:{libraryId:string;ids:string[]};result:{deleted:number}};
   recordDelete: {args:{libraryId:string; id:string; expectedRevision:number; requestId:string}; result:RecordMutationResult};
   recordRestore: {args:{libraryId:string; id:string; expectedRevision:number; requestId:string}; result:RecordMutationResult};
   recordVersions: {args:{libraryId:string; id:string; cursor?:string|null; limit?:number}; result:RecordVersionPage};
@@ -73,11 +75,14 @@ export interface Methods {
   recoveryComplete: {args:{libraryId:string;nodeId:string;configRevision:number;taskId:string};result:RecoveryProgress};
   markdownImport: {args:{libraryId:string};result:{cancelled?:boolean;imported:number;skipped:number;records:Array<{id:string;title:string;contentDay:string|null}>;failures?:Array<{index:number;code:string}>}};
   recordExport: {args:{libraryId:string;id:string};result:{cancelled?:boolean;exported:boolean;encrypted?:boolean}};
+  recordExportWithImages: {args:{libraryId:string;id:string};result:{cancelled?:boolean;exported:boolean;encrypted?:boolean}};
   libraryBackupExport: {args:{libraryId:string;includeConversations?:boolean};result:{cancelled?:boolean;exported:boolean;encrypted?:boolean}};
   libraryBackupRestore: {args:{libraryId:string;name?:string;asNewLibrary?:boolean;requestId:string};result:{cancelled?:boolean;restored:boolean;requestId?:string;libraryId?:string;name?:string;recordCount?:number;attachments?:number;sourceLibraryId?:string|null;role?:string;integrity?:string}};
   recordCopy: {args:{libraryId:string;id:string;targetLibraryId:string;requestId:string};result:RecordMutationResult};
+  recordCopyWithImages: {args:{libraryId:string;id:string;targetLibraryId:string;requestId:string};result:{record:{id:string;title:string};libraryId:string}};
   recordShare: {args:{libraryId:string;id:string};result:{shared:boolean}};
   recordAttachments: {args:{libraryId:string;recordId:string};result:{items:AttachmentDescriptor[]}};
+  attachmentImageRead: {args:{libraryId:string;recordId:string;branchId?:string;attachmentId?:string;expectedHash?:string;sourceTarget?:string};result:{mimeType:'image/png'|'image/jpeg'|'image/gif'|'image/webp';byteLength:number;sha256:string;dataBase64:string}};
   attachmentOpen: {args:{recordId:string;attachmentId:string};result:{opened:boolean}};
   attachmentShare: {args:{recordId:string;attachmentId:string};result:{shared:boolean}};
   shareInboxList: {args:Record<string,never>;result:{items:ShareInboxItem[]}};
@@ -121,6 +126,7 @@ export interface MobileRecord extends MobileRecordInput {
   createdAt:string;updatedAt:string;deleted:boolean;createdByDevice:string|null;syncState:'synced'|'pending'|'conflict'|'local-only'|string;
 }
 export interface AttachmentDescriptor {id:string;name:string;createdAt?:string;hash:string;byteLength:number;available:boolean;synced?:boolean;mimeType?:string}
+export interface BranchAttachmentDescriptor extends AttachmentDescriptor {branchId:string;downloaded?:boolean}
 export interface ShareInboxRecord {title:string;markdown:string;kind:MobileRecordKind;origin:RecordOrigin;processing:string;contentDay:string|null;url:string|null}
 export interface ShareInboxItem {id:string;title:string;text:string;url:string|null;receivedAt:string;pendingTargetLibraryId:string|null;pendingRecord:ShareInboxRecord|null}
 export interface RecordPage {items:MobileRecord[];nextCursor?:string|null;total?:number}
@@ -148,4 +154,4 @@ export interface RecoveryInspection {source:{libraryId:string;integrity:'complet
 export interface RecoveryTask {taskId:string;mode:RecoveryMode;state:string}
 export interface RecoveryProgress extends RecoveryTask {receivedCounts:Record<string,number>;expectedCounts:Record<string,number>;missingEntities:Array<{entity:string;received:number;expected:number;digestMatches?:boolean}>;missingAttachmentIds:string[];candidateCount:number;resolvedCount:number;resolvedCounts:{retained:number;merged:number;discarded:number;applied:number}}
 export interface RecoveryCandidate {branchId:string;recordId:string;classification:string;sourceHead:RecoveryHead;targetHead:RecoveryHead|null}
-export interface RecoveryBranch {branchId:string;record:MobileRecord;versions:RecordVersion[];activities:unknown[];attachments:unknown[]}
+export interface RecoveryBranch {branchId:string;record:MobileRecord;versions:RecordVersion[];activities:unknown[];attachments:BranchAttachmentDescriptor[]}

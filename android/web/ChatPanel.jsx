@@ -5,6 +5,7 @@ import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {call} from '../bridge/library.mjs';
 import {RemoteChatPanel} from './RemoteChatPanel.jsx';
 import {AgentProposals} from './AgentProposals.jsx';
+import {MarkdownView} from './MarkdownView.jsx';
 
 // Writes from mounted and unmounted chat views share one queue. Each queued value
 // contains the conversation id captured at edit time, never a mutable selection.
@@ -323,10 +324,10 @@ function LocalChatPanel({ready, config, onRead, onDirect, onSending, onOpenSetti
       {!tasks.length && !draft.input && <div className="chat-welcome"><h1>{t('把想法放在这里')}</h1><p className="secondary">{t('和拾文助手讨论日常、整理资料，再把有价值的内容留在资料库。')}</p></div>}
       {nextOffset != null && <button className="text" disabled={loading} onClick={loadOlder}>{t('加载更早的对话')}</button>}
       {tasks.map(task => <article className="turn" key={task.id}>
-        <div className="user-message">{task.input}</div>
+        <div className="user-message"><MarkdownView markdown={task.input}/></div>
         <div className="agent-message"><span className="task-status">{t(terminalLabels[task.status] || task.status)}{task.model ? ` · ${task.model}` : ''}</span>
           {Number.isInteger(task.contextTurns) && <span className="task-context"> · {t(`本轮参考 ${task.contextTurns} 轮对话${task.omittedTurns ? `，另有 ${task.omittedTurns} 轮未纳入` : ''}`,`Context: ${task.contextTurns} conversation turns${task.omittedTurns ? `; ${task.omittedTurns} more omitted` : ''}`)}</span>}
-          {task.output && <p>{task.output}</p>}{task.error && <p className="error">{task.error}</p>}
+          {task.output && <MarkdownView markdown={task.output}/>}{task.error && <p className="error">{task.error}</p>}
           {task.recordId && <button className="receipt" onClick={() => onRead?.(task.recordId)}>✓ {t('原文已保存为素材 · 查看','Original saved as material · View')}</button>}
           {isRunning(task) && <button className="text" onClick={() => cancel(task)}>{t('取消任务')}</button>}
         </div>

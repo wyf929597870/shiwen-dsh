@@ -9,6 +9,7 @@ import {SettingsPanel} from './SettingsPanel.jsx';
 import {RecordPanel} from './RecordPanel.jsx';
 import {ReviewPanel} from './ReviewPanel.jsx';
 import {MarkdownView} from './MarkdownView.jsx';
+import {attachmentImageIds} from './markdown-renderer.mjs';
 import {applyAppearance,setLanguage,useI18n} from './i18n.js';
 import {enqueueRecordDraft,flushRecordDraft} from './record-draft-queue.mjs';
 import './mobile-translations.mjs';
@@ -108,6 +109,7 @@ function App() {
   };
   const save = async () => {
     if (!ready || saving) return;
+    if(!pendingMutationRef.current&&attachmentImageIds(draftRef.current.markdown).size){setMessage(t('正文引用的图片不存在，请到素材或创作页插入图片。','An image referenced in the text is missing. Insert images from Materials or Writing.'));return;}
     clearTimeout(timer.current); setSaving(true); setMessage('');
     const pending = {...draftRef.current};
     try {
@@ -169,7 +171,7 @@ function App() {
     {libraryOpen && <div className="sheet-backdrop" onClick={()=>setLibraryOpen(false)}><section className="library-sheet" role="dialog" aria-modal="true" aria-label={t('切换资料库','Switch library')} onClick={e=>e.stopPropagation()}><div className="sheet-heading"><h2>{t('切换资料库','Switch library')}</h2><button type="button" onClick={()=>setLibraryOpen(false)} aria-label={t('关闭','Close')}>×</button></div><div className="sheet-list">{libraries.map(item=><button type="button" key={item.libraryId} className="sheet-library" aria-current={item.libraryId===libraryId?'true':undefined} onClick={async()=>{await changeLibrary(item.libraryId);setLibraryOpen(false);}}><span><strong>{item.name}</strong><small>{libraryLabel(item.role||'standalone')} · {libraryLabel(item.integrity)}</small></span>{item.libraryId===libraryId&&<span aria-hidden="true">✓</span>}</button>)}</div><button type="button" className="sheet-manage" onClick={()=>{setLibraryOpen(false);switchTab('settings');}}>{t('管理资料库和服务','Manage libraries and servers')}　›</button></section></div>}
     {!isNative && <p className="notice">{t('浏览器布局预览 · 保存需要 Android 原生资料库','Browser layout preview · saving requires the native Android library')}</p>}
     <main className={tab === 'chat' && !reading && !editor ? 'chat-main' : undefined}>
-      {reading ? <article className="reading"><button className="text" onClick={() => setReading(null)}>‹ {t('返回','Back')}</button><h1>{reading.title}</h1><p className="secondary">{originLabel(reading.origin)} · {reading.contentDay||reading.createdAt?.slice(0, 10)||t('日期待确认','Date unconfirmed')}</p><MarkdownView markdown={reading.markdown}/></article> : tab === 'chat' ? <>
+      {reading ? <article className="reading"><button className="text" onClick={() => setReading(null)}>‹ {t('返回','Back')}</button><h1>{reading.title}</h1><p className="secondary">{originLabel(reading.origin)} · {reading.contentDay||reading.createdAt?.slice(0, 10)||t('日期待确认','Date unconfirmed')}</p><MarkdownView markdown={reading.markdown} libraryId={libraryId} recordId={reading.id} attachmentDescriptors={reading.attachmentDescriptors}/></article> : tab === 'chat' ? <>
         {editor ? <><button className="text" onClick={() => setEditor(false)}>‹ {t('返回助手','Back to assistant')}</button><h1>{t('直接记录','Quick note')}</h1><p className="secondary">{t('保存到手机资料库，无需模型或电脑服务。','Save to the phone library without a model or desktop service.')}</p></> : <ChatPanel key={libraryId} libraryId={libraryId} ready={ready} config={modelConfig} onRead={read} onSending={setAgentSending} onOpenSettings={() => switchTab('settings')} onDirect={(text, options = {}) => {
           if (text && text !== draftRef.current.markdown) {
             if (saving || uncertain || draftRef.current.markdown || draftRef.current.title) setMessage(t('已有一条未完成的记录，请先处理。助手中的原文仍保留在其草稿中。','There is already an unfinished note. Handle it first; the assistant text remains in its own draft.'));

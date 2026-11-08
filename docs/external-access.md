@@ -77,13 +77,17 @@ export SHIWEN_TOKEN_FILE="$HOME/.config/shiwen/workbuddy-token"
 | 权限 | 工具 |
 | --- | --- |
 | create | `shiwen_save`, `shiwen_collect` |
-| read | `shiwen_search`, `shiwen_read`, `shiwen_review` |
+| read | `shiwen_search`, `shiwen_read`, `shiwen_review`, `shiwen_image_read` |
 | update | `shiwen_update` |
 | delete | `shiwen_delete`, `shiwen_restore` |
 
-对外提供 8 个资料工具；拾文内部的会话读取、个人记忆和凭据管理不在外部接口中。
+拥有 create 或 update 权限的客户端还可使用图片暂存工具，具体用途分别要求 create 或 update 权限。拾文内部的会话读取、个人记忆和凭据管理不在外部接口中。
 
 `shiwen_save` 接受完整 Markdown 和显式 `kind`、`origin`，不要求 DSH 消息 ID。外部会话、消息和文件路径放在可选 `source` 对象中。`source.file` 只保存出处文字，不读取本机文件。`shiwen_collect` 接受已抓取的正文和 HTTP(S) URL，固定为 `web/external`，不自行联网。
+
+图片通过 `shiwen_image_begin`、`shiwen_image_part` 和 `shiwen_image_status` 分块暂存，再把返回的附件 ID 写入 `![说明](attachment:ID)`，并在 `shiwen_save`、`shiwen_collect` 或 `shiwen_update` 的 `imageIds` 中提交。更新时上传用途为 `update` 并提供记录 ID；新增使用 `create`。暂存按客户端隔离，正文、附件和版本一起提交；请求超时仍使用原 `requestId` 重试。图片单张上限 8 MiB，每次提交最多 20 张，支持 PNG、JPEG、GIF、WebP。暂存过期时间为七天。
+
+CLI 可使用 `shiwen-bridge upload-image ./photo.png` 上传，命令输出附件 ID；为已有记录添加时使用 `--purpose update --record RECORD_ID`。上传文件由 CLI 读取，不依赖 `source.file`。读取凭据可通过 `shiwen_image_read` 分块获取记录所属图片。
 
 `shiwen_update` 要求最近读到的 `id` 和 `revision`，只更新提供的字段。正文替换前读完所有分页；内容变化时重新读取后决定如何处理。新增 AI 文字保留 AI 片段来源。`kind` 不自动改变 `origin`；只有用户明确纠正作者归属时才修改来源。素材与文章之间不能直接互改，创建文章并关联素材即可。
 
