@@ -2,7 +2,7 @@
 
 拾文 Android 是独立的本地资料库客户端。界面使用 React + Capacitor，资料、草稿、任务与同步状态保存在 Kotlin/Room 中，手机不需要运行 Node 服务。当前处于完整功能整合验收阶段；已执行结果与剩余验收项见 [验证记录](../docs/android/validation-2026-11-07.md)。
 
-下载 [Android 0.1.1 正式签名 APK](https://github.com/wyf929597870/shiwen-dsh/releases/download/android-v0.1.1/shiwen-android-0.1.1.apk)，无需自行构建。最低 Android 9，应用 ID 为 `io.github.wyf929597870.shiwen`。升级直接覆盖安装，避免卸载造成未同步资料丢失。
+下载 [Android 0.1.2 正式签名 APK](https://github.com/wyf929597870/shiwen-dsh/releases/download/android-v0.1.2/shiwen-android-0.1.2.apk)，无需自行构建。最低 Android 9，应用 ID 为 `io.github.wyf929597870.shiwen`。升级直接覆盖安装，避免卸载造成未同步资料丢失。
 
 图片同步需使用更新后的服务端，例如 Linux 0.1.9、Windows 0.1.9 预览版或插件 0.2.0-dev.4；旧服务遇到新图片时会提示升级。手机和服务电脑需网络互通，离线修改保留在手机。
 

@@ -3,6 +3,11 @@
 0.1.4 是本仓库首次公开的 Linux 预览版；0.1.0–0.1.3 为本地开发与打包记录。
 0.1.4 is this repository's first public Linux preview; 0.1.0–0.1.3 are local development builds.
 
+## android-v0.1.2 - 2026-11-08
+
+- 修复安卓正文在重新渲染后，已同步的图片重新显示“图片加载中”的问题。
+- Fix synchronized inline images reverting to a loading placeholder after the Android record view rerenders.
+
 ## android-v0.1.1 - 2026-11-08
 
 ### 中文

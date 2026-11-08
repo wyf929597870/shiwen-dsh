@@ -7,7 +7,7 @@ const assert = (ok, message) => { if (!ok) throw Error(message); };
 const pause = () => new Promise(resolve => setTimeout(resolve, 10));
 async function until(check) { for (let i=0;i<150;i++) { if(check())return; await pause(); } throw Error('Timed out: '+check); }
 const button = label => [...document.querySelectorAll('button')].find(node=>node.textContent.trim()===label);
-let row, draft, writes, receipts, pageState, failAfterWrite, failDraft, root, deletedStages;
+let row, draft, writes, receipts, pageState, failAfterWrite, failDraft, root, deletedStages, imageDelay;
 const base = () => ({id:'record-1',title:'Fixture',markdown:'Original',kind:'journal',origin:'personal',processing:'original',contentDay:'2026-11-07',dateBasis:'',url:null,annotation:null,stage:null,sourceIds:[],sources:[],revision:1,state:'synced',syncState:'synced',attachmentDescriptors:[],versionId:'old-version',serverRevision:1,deleted:false});
 export const isNative = true;
 export async function call(method, args) {
@@ -30,7 +30,7 @@ export async function call(method, args) {
   if(method==='recordVersions')return {items:row.historicalMarkdown?[{id:'version-1',markdown:row.historicalMarkdown,reason:'history',doc:{attachmentDescriptors:row.historicalAttachments}}]:[]};
   if(method==='attachmentPick')return {items:[{id:'12345678-1234-4123-8123-123456789abc',name:'photo.png',hash:'a'.repeat(64),byteLength:10,mimeType:'image/png'}]};
   if(method==='attachmentStageDelete'){deletedStages.push(...args.ids);return {deleted:args.ids.length};}
-  if(method==='attachmentImageRead'){if(args.expectedHash==='a'.repeat(64))return {mimeType:'image/png',byteLength:8,dataBase64:'iVBORw0KGgo=',sha256:args.expectedHash};throw Error('ATTACHMENT_NOT_AVAILABLE');}
+  if(method==='attachmentImageRead'){if(imageDelay)await new Promise(resolve=>setTimeout(resolve,imageDelay));if(args.expectedHash==='a'.repeat(64))return {mimeType:'image/png',byteLength:8,dataBase64:'iVBORw0KGgo=',sha256:args.expectedHash};throw Error('ATTACHMENT_NOT_AVAILABLE');}
   if(method==='recordUpdate'||method==='recordCreate'){
     const input=args.patch||args.record;
     if(!receipts.has(args.requestId)){
@@ -50,7 +50,7 @@ async function mount(mode='materials'){
   await until(()=>pageState&&!pageState.busy);
 }
 async function reset(mode='materials'){
-  if(root)root.unmount();row=base();draft=null;writes=[];deletedStages=[];receipts=new Map();pageState=null;failAfterWrite=false;failDraft=false;
+  if(root)root.unmount();row=base();draft=null;writes=[];deletedStages=[];receipts=new Map();pageState=null;failAfterWrite=false;failDraft=false;imageDelay=0;
   if(mode==='articles'){row.kind='article';row.sourceIds=['source-1'];}
   await mount(mode);
 }
@@ -95,10 +95,12 @@ async function run(){
   root.unmount();pageState=null;await mount();await until(()=>button('再次核对保存结果'));button('再次核对保存结果').click();await until(()=>!draft&&deletedStages.length===1);
   assert(writes.length===1,'image retry does not duplicate write');passed.push('image staging retained through uncertain save and cleaned after retry');
 
-  await reset();const imageId='12345678-1234-4123-8123-123456789abc',historicalId='87654321-4321-4321-8321-123456789abc';row.markdown=`![current](attachment:${imageId})`;row.historicalMarkdown=`![history](attachment:${historicalId})`;row.attachmentDescriptors=[{id:imageId,name:'photo.png',hash:'a'.repeat(64),byteLength:8}];row.historicalAttachments=[{id:historicalId,name:'old.png',hash:'a'.repeat(64),byteLength:8}];
+  await reset();const imageId='12345678-1234-4123-8123-123456789abc',historicalId='87654321-4321-4321-8321-123456789abc';imageDelay=30;row.markdown='Synthetic paragraph.\n\n'.repeat(800)+`## **Heading**\n![current](attachment:${imageId})`;row.historicalMarkdown=`![history](attachment:${historicalId})`;row.attachmentDescriptors=[{id:imageId,name:'photo.png',hash:'a'.repeat(64),byteLength:8}];row.historicalAttachments=[{id:historicalId,name:'old.png',hash:'a'.repeat(64),byteLength:8}];
   await until(()=>document.querySelector('.record-list-row'));document.querySelector('.record-list-row').click();await until(()=>document.querySelector('.markdown-view img'));
   const history=document.querySelector('.record-versions');history.open=true;history.dispatchEvent(new Event('toggle'));await until(()=>document.querySelector('.version-row'));
-  await until(()=>document.querySelector('.version-row .markdown-view img'));passed.push('current and historical images use attachment identity');
+  await until(()=>document.querySelector('.version-row .markdown-view img'));
+  assert(document.querySelector('.record-detail > .markdown-view img'),'current image survives record panel rerenders: '+[...document.querySelectorAll('.markdown-view')].map(x=>`${x.parentElement.className}:${x.querySelectorAll('img').length}:${x.querySelectorAll('.md-attachment-pending').length}`).join(','));
+  passed.push('current and historical images use attachment identity');
 
   await reset();await edit();await typeBody('![missing](attachment:99999999-9999-4999-8999-999999999999)');await save();
   assert(!writes.length&&document.body.textContent.includes('正文引用的图片不存在'),'new missing image cannot be saved');

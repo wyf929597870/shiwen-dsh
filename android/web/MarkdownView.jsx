@@ -127,5 +127,7 @@ export function MarkdownView({markdown = '', libraryId, recordId, branchId, atta
     void loadImages();
     return () => { active = false;if(viewer){viewer.close();viewer.remove();viewer=null;}loadedImages.forEach(item=>{item.image.src='';}); };
   }, [rendered, markdown, libraryId, recordId, branchId, descriptorKey, language]);
-  return <div ref={root} className="markdown-view" dangerouslySetInnerHTML={{__html:rendered}}/>;
+  // The effect owns this subtree: React must not reapply the original HTML
+  // and resurrect loading placeholders after native images are inserted.
+  return <div ref={root} className="markdown-view"/>;
 }

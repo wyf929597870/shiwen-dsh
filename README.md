@@ -10,7 +10,7 @@
 
 [为什么做](#为什么做拾文) · [能做什么](#能做什么) · [开始使用](#开始使用) · [数据与隐私](#数据与隐私) · [参与开发](#参与开发)
 
-可下载 **[Android 0.1.1](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.1)**、**[Linux 0.1.9](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.9)**、**[Windows 0.1.9 预览版](https://github.com/wyf929597870/shiwen-dsh/releases/tag/windows-v0.1.9)**，以及 [DSH 插件 0.2.0-dev.4](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.4)。项目采用 [MIT](LICENSE) 许可证。Android 0.1.1 已在现用手机覆盖安装并通过隔离图片和备份设备测试；Windows 旧版已验证虚拟机安装与服务启停，新版完整图形界面仍待验收。macOS 未提供本项目安装包。
+可下载 **[Android 0.1.2](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.2)**、**[Linux 0.1.9](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.9)**、**[Windows 0.1.9 预览版](https://github.com/wyf929597870/shiwen-dsh/releases/tag/windows-v0.1.9)**，以及 [DSH 插件 0.2.0-dev.4](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.4)。项目采用 [MIT](LICENSE) 许可证。Android 0.1.2 修复正文图片重新渲染后持续显示加载中的问题；Windows 旧版已验证虚拟机安装与服务启停，新版完整图形界面仍待验收。macOS 未提供本项目安装包。
 
 **本次更新：** 改进 Android Markdown 显示，支持图片插入、系统分享、外部传入、跨库复制、同步和备份恢复。图片同步需要同步更新服务端；旧服务会提示升级，不会静默丢弃图片。
 
@@ -135,9 +135,9 @@ sudo apt install ./shiwen-dsh_0.1.9_amd64.deb
 
 ### Android 正式签名安装包
 
-下载 [Android 0.1.1 APK](https://github.com/wyf929597870/shiwen-dsh/releases/download/android-v0.1.1/shiwen-android-0.1.1.apk)，支持 Android 9 及以上。升级直接覆盖安装，保留现有资料与配置；不要先卸载有未同步资料的应用。该 APK 使用发布签名，不是 `.probe` 调试应用；两个应用的数据目录不同。
+下载 [Android 0.1.2 APK](https://github.com/wyf929597870/shiwen-dsh/releases/download/android-v0.1.2/shiwen-android-0.1.2.apk)，支持 Android 9 及以上。升级直接覆盖安装，保留现有资料与配置；不要先卸载有未同步资料的应用。该 APK 使用发布签名，不是 `.probe` 调试应用；两个应用的数据目录不同。
 
-手机拥有完整本地资料库，断网可以记录和编辑。设置中添加服务地址、访问密码，为节点命名；连接电脑所在局域网后，可手动同步或启用自动同步。手机模型与密钥单独配置，不随资料同步。支持范围、校验文件和已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.1) 与 [Android 使用说明](android/README.md)。
+手机拥有完整本地资料库，断网可以记录和编辑。设置中添加服务地址、访问密码，为节点命名；连接电脑所在局域网后，可手动同步或启用自动同步。手机模型与密钥单独配置，不随资料同步。支持范围、校验文件和已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.2) 与 [Android 使用说明](android/README.md)。
 
 ### Windows x64 预览安装包
 

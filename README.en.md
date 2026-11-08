@@ -10,7 +10,7 @@ Shiwen is a personal AI workspace built on [DeepSeek Harness (DSH)](https://gith
 
 [Why Shiwen](#why-shiwen) · [What it does](#what-it-does) · [Getting started](#getting-started) · [Data and privacy](#data-and-privacy) · [Contributing](#contributing)
 
-Downloads: **[Android 0.1.1](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.1)**, **[Linux 0.1.9](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.9)**, **[Windows 0.1.9 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/windows-v0.1.9)** and [DSH plugin 0.2.0-dev.4](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.4). Licensed under [MIT](LICENSE). Android 0.1.1 was installed over the existing release on the current phone and passed isolated image and backup device tests. Windows installation and service lifecycle were checked for the previous version; full GUI validation of the new version remains outstanding. No project macOS installer is provided.
+Downloads: **[Android 0.1.2](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.2)**, **[Linux 0.1.9](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.9)**, **[Windows 0.1.9 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/windows-v0.1.9)** and [DSH plugin 0.2.0-dev.4](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.4). Licensed under [MIT](LICENSE). Android 0.1.2 fixes inline images reverting to a loading placeholder after the view rerenders. Windows installation and service lifecycle were checked for the previous version; full GUI validation of the new version remains outstanding. No project macOS installer is provided.
 
 **This update:** Android Markdown rendering now supports inline images, image sharing, external ingestion, cross-library copying, synchronization and backups. Image synchronization requires an updated service; older services report that an upgrade is needed rather than silently dropping images.
 
@@ -133,9 +133,9 @@ Start by creating a record in Materials. For AI conversations, configure a model
 
 ### Signed Android installer
 
-Download the [Android 0.1.1 APK](https://github.com/wyf929597870/shiwen-dsh/releases/download/android-v0.1.1/shiwen-android-0.1.1.apk), requiring Android 9 or later. Install updates over the existing release to preserve data and settings; do not uninstall an app containing unsynced records. This is a release-signed APK, separate from the `.probe` debug application and its storage.
+Download the [Android 0.1.2 APK](https://github.com/wyf929597870/shiwen-dsh/releases/download/android-v0.1.2/shiwen-android-0.1.2.apk), requiring Android 9 or later. Install updates over the existing release to preserve data and settings; do not uninstall an app containing unsynced records. This is a release-signed APK, separate from the `.probe` debug application and its storage.
 
-The phone keeps a complete local library and supports offline editing. Add and name a service node in Settings with its address and password, then sync manually or enable automatic sync when the service is reachable on the LAN. Phone model credentials are configured separately and excluded from library sync. See [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.1) and the [Android guide](android/README.md).
+The phone keeps a complete local library and supports offline editing. Add and name a service node in Settings with its address and password, then sync manually or enable automatic sync when the service is reachable on the LAN. Phone model credentials are configured separately and excluded from library sync. See [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.2) and the [Android guide](android/README.md).
 
 ### Windows x64 preview installer
 
