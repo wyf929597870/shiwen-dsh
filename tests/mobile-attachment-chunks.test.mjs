@@ -11,7 +11,7 @@ function isolated(t){const directory=mkdtempSync(join(tmpdir(),'shiwen-attachmen
 function attachment(store,bytes){
   const record=store.save({kind:'reference',title:'synthetic attachment owner',body:'synthetic body'});
   const id=store.attachmentAdd({record:record.id,name:'synthetic.bin',data:bytes.toString('base64')});
-  const identity=store.mobileSync().identity({protocolVersion:'1.0.0-draft.2',deviceId:randomUUID()});
+  const identity=store.mobileSync().identity({protocolVersion:'1.0.0-draft.3',deviceId:randomUUID()});
   return {record,id,identity,deviceId:randomUUID()};
 }
 
@@ -33,7 +33,7 @@ test('zero byte attachment is a complete empty range with the empty-file digest'
 
 test('branch range download is scoped to the branch and returns explicit branch identity',t=>{
   const source=isolated(t),sourceSync=source.mobileSync(),sourceDevice=randomUUID();
-  const sourceIdentity=sourceSync.identity({protocolVersion:'1.0.0-draft.2',deviceId:sourceDevice});
+  const sourceIdentity=sourceSync.identity({protocolVersion:'1.0.0-draft.3',deviceId:sourceDevice});
   const saved=source.save({kind:'reference',title:'synthetic branch owner',body:'synthetic body'});
   const attachmentId=source.attachmentAdd({record:saved.id,name:'synthetic.bin',data:Buffer.from('branch bytes').toString('base64')});
   const rawAttachment=JSON.parse(source.exportBackup()).payload.tables.attachments.find(item=>item.id===attachmentId);
@@ -45,9 +45,9 @@ test('branch range download is scoped to the branch and returns explicit branch 
     links:[],provenance:null,attachments:[{...entities.attachments[0],branchId}],createdAt:'2026-11-07T00:00:00.000Z'};
   entities.branches=[branch];entities.attachments.push({...entities.attachments[0],branchId});
   const types=snapshot.manifest.entityTypes,counts=Object.fromEntries(types.map(type=>[type,entities[type].length]));
-  const entityDigests=Object.fromEntries(types.map(type=>[type,fingerprint(entities[type])])),manifest={protocolVersion:'1.0.0-draft.2',libraryId:sourceIdentity.libraryId,
+  const entityDigests=Object.fromEntries(types.map(type=>[type,fingerprint(entities[type])])),manifest={protocolVersion:'1.0.0-draft.3',libraryId:sourceIdentity.libraryId,
     epoch:sourceIdentity.epoch,snapshotId:randomUUID(),highWatermark:snapshot.highWatermark,counts,entityDigests,entityTypes:types};manifest.manifestDigest=fingerprint(manifest);
-  const target=isolated(t),targetSync=target.mobileSync(),targetDevice=randomUUID(),targetIdentity=targetSync.identity({protocolVersion:'1.0.0-draft.2',deviceId:targetDevice}),setupId=randomUUID();
+  const target=isolated(t),targetSync=target.mobileSync(),targetDevice=randomUUID(),targetIdentity=targetSync.identity({protocolVersion:'1.0.0-draft.3',deviceId:targetDevice}),setupId=randomUUID();
   const begun=targetSync.setupBegin({setupId,mode:'initialize',libraryId:sourceIdentity.libraryId,sourceEpoch:sourceIdentity.epoch,
     manifestDigest:manifest.manifestDigest,manifest,expectedLibraryId:targetIdentity.libraryId,expectedEpoch:targetIdentity.epoch,targetGeneration:targetIdentity.targetGeneration});
   for(const type of types)if(entities[type].length)targetSync.setupPage({setupId,fencingToken:begun.fencingToken,entityType:type,startOrdinal:0,items:entities[type]});
@@ -55,7 +55,7 @@ test('branch range download is scoped to the branch and returns explicit branch 
   targetSync.setupBlobStore({setupId,fencingToken:begun.fencingToken,attachmentId,recordId:record.id,name:'synthetic.bin',bytes,digest,branchId:null});
   targetSync.setupBlobStore({setupId,fencingToken:begun.fencingToken,attachmentId,recordId:record.id,name:'synthetic.bin',bytes,digest,branchId});
   assert.equal(targetSync.setupStatus({setupId,fencingToken:begun.fencingToken}).state,'ready');targetSync.setupCommit({setupId,fencingToken:begun.fencingToken});
-  const identity=targetSync.identity({protocolVersion:'1.0.0-draft.2',deviceId:targetDevice});
+  const identity=targetSync.identity({protocolVersion:'1.0.0-draft.3',deviceId:targetDevice});
   const response=targetSync.attachmentChunk({libraryId:identity.libraryId,epoch:identity.epoch,deviceId:targetDevice,attachmentId,branchId,offset:0,byteLength:1024});
   assert.equal(response.branchId,branchId);assert.equal(response.recordId,record.id);assert.equal(response.digest,digest);
   assert.equal(response.nextOffset,null);assert.equal(response.complete,true);assert.equal(Buffer.from(response.dataBase64,'base64').toString(),'branch bytes');

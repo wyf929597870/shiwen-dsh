@@ -62,11 +62,11 @@ internal class LibraryClientArchive(context: Context) {
             require(archive.optInt("version") == 1 && archive.toString().length <= 24 * 1024 * 1024) { "CLIENT_ARCHIVE_INVALID" }
             require(archive.keys().asSequence().all { it in setOf("version", "editorDrafts", "agentArchive", "draftAttachments") }) { "CLIENT_ARCHIVE_UNEXPECTED_FIELD" }
             val drafts = archive.getJSONArray("editorDrafts")
-            require(drafts.length() <= 3) { "CLIENT_ARCHIVE_DRAFT_INVALID" }
+            require(drafts.length() <= 1000) { "CLIENT_ARCHIVE_DRAFT_INVALID" }
             val slots = mutableSetOf<String>()
             for (i in 0 until drafts.length()) {
                 val row = drafts.getJSONObject(i); val slot = row.getString("slot")
-                require(slot in setOf("composer", "materials", "articles") && slots.add(slot)) { "CLIENT_ARCHIVE_DRAFT_INVALID" }
+                require((slot in setOf("composer", "materials", "articles") || slot.matches(Regex("annotation:[0-9a-fA-F-]{36}"))) && slots.add(slot)) { "CLIENT_ARCHIVE_DRAFT_INVALID" }
                 require(row.getLong("localGeneration") in 0..9_007_199_254_740_991L && row.getLong("updatedAt") >= 0) { "CLIENT_ARCHIVE_DRAFT_INVALID" }
                 val id = row.optString("requestId").takeUnless { it.isBlank() || it == "null" }
                 if (id != null) UUID.fromString(id)
@@ -125,7 +125,9 @@ internal class LibraryClientArchive(context: Context) {
             val references = linkedMapOf<String, JSONObject>()
             for (i in 0 until drafts.length()) {
                 val row = drafts.getJSONObject(i)
-                val form = row.optJSONObject("content")?.optJSONObject("form")
+                val content = row.optJSONObject("content")
+                val form = content?.optJSONObject("form")
+                val annotationEditor = content?.optJSONObject("editor")
                 val metadata = linkedMapOf<String, JSONObject>()
                 fun collect(array: JSONArray?) {
                     if (array == null) return
@@ -141,11 +143,15 @@ internal class LibraryClientArchive(context: Context) {
                     }
                 }
                 collect(form?.optJSONArray("stagedAttachments"))
+                collect(annotationEditor?.optJSONArray("staged"))
                 val pending = row.optJSONObject("pendingMutation")
                 val frozenRecord = pending?.optJSONObject("record") ?: pending?.optJSONObject("patch")
                 collect(frozenRecord?.optJSONArray("attachmentDescriptors"))
                 val ids = linkedSetOf<String>()
                 form?.optJSONArray("stagedAttachments")?.let { array ->
+                    for (index in 0 until array.length()) ids += array.getJSONObject(index).getString("id")
+                }
+                annotationEditor?.optJSONArray("staged")?.let { array ->
                     for (index in 0 until array.length()) ids += array.getJSONObject(index).getString("id")
                 }
                 pending?.optJSONArray("stagedAttachmentIds")?.let { array ->

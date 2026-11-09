@@ -26,6 +26,10 @@ Manage passwords and devices under Settings → Shiwen data, or External access.
 
 Local exit offers keep, stop, or cancel. Stopping interrupts tasks and disconnects other clients; shutdown failure keeps the desktop open. Abnormal client termination leaves the server running. Remote exit never stops its server; switching away from a local server also leaves it running.
 
+当前桌面可在“连接与桌面设置”选择关闭窗口到托盘或退出应用。关闭到托盘不会触发服务停止；菜单或托盘的“退出”始终保留以上确认。升级前应选择“停止服务并退出”。
+The desktop close preference can hide the window to the tray without stopping its service. Explicit Quit from the menu or tray always keeps the confirmation above. Choose stop-service-and-quit before upgrading.
+
+
 安装包中的管理命令位于应用资源目录 `resources/shiwen/shiwen-server`，支持 `status`、`url`、`stop`、`start --lan`；不要求系统安装 Node。升级软件前应停止独立服务，避免替换它正在使用的运行资源。本轮没有安装 systemd 服务或设置开机自启。
 
 The package includes `resources/shiwen/shiwen-server` for status/url/stop/start management without system Node. Stop the service before upgrading package resources. This does not install a systemd unit or enable boot startup.

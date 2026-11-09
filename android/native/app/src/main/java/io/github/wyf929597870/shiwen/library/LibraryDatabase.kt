@@ -32,7 +32,8 @@ data class LibraryRecord(
     val serverRevision: Long?,
     val localGeneration: Long,
     val revision: Long,
-    val syncState: String
+    val syncState: String,
+    val annotationOfJson: String? = null
 )
 
 @Entity(tableName = "heads")
@@ -49,7 +50,7 @@ data class LibraryVersion(val id: String, val recordId: String, val revision: Lo
     val docJson: String?, @ColumnInfo(defaultValue = "'[]'") val sourcesJson: String = "[]",
     @ColumnInfo(defaultValue = "'[]'") val parentVersionIdsJson: String = "[]",
     @ColumnInfo(defaultValue = "1") val sourcesDerived: Boolean = false,
-    @ColumnInfo(defaultValue = "1") val parentsDerived: Boolean = false)
+    @ColumnInfo(defaultValue = "1") val parentsDerived: Boolean = false, val journalInputJson: String? = null)
 
 @Entity(tableName = "provenance")
 data class LibraryProvenance(@PrimaryKey val recordId: String, val json: String)
@@ -99,9 +100,15 @@ data class LibraryDraft(@PrimaryKey val slot: String, val requestId: String, val
 
 @Dao
 interface LibraryDao {
-    @Query("SELECT * FROM records WHERE (:includeDeleted=1 OR deleted=0) AND (:query='' OR instr(title,:query)>0 OR instr(markdown,:query)>0) AND (:kind IS NULL OR kind=:kind) AND (:excludeKind IS NULL OR kind!=:excludeKind) ORDER BY CASE WHEN contentDay IS NULL THEN 1 ELSE 0 END, contentDay DESC, createdAt DESC, id DESC LIMIT :limit OFFSET :offset")
+    @Query("SELECT * FROM records WHERE kind!='ai_annotation' AND (:includeDeleted=1 OR deleted=0) AND (:query='' OR instr(title,:query)>0 OR instr(markdown,:query)>0) AND (:kind IS NULL OR kind=:kind) AND (:excludeKind IS NULL OR kind!=:excludeKind) ORDER BY CASE WHEN contentDay IS NULL THEN 1 ELSE 0 END, contentDay DESC, createdAt DESC, id DESC LIMIT :limit OFFSET :offset")
     fun records(query: String, kind: String?, includeDeleted: Boolean, limit: Int, offset: Int, excludeKind: String? = null): List<LibraryRecord>
     @Query("SELECT * FROM records WHERE id=:id") fun record(id: String): LibraryRecord?
+    @Query("SELECT * FROM records WHERE kind='journal' AND deleted=0 AND contentDay=:day ORDER BY createdAt,id LIMIT 1")
+    fun journalForDay(day: String): LibraryRecord?
+    @Query("SELECT contentDay FROM records WHERE kind='journal' AND deleted=0 AND contentDay IS NOT NULL GROUP BY contentDay HAVING count(*)>1")
+    fun duplicateJournalDays(): List<String>
+    @Query("SELECT * FROM records WHERE kind='journal' AND deleted=0 AND contentDay=:day ORDER BY createdAt,id")
+    fun journalsForDay(day: String): List<LibraryRecord>
     @Query("SELECT * FROM records ORDER BY id") fun allRecords(): List<LibraryRecord>
     @Query("SELECT * FROM heads WHERE recordId=:id") fun head(id: String): LibraryHead?
     @Query("SELECT * FROM heads ORDER BY recordId") fun allHeads(): List<LibraryHead>
@@ -165,8 +172,18 @@ interface LibraryDao {
 @Database(entities = [LibraryRecord::class, LibraryVersion::class, LibraryActivity::class, LibraryLink::class,
     LibraryAttachment::class, LibraryOutbox::class, LibraryReceipt::class, LibraryConflict::class, LibraryMeta::class,
     LibraryDraft::class, LibraryHead::class, LibraryProvenance::class, LibraryRemoteHead::class, LibraryBranch::class,
-    LibraryBranchAttachment::class], version = 5, exportSchema = true)
+    LibraryBranchAttachment::class], version = 7, exportSchema = true)
 abstract class LibraryDatabase : RoomDatabase() { abstract fun dao(): LibraryDao }
+
+val LIBRARY_MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) { db.execSQL("ALTER TABLE `versions` ADD COLUMN `journalInputJson` TEXT") }
+}
+
+val LIBRARY_MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `records` ADD COLUMN `annotationOfJson` TEXT")
+    }
+}
 
 val LIBRARY_MIGRATION_1_2 = object : Migration(1, 2) {
     override fun migrate(db: SupportSQLiteDatabase) {

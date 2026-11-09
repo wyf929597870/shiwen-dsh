@@ -34,7 +34,7 @@ try {
     return body.result.data;
   };
   const deviceId = randomUUID();
-  const identity = await rpc('identity', {deviceId, protocolVersion: '1.0.0-draft.2'});
+  const identity = await rpc('identity', {deviceId, protocolVersion: '1.0.0-draft.3'});
   const binding = {libraryId: identity.libraryId, epoch: identity.epoch, deviceId};
   const id = randomUUID();
   const operationId = randomUUID();

@@ -11,7 +11,7 @@ test('列表与查询按内容日期、创建时间倒序，未知日期置底�
  const dir=mkdtempSync(join(tmpdir(),'shiwen-order-')),path=join(dir,'library.sqlite');
  const store=createStore(path),db=new Database(path);
  t.after(()=>{db.close();store.close();rmSync(dir,{recursive:true,force:true});});
- function add(title,created,{day,imported=false,kind='journal'}={}){
+ function add(title,created,{day,imported=false,kind='reference'}={}){
   const row=store.save({kind,title,body:'排序验证'});
   db.prepare('UPDATE records SET created=?,updated=? WHERE id=?').run(created,created,row.id);
   if(imported)db.prepare('INSERT INTO imports VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(row.id,'fixture',title,'hash',day,'test',4,null,'{}','[]','2026-12-01T00:00:00Z');
@@ -36,9 +36,9 @@ test('列表与查询按内容日期、创建时间倒序，未知日期置底�
  assert.equal(store.snapshot().records.find(r=>r.id===unknownImported).contentDay,null);
  assert.equal(store.get(unknownDated).contentDay,null);
  const filtered=expected.filter(id=>id!==article);
- assert.deepEqual(store.snapshot().records.filter(r=>r.kind==='journal').map(r=>r.id),filtered);
+ assert.deepEqual(store.snapshot().records.filter(r=>r.kind==='reference').map(r=>r.id),filtered);
  const pages=[];let offset=0;
- do{const page=store.searchRecords({query:'排序验证',kind:'journal',offset,limit:2});pages.push(...page.items.map(r=>r.id));offset=page.nextOffset;}while(offset!==null);
+ do{const page=store.searchRecords({query:'排序验证',kind:'reference',offset,limit:2});pages.push(...page.items.map(r=>r.id));offset=page.nextOffset;}while(offset!==null);
  assert.deepEqual(pages,filtered);
  assert.deepEqual(store.searchRecords({start:'2026-10-01',end:'2026-10-31'}).items.map(r=>r.id),[natural,article,sameLate,sameEarly]);
  // Changing the content date, unlike editing text, must change the position.

@@ -7,6 +7,7 @@ import {useI18n} from './i18n.js';
 import './record-translations.mjs';
 import {enqueueRecordDraft,flushRecordDraft} from './record-draft-queue.mjs';
 import './record.css';
+import {AnnotationPanel} from './AnnotationPanel.jsx';
 
 // Only editor-owned fields belong in a mutation; detail responses also contain sync/UI metadata.
 const editableFields = ['title','markdown','kind','origin','processing','contentDay','dateBasis','url','annotation','stage','sourceIds','sources'];
@@ -48,6 +49,7 @@ export function RecordPanel({libraryId, libraries=[], mode='materials', onPageSt
   const sourceGeneration=useRef(0);
   useEffect(()=>()=>{sourceGeneration.current++;},[]);
   const [attachments,setAttachments]=useState([]);
+  const [annotationState,setAnnotationState]=useState({dirty:false,busy:false});
   const [copyTarget,setCopyTarget]=useState('');
   const [versions,setVersions] = useState([]), [versionCursor,setVersionCursor] = useState(null), [showVersions,setShowVersions] = useState(false);
   const [saveRequest,setSaveRequest] = useState(null),[pendingMutation,setPendingMutation]=useState(null),[uncertain,setUncertain]=useState(false),[pendingAction,setPendingAction]=useState(null),[draftReady,setDraftReady]=useState(false),[pendingDurable,setPendingDurable]=useState(false);
@@ -56,7 +58,7 @@ export function RecordPanel({libraryId, libraries=[], mode='materials', onPageSt
   formRef.current=form;selectedRef.current=selected;creatingRef.current=creating;editingRef.current=editing;pendingMutationRef.current=pendingMutation;pendingActionRef.current=pendingAction;
   const dirty = Boolean(editing && selected && form && JSON.stringify(form)!==JSON.stringify(selected) || creating && form && JSON.stringify(form)!==JSON.stringify({...newMaterial(),kind:articles?'article':'journal'}));
   // A durable pending draft can be revisited; only an in-flight operation blocks navigation.
-  useEffect(()=>onPageStateChange({dirty:dirty&&!pendingDurable,busy:busy||!draftReady||((uncertain||Boolean(pendingAction))&&!pendingDurable)}),[dirty,busy,uncertain,pendingAction,draftReady,pendingDurable,onPageStateChange]);
+  useEffect(()=>onPageStateChange({dirty:(dirty&&!pendingDurable)||annotationState.dirty,busy:busy||annotationState.busy||!draftReady||((uncertain||Boolean(pendingAction))&&!pendingDurable)}),[dirty,busy,uncertain,pendingAction,draftReady,pendingDurable,annotationState,onPageStateChange]);
   viewStateRef.current={query,kind,showDeleted,loadedPages};
   useEffect(()=>{
     const main=document.querySelector('.app > main');
@@ -136,7 +138,7 @@ export function RecordPanel({libraryId, libraries=[], mode='materials', onPageSt
   const exportSelectedWithImages=()=>runTransfer(async()=>{
     const result=await call('recordExportWithImages',{libraryId,id:selected.id});
     if(result?.cancelled)return;
-    setHint(t('Markdown 与库内图片已打包；网络图片仍依赖原地址。','Markdown and library images were exported; remote images still depend on their original URLs.'));
+    setHint(t('原文、标注与库内图片已打包；网络图片仍依赖原地址。','Original, annotations and library images were exported; remote images still depend on their original URLs.'));
   });
   const shareSelected=()=>runTransfer(async()=>{
     const result=await call('recordShare',{libraryId,id:selected.id});
@@ -149,6 +151,13 @@ export function RecordPanel({libraryId, libraries=[], mode='materials', onPageSt
   const shareAttachment=file=>runTransfer(async()=>{
     await call('attachmentShare',{recordId:selected.id,attachmentId:file.id});
     setHint(t('已打开系统分享面板。','Opened the system share sheet.'));
+  });
+  const correctOrigin=()=>runTransfer(async()=>{
+    const origin=window.prompt(t('输入正确来源：personal、external、ai、translation 或 unknown','Enter origin: personal, external, ai, translation, or unknown'),selected.origin);
+    if(origin==null||origin===selected.origin)return;
+    if(!['personal','external','ai','translation','unknown'].includes(origin))throw Error(t('来源无效','Invalid origin'));
+    const result=await call('correctRecordOrigin',{libraryId,id:selected.id,revision:selected.revision,origin,requestId:newId()});
+    setSelected(result);setForm({...result});setHint(t('来源已更正。','Origin corrected.'));await load(true);
   });
   const copySelected=()=>runTransfer(async()=>{
     if(!copyTarget||copyTarget===libraryId||!selected)return;
@@ -186,7 +195,7 @@ export function RecordPanel({libraryId, libraries=[], mode='materials', onPageSt
     catch(e){setError(`${t('草稿未保存：','Draft not saved: ')}${String(e.message||e)}`);}
   };
   const startEdit=record=>{
-    if(uncertain||pendingAction)return;
+    if(uncertain||pendingAction||annotationState.dirty||annotationState.busy)return;
     const next={...record};formRef.current=next;creatingRef.current=false;editingRef.current=true;setForm(next);setCreating(false);setEditing(true);
     generationRef.current=Math.max(generationRef.current,Number(record.localGeneration||0))+1;requestRef.current=newId();setSaveRequest(requestRef.current);setPendingMutation(null);pendingMutationRef.current=null;setPendingDurable(false);
     persistDraft({form:next,selectedId:record.id,creating:false,editing:true,pendingAction:null},requestRef.current,generationRef.current,null).catch(e=>setError(`${t('草稿未保存：','Draft not saved: ')}${String(e.message||e)}`));
@@ -197,9 +206,10 @@ export function RecordPanel({libraryId, libraries=[], mode='materials', onPageSt
     catch(e){setError(`${t('草稿清理失败：','Could not clear draft: ')}${String(e.message||e)}`);}
   };
   const leaveDetail=async()=>{
-    if(busy||uncertain||pendingAction){setError(t('当前操作尚未确认，请先核对。','Finish or verify the current operation first.'));return;}
+    if(busy||annotationState.busy||uncertain||pendingAction){setError(t('当前操作尚未确认，请先核对。','Finish or verify the current operation first.'));return;}
     if(editing){if(dirty&&!window.confirm(t('放弃尚未保存的修改？','Discard unsaved changes?')))return;await cancelEdit();return;}
-    setDetailOpen(false);
+    if(annotationState.dirty&&!window.confirm(t('标注草稿会保留，确定离开？','The annotation draft will be kept. Leave?')))return;
+    setAnnotationState({dirty:false,busy:false});setDetailOpen(false);
   };
   useEffect(()=>{onNavigation?.({depth:detailOpen,back:leaveDetail});});
   const change=(key,value)=>{
@@ -300,7 +310,7 @@ export function RecordPanel({libraryId, libraries=[], mode='materials', onPageSt
           <label>{t('标题')}<input value={form.title||''} maxLength={200} disabled={busy||uncertain} onChange={e=>setField('title',e.target.value)}/></label>
           <label>{t('正文 · Markdown')}<button type="button" className="chip record-image-insert" disabled={busy||uncertain} onClick={insertImages}>{t('插入图片','Insert image')}</button><textarea ref={markdownInput} className="record-editor" value={form.markdown||''} disabled={busy||uncertain} onChange={e=>setField('markdown',e.target.value)} spellCheck="false"/></label>
           <details className="record-metadata"><summary>{t('记录信息','Details')}</summary>
-          {!articles&&<div className="record-form-grid"><label>{t('类型')}<select value={form.kind} disabled={busy||uncertain} onChange={e=>setField('kind',e.target.value)}>{kinds.map(item=><option key={item} value={item}>{kindName(item,t)}</option>)}</select></label><label>{t('内容来源')}<select value={form.origin||'personal'} disabled={busy||uncertain} onChange={e=>setField('origin',e.target.value)}><option value="personal">{t('自己书写')}</option><option value="external">{t('外部资料')}</option><option value="ai">{t('AI 内容')}</option><option value="translation">{t('译文')}</option><option value="unknown">{t('来源待确认')}</option></select></label></div>}
+          {!articles&&<div className="record-form-grid"><label>{t('类型')}<select value={form.kind} disabled={busy||uncertain} onChange={e=>setField('kind',e.target.value)}>{kinds.map(item=><option key={item} value={item}>{kindName(item,t)}</option>)}</select></label><label>{t('内容来源')}<select value={form.origin||'personal'} disabled={busy||uncertain||!creating} onChange={e=>setField('origin',e.target.value)}><option value="personal">{t('自己书写')}</option><option value="external">{t('外部资料')}</option><option value="ai">{t('AI 内容')}</option><option value="translation">{t('译文')}</option><option value="unknown">{t('来源待确认')}</option></select></label></div>}
           {articles&&<><div className="record-form-grid"><label>{t('文章状态')}<select value={form.stage||'draft'} disabled={busy||uncertain} onChange={e=>setField('stage',e.target.value)}><option value="idea">{t('想法')}</option><option value="draft">{t('草稿')}</option><option value="revision">{t('修改中')}</option><option value="final">{t('已定稿')}</option></select></label></div><details className="source-picker"><summary>{t('关联素材')} · {(form.sourceIds||[]).length}</summary><input type="search" aria-label={t('搜索素材','Search materials')} placeholder={t('搜索素材','Search materials')} value={sourceQuery} onChange={e=>{const value=e.target.value;setSourceQuery(value);loadSources(null,value);}}/><div className="source-results">{(form.sourceIds||[]).filter(id=>!sources.some(source=>source.id===id)).map(id=><label key={id}><input type="checkbox" checked disabled={busy||uncertain} onChange={()=>setField('sourceIds',form.sourceIds.filter(item=>item!==id))}/>{t('已关联来源（尚未加载或已删除）','Linked source (not loaded or deleted)')} · {id}</label>)}{sources.map(source=><label key={source.id}><input type="checkbox" disabled={busy||uncertain} checked={(form.sourceIds||[]).includes(source.id)} onChange={e=>setField('sourceIds',e.target.checked?[...(form.sourceIds||[]),source.id]:(form.sourceIds||[]).filter(id=>id!==source.id))}/>{source.title||t('未命名')} · {dateText(source.contentDay,t)}</label>)}{sourceLoading&&<p>{t('正在读取素材…','Loading materials…')}</p>}{sourceError&&<p className="error">{t('读取素材失败','Could not load materials')}: {sourceError} <button type="button" onClick={()=>loadSources(sourceRetry,sourceQuery)}>{t('重试','Retry')}</button></p>}{!sources.length&&!sourceLoading&&!sourceError&&<p className="secondary">{t('暂无可关联素材。','No materials to link.')}</p>}</div>{sourceCursor&&!sourceError&&<button type="button" className="chip" disabled={sourceLoading} onClick={()=>loadSources(sourceCursor,sourceQuery)}>{t('加载更多','Load more')}</button>}</details><details className="publication-check"><summary>{t('发布前检查')} · {checks.filter(x=>!x.ok).length} {t('项待处理')}</summary>{checks.map(check=><p key={check.label} className={check.ok?'check-ok':'check-pending'}>{check.ok?'✓':'○'}　{check.label}</p>)}<p className="secondary">{t('仅检查常见格式，仍需作者人工复核。','Checks common patterns only; review the article yourself.')}</p></details></>}
           <label>{t('内容日期')}<input type="date" value={form.contentDay||''} disabled={busy||uncertain} onChange={e=>setField('contentDay',e.target.value||null)}/></label>
           <label>{t('来源说明')}<input value={form.dateBasis||''} maxLength={200} disabled={busy||uncertain} onChange={e=>setField('dateBasis',e.target.value)}/></label>
@@ -308,12 +318,12 @@ export function RecordPanel({libraryId, libraries=[], mode='materials', onPageSt
           <label>{t('备注')}<textarea value={form.annotation||''} maxLength={10000} disabled={busy||uncertain} onChange={e=>setField('annotation',e.target.value)}/></label>
           </details>
         </> : selected ? <>
-          <div className="record-detail-head"><div><span className="state-pill">{kindName(selected.kind,t)}</span><span className="state-pill">{originName(selected.origin,t)}</span></div><div>{pendingAction?.type==='delete'?<button className="chip danger" disabled={busy} onClick={remove}>{t('再次核对删除')}</button>:pendingAction?.type==='restore'?<button className="chip" disabled={busy} onClick={restore}>{t('再次核对恢复')}</button>:selected.deleted?<button className="chip" disabled={busy} onClick={restore}>{t('恢复')}</button>:<><button className="chip" disabled={busy} onClick={()=>startEdit(selected)}>{t('编辑')}</button><details className="record-actions"><summary>{t('更多','More')}</summary><button className="chip" disabled={busy} onClick={exportSelected}>{t('导出 Markdown','Export Markdown')}</button><button className="chip" disabled={busy} onClick={exportSelectedWithImages}>{t('导出 Markdown 与图片','Export Markdown with images')}</button><button className="chip" disabled={busy} onClick={shareSelected}>{t('分享','Share')}</button><button className="chip danger" disabled={busy} onClick={remove}>{t('删除')}</button></details></>}</div></div>
+          <div className="record-detail-head"><div><span className="state-pill">{kindName(selected.kind,t)}</span><span className="state-pill">{originName(selected.origin,t)}</span></div><div>{pendingAction?.type==='delete'?<button className="chip danger" disabled={busy} onClick={remove}>{t('再次核对删除')}</button>:pendingAction?.type==='restore'?<button className="chip" disabled={busy} onClick={restore}>{t('再次核对恢复')}</button>:selected.deleted?<button className="chip" disabled={busy} onClick={restore}>{t('恢复')}</button>:<><button className="chip" disabled={busy||annotationState.dirty||annotationState.busy} onClick={()=>startEdit(selected)}>{t('编辑')}</button><details className="record-actions"><summary>{t('更多','More')}</summary><button className="chip" disabled={busy} onClick={exportSelected}>{t('导出 Markdown','Export Markdown')}</button><button className="chip" disabled={busy} onClick={exportSelectedWithImages}>{t('导出原文、标注与图片','Export original, annotations and images')}</button><button className="chip" disabled={busy} onClick={shareSelected}>{t('分享','Share')}</button><button className="chip" disabled={busy||annotationState.dirty} onClick={correctOrigin}>{t('更正来源','Correct origin')}</button><button className="chip danger" disabled={busy||annotationState.dirty||annotationState.busy} onClick={remove}>{t('删除')}</button></details></>}</div></div>
           <h2>{selected.title||t('未命名')}</h2><p className="secondary record-date">{t('内容日期')}：{dateText(selected.contentDay,t)} · {t('记录于')} {dateText(selected.createdAt,t)}{selected.updatedAt&&` · ${t('更新于')} ${dateText(selected.updatedAt,t)}`}</p>
           {selected.url&&<p className="record-source"><span>{t('来源链接')}</span>{safeHttp(selected.url)?<a href={safeHttp(selected.url)} target="_blank" rel="noreferrer">{selected.url}</a>:<span>{selected.url}</span>}</p>}
           {selected.dateBasis&&<p className="record-source"><span>{t('日期说明')}</span>{selected.dateBasis}</p>}{selected.annotation&&<p className="record-source"><span>{t('备注')}</span>{selected.annotation}</p>}
           {selected.deleted&&<p className="conflict-callout">{t('此记录在回收站中，恢复后会回到当前资料库。')}</p>}
-          <MarkdownView markdown={selected.markdown} libraryId={libraryId} recordId={selected.id} attachmentDescriptors={attachments}/>
+          <AnnotationPanel key={`${libraryId}:${selected.id}`} libraryId={libraryId} original={selected} attachments={attachments} t={t} onStateChange={setAnnotationState}/>
           {selected.sources?.length>0&&<details className="source-picker"><summary>{t('正文来源')} · {selected.sources.length}</summary>{selected.sources.map((segment,index)=><div className="source-segment" key={`${index}-${segment.sourceRef||''}`}><strong>{originName(segment.origin,t)}</strong>{segment.sourceRef&&<span>{segment.sourceRef}</span>}<p>{segment.text?.length>220?`${segment.text.slice(0,220)}…`:segment.text}</p></div>)}</details>}
           {attachments.length>0&&<details className="source-picker"><summary>{t('原件与附件')} · {attachments.length}</summary>{attachments.map(file=><div className="attachment-row" key={file.id}><div><strong>{file.name}</strong><span>{byteText(file.byteLength)} · {file.available===false?t('尚未下载'):t('已保存在资料库')}</span></div><div className="node-actions">{file.available!==false&&<><button className="chip" disabled={busy} onClick={()=>openAttachment(file)}>{t('打开','Open')}</button><button className="chip" disabled={busy} onClick={()=>shareAttachment(file)}>{t('分享','Share')}</button></>}</div></div>)}</details>}
           {!articles&&!selected.deleted&&libraries.some(item=>item.libraryId!==libraryId)&&<div className="record-copy-row"><label>{t('复制到资料库','Copy to library')}<select value={copyTarget} disabled={busy} onChange={e=>setCopyTarget(e.target.value)}><option value="">{t('选择目标资料库','Choose target library')}</option>{libraries.filter(item=>item.libraryId!==libraryId).map(item=><option key={item.libraryId} value={item.libraryId}>{item.name}</option>)}</select></label><button className="chip" disabled={busy||!copyTarget} onClick={copySelected}>{t('复制正文','Copy text')}</button><button className="chip" disabled={busy||!copyTarget} onClick={copySelectedWithImages}>{t('复制正文和图片','Copy with images')}</button></div>}

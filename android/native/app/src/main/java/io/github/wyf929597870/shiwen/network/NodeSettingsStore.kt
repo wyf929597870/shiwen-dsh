@@ -47,7 +47,7 @@ internal class NodeSettingsStore(context: Context, private val namespace: String
     fun list(): JSONObject = synchronized(lock) {
         val value = read()
         JSONObject().put("activeId", value.opt("activeId") ?: JSONObject.NULL).put("items", JSONArray(rows(value).map { row ->
-            JSONObject().apply { for (key in listOf("id", "name", "baseUrl", "allowPrivateHttp", "authenticated", "lastCheckedAt", "profileSyncStatus", "profileUpdatedAt", "configRevision"))
+            JSONObject().apply { for (key in listOf("id", "name", "baseUrl", "allowPrivateHttp", "authenticated", "lastCheckedAt", "profileSyncStatus", "profileUpdatedAt", "configRevision", "fingerprint", "endpoints", "connectionGeneration", "connectionState"))
                 put(key, row.opt(key) ?: JSONObject.NULL)
                 val profile = row.optJSONObject("profile")
                 put("profileRevision", profile?.optString("revision") ?: JSONObject.NULL)
@@ -62,12 +62,44 @@ internal class NodeSettingsStore(context: Context, private val namespace: String
         val value = read(); val rows = rows(value).toMutableList()
         val old = id?.let { key -> rows.find { it.getString("id") == key } ?: error("NODE_NOT_FOUND") }
         require(rows.size < 32 || old != null) { "TOO_MANY_NODES" }
-        val row = if (old?.getString("baseUrl") == normalized) old else JSONObject().put("id", id ?: UUID.randomUUID().toString())
+        val sameBinding = old != null && (old.optString("fingerprint").isNotEmpty() ||
+            old.getString("baseUrl") == normalized && old.optBoolean("allowPrivateHttp") == allowPrivateHttp)
+        val addressChanged = old != null && old.getString("baseUrl") != normalized
+        val row = if (old != null && (old.getString("baseUrl") == normalized || old.optString("fingerprint").isNotEmpty())) old else JSONObject().put("id", id ?: UUID.randomUUID().toString())
             .put("authenticated", false).put("cookies", JSONArray()).put("profileSyncStatus", "not-synced")
+        if (row.optString("fingerprint").isNotEmpty()) {
+            require(normalized.startsWith("https://")) { "PIN_REQUIRES_TLS" }
+            val endpoints = row.optJSONArray("endpoints") ?: JSONArray()
+            row.put("endpoints", JSONArray((listOf(normalized) + (0 until endpoints.length()).map(endpoints::getString)).distinct().take(16)))
+        }
         row.put("name", name.trim()).put("baseUrl", normalized).put("allowPrivateHttp", allowPrivateHttp)
-            .put("configRevision", UUID.randomUUID().toString())
+            .put("configRevision", if (sameBinding) old!!.getString("configRevision") else UUID.randomUUID().toString())
+        if (addressChanged) row.put("connectionGeneration", row.optLong("connectionGeneration") + 1).put("connectionState", "checking")
         rows.removeAll { it.optString("id") == row.getString("id") }; rows.add(row)
         value.put("items", JSONArray(rows)); write(value); row
+    }
+    fun paired(id: String?, name: String, fingerprint: String, endpoints: List<String>, token: String): JSONObject = synchronized(lock) {
+        require(fingerprint.matches(Regex("[a-f0-9]{64}")) && token.matches(Regex("[A-Za-z0-9_-]{43}"))) { "INVALID_PAIRING" }
+        val urls = endpoints.distinct().take(16).map { normalizeUrl(it, false) }
+        require(urls.isNotEmpty()) { "INVALID_PAIRING" }
+        val value = read(); val rows = rows(value).toMutableList()
+        val old = if (id != null) rows.find { it.getString("id") == id } ?: error("NODE_NOT_FOUND")
+            else rows.find { it.optString("fingerprint") == fingerprint }
+        check(old == null || old.optString("fingerprint").isEmpty() || old.optString("fingerprint") == fingerprint) { "NODE_IDENTITY_MISMATCH" }
+        require(old != null || rows.size < 32) { "TOO_MANY_NODES" }
+        val row = old ?: JSONObject().put("id", UUID.randomUUID().toString()).put("configRevision", UUID.randomUUID().toString())
+        row.put("name", name.take(80).ifBlank { "拾文服务" }).put("fingerprint", fingerprint)
+            .put("baseUrl", urls.first()).put("endpoints", JSONArray(urls)).put("token", token)
+            .put("allowPrivateHttp", false).put("cookies", JSONArray()).put("authenticated", true)
+            .put("connectionState", "online").put("connectionGeneration", row.optLong("connectionGeneration") + 1)
+        rows.removeAll { it.getString("id") == row.getString("id") }; rows.add(row)
+        value.put("items", JSONArray(rows)); write(value); JSONObject(row.toString())
+    }
+    /** Runtime connection changes never change the user's binding revision. */
+    fun connection(id: String, revision: String, generation: Long, patch: (JSONObject) -> Unit) = synchronized(lock) {
+        val value = read(); val row = rows(value).find { it.getString("id") == id } ?: error("NODE_NOT_FOUND")
+        check(row.optString("configRevision") == revision && row.optLong("connectionGeneration") == generation) { "NODE_CHANGED" }
+        patch(row); write(value)
     }
     /** A response for an address edited in the meantime cannot update the new node. */
     fun update(id: String, expectedUrl: String, expectedRevision: String? = null, patch: (JSONObject) -> Unit) = synchronized(lock) {

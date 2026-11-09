@@ -29,6 +29,24 @@ function App() {
   const originLabel=value=>({personal:t('自己书写','Written by me'),external:t('外部资料','External source'),ai:t('AI 内容','AI content'),translation:t('译文','Translation')}[value]||t('来源待确认','Source unconfirmed'));
   const [ready, setReady] = useState(false), [tab, setTab] = useState('chat'), [draft, setDraft] = useState(fresh);
   const [libraryId, setLibraryId] = useState(''), [libraryContext,setLibraryContext]=useState(null), [libraries,setLibraries]=useState([]), [modelConfig, setModelConfig] = useState({configured:false});
+  const [libraryConnection,setLibraryConnection]=useState(null);
+  useEffect(()=>{
+    if(!ready||!libraryId)return;
+    let disposed=false,busy=false,timer;
+    setLibraryConnection(null);
+    const refresh=async()=>{
+      if(disposed||busy||document.visibilityState==='hidden')return;
+      clearTimeout(timer);busy=true;
+      try{
+        const snapshot=await call('libraryConnectionStatus');
+        if(!disposed&&snapshot.libraryId===libraryId)setLibraryConnection(snapshot);
+      }catch{if(!disposed)setLibraryConnection(null);}
+      finally{busy=false;if(!disposed)timer=setTimeout(refresh,5000);}
+    };
+    const visibility=()=>{if(document.visibilityState==='visible')void refresh();else clearTimeout(timer);};
+    void refresh();document.addEventListener('visibilitychange',visibility);
+    return()=>{disposed=true;clearTimeout(timer);document.removeEventListener('visibilitychange',visibility);};
+  },[ready,libraryId]);
   const [pageState, setPageState] = useState({dirty:false,busy:false});
   const [agentSending, setAgentSending] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -166,8 +184,16 @@ function App() {
     return()=>{delete window.__shiwenBack;};
   });
   const selectedLibrary=libraries.find(item=>item.libraryId===libraryId);
+  const connectionState=libraryConnection?.libraryId===libraryId?libraryConnection.state:'unknown';
+  const connectionLabel=({online:t('在线','Online'),offline:t('离线','Offline'),'no-network':t('离线','Offline'),
+    'login-required':t('在线 · 需登录','Online · sign in'),local:t('本机','On phone'),checking:t('检查中','Checking'),
+    'identity-mismatch':t('身份不匹配','Identity mismatch'),'service-error':t('服务异常','Service error'),
+    unbound:t('未连接','Not connected')}[connectionState]||t('待检查','Not checked'));
+  const connectionTone=['online','login-required'].includes(connectionState)?'online':
+    ['offline','no-network','identity-mismatch','service-error'].includes(connectionState)?'offline':'neutral';
+
   return <div className="app">
-    <header className="shell-header"><div className="brand"><img src="./shiwen-mark.png" alt=""/><strong>{tab==='chat'?t('皮皮','Pipi'):({notes:t('素材','Materials'),write:t('创作','Writing'),review:t('回顾','Review'),settings:t('设置','Settings')}[tab])}</strong></div><button className="library-trigger" type="button" aria-haspopup="dialog" aria-expanded={libraryOpen} onClick={()=>setLibraryOpen(true)} disabled={!ready||agentSending||saving||pageState.busy||childDepth}>{selectedLibrary?.name||t('选择资料库','Choose library')} <span aria-hidden="true">⌄</span></button></header>
+    <header className="shell-header"><div className="brand"><img src="./shiwen-mark.png" alt=""/><strong>{tab==='chat'?t('皮皮','Pipi'):({notes:t('素材','Materials'),write:t('创作','Writing'),review:t('回顾','Review'),settings:t('设置','Settings')}[tab])}</strong></div><button className="library-trigger" type="button" aria-haspopup="dialog" aria-expanded={libraryOpen} onClick={()=>setLibraryOpen(true)} disabled={!ready||agentSending||saving||pageState.busy||childDepth}><span className="library-trigger-content"><span className="library-trigger-name">{selectedLibrary?.name||t('选择资料库','Choose library')}</span>{ready&&<span className={`library-connection is-${connectionTone}`} role="status"><i aria-hidden="true"/>{connectionLabel}</span>}</span><span className="library-trigger-chevron" aria-hidden="true">⌄</span></button></header>
     {libraryOpen && <div className="sheet-backdrop" onClick={()=>setLibraryOpen(false)}><section className="library-sheet" role="dialog" aria-modal="true" aria-label={t('切换资料库','Switch library')} onClick={e=>e.stopPropagation()}><div className="sheet-heading"><h2>{t('切换资料库','Switch library')}</h2><button type="button" onClick={()=>setLibraryOpen(false)} aria-label={t('关闭','Close')}>×</button></div><div className="sheet-list">{libraries.map(item=><button type="button" key={item.libraryId} className="sheet-library" aria-current={item.libraryId===libraryId?'true':undefined} onClick={async()=>{await changeLibrary(item.libraryId);setLibraryOpen(false);}}><span><strong>{item.name}</strong><small>{libraryLabel(item.role||'standalone')} · {libraryLabel(item.integrity)}</small></span>{item.libraryId===libraryId&&<span aria-hidden="true">✓</span>}</button>)}</div><button type="button" className="sheet-manage" onClick={()=>{setLibraryOpen(false);switchTab('settings');}}>{t('管理资料库和服务','Manage libraries and servers')}　›</button></section></div>}
     {!isNative && <p className="notice">{t('浏览器布局预览 · 保存需要 Android 原生资料库','Browser layout preview · saving requires the native Android library')}</p>}
     <main className={tab === 'chat' && !reading && !editor ? 'chat-main' : undefined}>

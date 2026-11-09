@@ -27,13 +27,15 @@ test('Agent 改分类保留正文和来源，重试幂等，陈旧版本不能�
  assert.throws(()=>store.save({id:saved.id,revision:before.revision,doc:plainDoc('旧编辑器正文')}),/更新/);
  assert.equal(store.searchRecords({kind:'journal',start:'2026-10-01',end:'2026-10-31'}).total,1);
 });
-test('修改正文保留原话来源，AI 新增字数不算个人写作；分段读取校验版本',async t=>{
- const {store,call}=fixture(t),saved=store.save({kind:'journal',body:'我的原话'}),added=store.review().totals.added;
- const updated=await call('shiwen_update',{id:saved.id,revision:saved.revision,body:'我的原话\n\n## AI 整理\n新的建议'});
- const groups=readDoc(store.get(saved.id).doc).groups;assert.equal(groups.personal,'我的原话');assert.match(groups.ai,/新的建议/);
- assert.equal(store.review().totals.added,added);assert.equal(updated.origin,'personal');
- const full=await call('shiwen_read',{id:saved.id});assert.match(full.body,/## AI 整理/);assert.equal(full.format,'markdown');
- await assert.rejects(()=>call('shiwen_read',{id:saved.id,offset:1,revision:saved.revision}),/更新/);
+test('AI 标注与原文分开，普通编辑保留作者；分段读取校验版本',async t=>{
+ const {store,call,exec}=fixture(t),saved=store.save({kind:'journal',body:'我的原话'}),added=store.review().totals.added;
+ const anchor=await call('shiwen_original_version',{id:saved.id});
+ const args={originalId:saved.id,originalVersionId:anchor.versionId,originalContentHash:anchor.contentHash,body:'## AI 整理\n新的建议'};
+ const annotation=await call('shiwen_annotation_create',args);assert.equal((await call('shiwen_annotation_create',args)).id,annotation.id);
+ assert.equal(store.get(saved.id).body,'我的原话');assert.equal(store.review().totals.added,added);assert.equal(store.get(annotation.id).origin,'ai');
+ const full=await call('shiwen_annotation_read',{id:annotation.id});assert.match(full.body,/## AI 整理/);assert.equal((await call('shiwen_annotation_list',{originalId:saved.id})).length,1);
+ await call('shiwen_update',{id:saved.id,revision:saved.revision,body:'我的原话补充'},{...exec,callId:'original-edit'});
+ assert.equal(store.get(saved.id).origin,'personal');await assert.rejects(()=>call('shiwen_read',{id:saved.id,offset:1,revision:saved.revision}),/更新/);
  const long=store.save({kind:'reference',body:'甲'.repeat(6100)});
  const first=await call('shiwen_read',{id:long.id});assert.equal(first.nextOffset,6000);
  const last=await call('shiwen_read',{id:long.id,offset:first.nextOffset,revision:first.revision});assert.equal(last.body.length,100);assert.equal(last.nextOffset,null);
@@ -81,15 +83,16 @@ test('来源可纠正，原文和历史版本保留，改标签不凭空增加�
  const saved=store.saveDsh({kind:'journal',body:'这是我的日记',origin:'ai',day:'2026-10-20',sessionId:'s',messageId:'m',role:'user',operationId:'source-test'});
  const args={period:'month',month:'2026-10',now:'2026-11-05T00:00:00Z'};
  assert.equal(store.review(args).totals.personalRecords,0);
- const corrected=await call('shiwen_update',{id:saved.id,revision:saved.revision,origin:'personal'});
+ const corrected=await call('shiwen_correct_origin',{id:saved.id,revision:saved.revision,origin:'personal'});
  assert.equal(corrected.origin,'personal');assert.equal(store.get(saved.id).body,saved.body);
  assert.equal(readDoc(store.get(saved.id).doc).groups.personal,'这是我的日记');
  assert.equal(store.review(args).totals.personalRecords,1);assert.equal(store.review().totals.added,0);
  const versions=store.versions({id:saved.id});assert.equal(readDoc(versions[1].doc).groups.ai,'这是我的日记');assert.match(versions[0].reason,/ai → personal/);
  assert.equal(store.dshSources({id:saved.id})[0].message_id,'m');
- await call('shiwen_update',{id:saved.id,revision:corrected.revision,origin:'external',body:'这是我的日记\nAI 新增解释',url:'https://example.org/source'},{...exec,callId:'correction-and-edit'});
- const groups=readDoc(store.get(saved.id).doc).groups;assert.equal(groups.external,'这是我的日记');assert.equal(groups.ai,'AI 新增解释');
- assert.equal(store.review().totals.added,0);
+ const second=await call('shiwen_correct_origin',{id:saved.id,revision:corrected.revision,origin:'external'},{...exec,callId:'correct-again'});
+ await call('shiwen_update',{id:saved.id,revision:second.revision,body:'这是我的日记\n外部补充',url:'https://example.org/source'},{...exec,callId:'separate-edit'});
+ const groups=readDoc(store.get(saved.id).doc).groups;assert.equal(groups.external,'这是我的日记');assert.equal(groups.personal,'外部补充');assert.equal(groups.ai,'');
+ assert.equal(store.get(saved.id).origin,'external');
 });
 test('用户原话和排版稿归用户，网页原文归外部，实际归档者不决定作者',async t=>{
  const {store}=fixture(t),tools=new Map();
@@ -107,5 +110,5 @@ test('用户原话和排版稿归用户，网页原文归外部，实际归档�
  assert.equal((await call('shiwen_collect',{requestMessageId:'u',title:'网页原文',url:'https://example.org/article',body:'# 网络文章\n外部作者的原文。'},'collect')).id,external.id);
  await assert.rejects(()=>call('shiwen_collect',{requestMessageId:'missing',url:'https://example.org',title:'标题',body:'正文'},'bad'),/用户消息/);
  await assert.rejects(()=>call('shiwen_collect',{requestMessageId:'u',url:'file:///private',title:'标题',body:'正文'},'bad-url'),/HTTP/);
- assert.equal(store.snapshot().records.length,4);
+ assert.equal(formatted.id,original.id);assert.equal(store.snapshot().records.length,3);
 });

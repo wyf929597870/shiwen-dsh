@@ -61,6 +61,7 @@ class LibraryProbePlugin : Plugin() {
     }
     private val fileTransfers by fileTransferDelegate
     override fun handleOnDestroy() {
+        if (nodeMonitorDelegate.isInitialized()) nodeMonitor.close()
         if (fileTransferDelegate.isInitialized()) fileTransfers.destroy()
         if (recoveryCoordinatorDelegate.isInitialized()) recoveryCoordinator.close()
         super.handleOnDestroy()
@@ -230,6 +231,9 @@ class LibraryProbePlugin : Plugin() {
     private val repository: LibraryRepository get() = scopedRepository.get() ?: currentRepository ?: error("LIBRARY_NOT_READY")
     private val modelDialogOpen = AtomicBoolean(false)
     private val nodeSettings by lazy { NodeSettingsStore(context) }
+    private val nodeMonitorDelegate = lazy { io.github.wyf929597870.shiwen.network.NodeMonitor(context, nodeSettings) }
+    private val nodeMonitor by nodeMonitorDelegate
+    override fun handleOnPause() { if (nodeMonitorDelegate.isInitialized()) nodeMonitor.stop(); super.handleOnPause() }
     private val nodeAgentActions by lazy { NodeAgentActions(nodeSettings) }
     private val nodeManagementActions by lazy { NodeManagementActions(NodeConnection(nodeSettings)) }
     private val nodeSessionDrafts by lazy { io.github.wyf929597870.shiwen.network.NodeSessionDraftStore(context) }
@@ -238,6 +242,7 @@ class LibraryProbePlugin : Plugin() {
 
     override fun handleOnResume() {
         super.handleOnResume()
+        nodeMonitor.start()
         networkExecutor.execute {
             runCatching {
                 libraryManager.all().filter { it.role == "coordinated" && it.autoSync }.forEach { row ->
@@ -303,6 +308,20 @@ class LibraryProbePlugin : Plugin() {
         refreshSelectedProfile()
         JSObject().put("libraryId", context.libraryId).put("pageGeneration", next)
             .put("role", context.role).put("integrity", context.integrity).put("probe", false)
+    }
+    /** Read the active library's bound node, independently of the agent's selected node. */
+    @PluginMethod fun libraryConnectionStatus(call: PluginCall) = run(call) {
+        val row = repository.registryItem()
+        val binding = repository.dao.meta("nodeBinding")?.let(::JSONObject)
+        val state = if (row.role == "standalone") "local" else if (binding == null) "unbound" else {
+            val node = runCatching { nodeSettings.get(binding.getString("nodeId")) }.getOrNull()
+            when {
+                node == null -> "unbound"
+                node.optString("configRevision") != binding.optString("configRevision") -> "unbound"
+                else -> node.optString("connectionState", "unknown")
+            }
+        }
+        JSObject().put("libraryId", repository.libraryId).put("state", state)
     }
     @PluginMethod fun libraryList(call: PluginCall) = run(call, false) {
         val activeId = repository.libraryId
@@ -471,6 +490,44 @@ class LibraryProbePlugin : Plugin() {
         JSObject(io.github.wyf929597870.shiwen.library.LibraryReview(repository)
             .read(call.getString("period") ?: "7", call.getString("month")).toString())
     }
+    @PluginMethod fun correctRecordOrigin(call: PluginCall) = run(call) {
+        json(repository.update(call.getString("id") ?: "", call.getLong("revision") ?: error("INVALID_REVISION"),
+            call.getString("requestId") ?: error("MISSING_REQUEST"), JSONObject().put("origin", call.getString("origin") ?: error("INVALID_ORIGIN")), allowOriginCorrection = true), true)
+    }
+    @PluginMethod fun originalVersionInfo(call: PluginCall) = run(call) {
+        JSObject(repository.originalVersionInfo(call.getString("id") ?: "").toString())
+    }
+    @PluginMethod fun annotationCreate(call: PluginCall) = run(call) {
+        val input = JSONObject().put("attachmentDescriptors", call.data.optJSONArray("attachmentDescriptors") ?: org.json.JSONArray())
+        val request = call.getString("requestId") ?: error("MISSING_REQUEST")
+        val staged = if (repository.receipt(request) != null) emptyList() else stagedAttachments(call, input)
+        json(repository.annotationCreate(call.getString("originalId") ?: "", call.getString("originalVersionId") ?: "",
+            call.getString("originalContentHash"), call.getString("title") ?: "", call.getString("body") ?: "",
+            request, input.getJSONArray("attachmentDescriptors"), staged), true)
+    }
+    @PluginMethod fun annotationList(call: PluginCall) = run(call) {
+        JSObject().put("items", JSArray(repository.annotationList(call.getString("originalId") ?: "", call.getBoolean("deleted") == true).map { json(it, true) }))
+    }
+    @PluginMethod fun annotationRead(call: PluginCall) = run(call) { json(repository.annotationRead(call.getString("id") ?: ""), true) }
+    @PluginMethod fun annotationUpdate(call: PluginCall) = run(call) {
+        val patch = JSONObject()
+        call.getString("title")?.let { patch.put("title", it) }
+        call.getString("body")?.let { patch.put("markdown", it) }
+        call.data.optJSONArray("attachmentDescriptors")?.let { patch.put("attachmentDescriptors", it) }
+        val request = call.getString("requestId") ?: error("MISSING_REQUEST")
+        val staged = if (repository.receipt(request) != null) emptyList() else stagedAttachments(call, patch)
+        json(repository.annotationUpdate(call.getString("id") ?: "", call.getLong("revision") ?: error("INVALID_REVISION"),
+            request, patch, staged), true)
+    }
+    @PluginMethod fun annotationDelete(call: PluginCall) = run(call) { annotationDeleted(call, true) }
+    @PluginMethod fun annotationRestore(call: PluginCall) = run(call) { annotationDeleted(call, false) }
+    private fun annotationDeleted(call: PluginCall, deleted: Boolean): JSObject = json(repository.annotationSetDeleted(
+        call.getString("id") ?: "", call.getLong("revision") ?: error("INVALID_REVISION"),
+        call.getString("requestId") ?: error("MISSING_REQUEST"), deleted), true)
+    @PluginMethod fun reviewPreview(call: PluginCall) = run(call) {
+        JSObject(io.github.wyf929597870.shiwen.library.LibraryReview(repository)
+            .preview(call.getString("period") ?: "7", call.getString("month")).toString())
+    }
     @PluginMethod fun recordList(call: PluginCall) = run(call) {
         val offset = call.getString("cursor")?.toIntOrNull() ?: call.getInt("offset") ?: 0
         require(offset >= 0)
@@ -591,7 +648,23 @@ class LibraryProbePlugin : Plugin() {
             }
         }
     }, call)
-    @PluginMethod fun nodeList(call: PluginCall) = run(call) { JSObject(nodeSettings.list().toString()) }
+    @PluginMethod fun nodeScan(call: PluginCall) = trusted({
+        val intent = com.journeyapps.barcodescanner.ScanOptions().setDesiredBarcodeFormats("QR_CODE")
+            .setPrompt("扫描服务电脑上的拾文配对码").setBeepEnabled(false).createScanIntent(activity)
+        startActivityForResult(call, intent, "nodeScanResult")
+    }, call)
+    @ActivityCallback private fun nodeScanResult(call: PluginCall?, result: ActivityResult) {
+        if (call == null) return
+        val contents = com.journeyapps.barcodescanner.ScanIntentResult.parseActivityResult(result.resultCode, result.data).contents
+        if (contents == null) { call.resolve(JSObject().put("cancelled", true)); return }
+        networkExecutor.execute {
+            try {
+                val id = io.github.wyf929597870.shiwen.network.NodePairing.pair(nodeSettings, contents, call.getString("id"))
+                call.resolve(JSObject().put("id", id))
+            } catch (error: Exception) { call.reject(error.message?.takeIf { it.matches(Regex("[A-Z_]+")) } ?: "PAIRING_FAILED") }
+        }
+    }
+    @PluginMethod fun nodeList(call: PluginCall) = run(call) { JSObject(nodeSettings.list().put("discovered", io.github.wyf929597870.shiwen.network.NodeReachability.discoveredNodes()).toString()) }
     @PluginMethod fun nodeSelect(call: PluginCall) = run(call) {
         nodeSettings.select(call.getString("id")); refreshSelectedProfile(); JSObject(nodeSettings.list().toString())
     }
@@ -857,6 +930,7 @@ class LibraryProbePlugin : Plugin() {
         .put("processing", row.processing).put("revision", row.revision).put("syncState", row.syncState)
         .put("state", row.syncState).put("updatedAt", row.updatedAt).put("deleted", row.deleted)
         .put("stage", row.stage ?: JSONObject.NULL).put("dateBasis", row.dateBasis)
+        .apply { row.annotationOfJson?.let { put("annotationOf", JSONObject(it)) } }
         .apply { if (full) {
             put("markdown", row.markdown).put("url", row.url ?: JSONObject.NULL).put("annotation", row.annotation ?: JSONObject.NULL)
             put("sourceIds", JSArray(row.sourceIdsJson)).put("sources", JSArray(row.sourcesJson))

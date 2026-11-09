@@ -17,6 +17,9 @@ test('initial password requires local ownership; hashes persist, sessions bind t
   assert.equal(store.authenticate(session.token,options.audience).id,session.id);
   assert.equal(store.authenticate(session.token,'https://127.0.0.1:3080'),undefined);
   assert.equal(store.authenticate(session.token,'http://127.0.0.1:3081'),undefined);
+  // A LAN IP change creates a different audience even when it reaches the same host.
+  assert.equal(store.authenticate(session.token,'http://192.168.1.16:3080'),undefined);
+  assert.equal(store.authenticate(session.token,'http://192.168.239.2:3080'),undefined);
   assert.equal(store.authenticate(session.token+'a',options.audience),undefined);
   const reload=new PasswordStore(f.directory);assert.equal(await reload.verify(password),true);assert.ok(reload.authenticate(session.token,options.audience));reload.close();
   const raw=Buffer.concat(['access.sqlite','access.sqlite-wal'].map(name=>readFileSync(join(f.directory,name)))).toString();assert.equal(raw.includes(password),false);assert.equal(raw.includes(session.token),false);

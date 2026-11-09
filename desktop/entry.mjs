@@ -4,14 +4,15 @@ import {homedir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {controlServer,ensureServer,stopServer} from '../scripts/server-control.mjs';
-import {serverOptions} from '../scripts/server-config.mjs';
-import {connectionPreference,connectionPartition,remoteTarget,quitConnection,recognizedLocalPreference,authenticateRemote} from './connection.mjs';
+import {desktopServerOptions,lanAddresses} from '../scripts/server-config.mjs';
+import {connectionPreference,connectionPartition,remoteTarget,quitConnection,recognizedLocalPreference,authenticateRemote,desktopPreference,closeWindow} from './connection.mjs';
 const base=resolve(process.env.SHIWEN_ROOT_DIR??join(process.env.XDG_DATA_HOME??join(homedir(),'.local/share'),'shiwen-dsh'));
 const version=app.isPackaged?app.getVersion():JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8')).version;
 app.setName('拾文');app.setPath('userData',join(base,'desktop'));
 if(!app.requestSingleInstanceLock()){app.quit();}else{
  let window,settings,tray,connected,preference,connecting=false,quitting=false,exitAllowed=false,localSeen;
  const preferences=join(base,'desktop/connection.json'),settingsFile=join(import.meta.dirname,'connection.html');
+ const desktopPreferencesFile=join(base,'desktop/preferences.json');let desktopPreferences=desktopPreference();
  const resources=app.isPackaged?join(process.resourcesPath,'shiwen'):resolve(import.meta.dirname,'..');
  const icon=join(resources,'assets/shiwen-icon-rounded.png');
  const zh=()=>app.getLocale().startsWith('zh'),t=(a,b)=>zh()?a:b;
@@ -27,18 +28,24 @@ if(!app.requestSingleInstanceLock()){app.quit();}else{
   for(const event of ['will-navigate','will-redirect'])wc.on(event,(e,url)=>{if(new URL(url).origin!==origin)e.preventDefault();});
   wc.session.setPermissionRequestHandler((_wc,permission,callback)=>callback(permission==='clipboard-sanitized-write'));
  }
+ function showAccess(){
+  if(!window||!connected)return;
+  const access=new BrowserWindow({width:680,height:850,parent:window,title:t('手机配对与访问设备','Phone pairing and access'),webPreferences:{session:window.webContents.session,contextIsolation:true,nodeIntegration:false,sandbox:true}});
+  access.setMenu(null);protect(access,connected.origin);
+  void access.loadURL(connected.origin+'/auth/manage');
+ }
  function updateMenu(){
   const target=connected?(connected.mode==='local'?(connected.recognized?t('本机服务 · 自动识别','Local service · detected'):t('本机服务','Local service')):t('远端服务','Remote service'))+' · '+connected.origin:t('未连接','Not connected');
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-   {label:t('拾文','Shiwen'),submenu:[{label:`${t('拾文客户端','Shiwen client')} v${version}`,enabled:false},{label:target,enabled:false},{label:t('连接设置…','Connection settings…'),accelerator:'CmdOrCtrl+,',click:()=>showSettings()},{type:'separator'},{label:t('退出','Quit'),accelerator:'CmdOrCtrl+Q',click:()=>app.quit()}]},
+   {label:t('拾文','Shiwen'),submenu:[{label:`${t('拾文客户端','Shiwen client')} v${version}`,enabled:false},{label:target,enabled:false},{label:t('手机配对与访问设备…','Phone pairing and access…'),enabled:!!connected,click:()=>showAccess()}, {label:t('连接与桌面设置…','Connection and desktop settings…'),accelerator:'CmdOrCtrl+,',click:()=>showSettings()},{type:'separator'},{label:t('退出','Quit'),accelerator:'CmdOrCtrl+Q',click:()=>app.quit()}]},
    {label:t('编辑','Edit'),submenu:[{role:'undo'},{role:'redo'},{type:'separator'},{role:'cut'},{role:'copy'},{role:'paste'},{role:'selectAll'}]},
    {label:t('查看','View'),submenu:[{role:'reload'},{role:'resetZoom'},{role:'zoomIn'},{role:'zoomOut'},{role:'togglefullscreen'}]}
   ]));
-  tray?.setContextMenu(Menu.buildFromTemplate([{label:target,enabled:false},{label:t('打开拾文','Open Shiwen'),click:()=>{if(window){window.show();window.focus();}else showSettings();}},{label:t('连接设置…','Connection settings…'),click:()=>showSettings()},{label:t('退出','Quit'),click:()=>app.quit()}]));
+  tray?.setContextMenu(Menu.buildFromTemplate([{label:target,enabled:false},{label:t('打开拾文','Open Shiwen'),click:()=>{if(window){window.show();window.focus();}else showSettings();}},{label:t('连接与桌面设置…','Connection and desktop settings…'),click:()=>showSettings()},{label:t('退出','Quit'),click:()=>app.quit()}]));
  }
  async function showSettings(error=''){
   if(settings&&!settings.isDestroyed()){settings.show();settings.focus();if(error)settings.webContents.send('connection-error',error);return;}
-  settings=new BrowserWindow({width:650,height:800,minWidth:520,minHeight:540,title:t('拾文 · 连接设置','Shiwen · Connection'),icon,backgroundColor:'#1d2126',webPreferences:{preload:join(import.meta.dirname,'connection-preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
+  settings=new BrowserWindow({width:650,height:800,minWidth:520,minHeight:540,title:t('拾文 · 连接与桌面设置','Shiwen · Connection and desktop settings'),icon,backgroundColor:'#1d2126',webPreferences:{preload:join(import.meta.dirname,'connection-preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
   settings.setMenu(null);settings.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   settings.webContents.on('will-navigate',e=>e.preventDefault());
   settings.on('closed',()=>{settings=null;if(!window&&!connecting)app.quit();});
@@ -52,7 +59,7 @@ if(!app.requestSingleInstanceLock()){app.quit();}else{
   let candidate;
   try{
    let next=connectionPreference(input);
-   let url,state,recognized=false;
+   let url,state,recognized=false,lanFallback=false;
    if(next.mode==='remote'){
     // Inspection failure leaves the connection remote. Never launch a local fallback.
     const owner=await controlServer(base,'status').catch(()=>null);
@@ -67,7 +74,11 @@ if(!app.requestSingleInstanceLock()){app.quit();}else{
     // Reuse before evaluating network settings: an existing service owns its binding.
     let server=await controlServer(base,'url');
     if(!server&&next.manualStart)throw Error(t('此本机服务使用 HTTPS，请先使用原证书配置启动服务，再重新连接。','This local service uses HTTPS. Start it with its original certificate configuration, then reconnect.'));
-    if(!server){const args=['--root',base,'--port',String(next.port),...(next.lan?['--lan']:[])];server=await ensureServer(serverOptions(args),launch);}
+    if(!server){
+     const args=['--root',base,'--port',String(next.port)];
+     const chosen=desktopServerOptions(args,next.lan,next.lanHost);lanFallback=chosen.lanFallback;const options=chosen.options;
+     server=await ensureServer(options,launch);
+    }
     if(!server?.loginUrl)throw Error(t('服务尚未就绪','Service is not ready'));
     url=server.loginUrl;state=server.state;localSeen=state;
    }else if(next.mode==='remote')url=remoteTarget(input.address).url;
@@ -88,9 +99,9 @@ if(!app.requestSingleInstanceLock()){app.quit();}else{
    const old=window;window=candidate;connected={mode:next.mode,origin,state,recognized};candidate=null;
    old?.destroy();
    window.webContents.on('will-prevent-unload',()=>{exitAllowed=false;quitting=false;});
-   window.on('close',event=>{if(!exitAllowed){event.preventDefault();void requestQuit();}});
+   window.on('close',event=>{if(!exitAllowed){event.preventDefault();if(!quitting)void closeWindow({preference:desktopPreferences,trayAvailable:!!tray&&!tray.isDestroyed(),hide:()=>window.hide(),quit:requestQuit});}});
    window.webContents.on('did-fail-load',(_event,code,_description,_url,main)=>{if(main&&code!==-3)void showSettings(t('连接已断开，请确认服务运行后重新连接。','Connection lost. Check the service and reconnect.'));});
-   window.show();settings?.close();updateMenu();console.log(`[shiwen-client] connected ${connected.mode} ${connected.origin}`);return {ok:true};
+   window.show();settings?.close();updateMenu();if(lanFallback)void dialog.showMessageBox(window,{type:'warning',message:t('已连接本机，局域网入口将随网络自动更新','Connected locally; LAN endpoints follow network changes'),detail:t('在访问密码与设备页面生成配对码，手机配对后会自动发现可用地址。','Generate a pairing code in Password and devices. Paired phones discover available addresses automatically.')});console.log(`[shiwen-client] connected ${connected.mode} ${connected.origin}`);return {ok:true};
   }catch(error){candidate?.destroy();throw Error(message(error));}finally{connecting=false;}
  }
  async function requestQuit(){
@@ -100,6 +111,7 @@ if(!app.requestSingleInstanceLock()){app.quit();}else{
   try{
    const local=connected?.mode==='local'?connected.state:(!connected?localSeen:null);
    await quitConnection({local,choose:async()=>{
+    if(window&&!window.isVisible())window.show();
     const result=await ask({type:'question',message:t('是否同时停止本机独立服务？','Stop the local service too?'),detail:t('停止服务会断开手机和浏览器，并中断正在执行的任务。未保存的窗口草稿请先保存。','Stopping disconnects phones and browsers and interrupts running tasks. Save unsaved drafts first.'),buttons:[t('保留服务并退出','Keep service and quit'),t('停止服务并退出','Stop service and quit'),t('取消','Cancel')],defaultId:0,cancelId:2});return ['keep','stop','cancel'][result.response];
    },stop:()=>stopServer(base,local),quit:()=>{exitAllowed=true;app.quit();}});
   }catch(error){await ask({type:'error',message:t('未退出：服务未能安全停止','Not closed: service shutdown failed'),detail:message(error)});}finally{quitting=false;}
@@ -109,9 +121,11 @@ if(!app.requestSingleInstanceLock()){app.quit();}else{
  app.on('second-instance',()=>{if(window){window.show();window.focus();}else void showSettings();});
  // Do not await ready at ESM top level: Electron waits for module evaluation first.
  void app.whenReady().then(async()=>{
- tray=new Tray(nativeImage.createFromPath(icon).resize({width:24,height:24}));tray.setToolTip(`拾文 v${version}`);tray.on('click',()=>{if(window){window.show();window.focus();}else void showSettings();});
+ try{tray=new Tray(nativeImage.createFromPath(icon).resize({width:24,height:24}));tray.setToolTip(`拾文 v${version}`);tray.on('click',()=>{if(window){window.show();window.focus();}else void showSettings();});}catch(error){tray?.destroy();tray=null;console.warn('[shiwen-client] tray unavailable:',message(error));}
+ try{desktopPreferences=desktopPreference(JSON.parse(await readFile(desktopPreferencesFile,'utf8')));}catch(error){if(error.code!=='ENOENT')console.warn('[shiwen-client] desktop preferences:',message(error));}
  updateMenu();
- ipcMain.handle('connection:get',event=>{if(!trusted(event))throw Error('Forbidden');return {version,preference:preference??{mode:'local',lan:true,port:3080},language:zh()?'zh':'en',current:connected?{mode:connected.mode,origin:connected.origin}:null};});
+ ipcMain.handle('connection:get',event=>{if(!trusted(event))throw Error('Forbidden');return {version,desktopPreferences,trayAvailable:!!tray&&!tray.isDestroyed(),lanAddresses:lanAddresses(),preference:preference??{mode:'local',lan:true,port:3080},language:zh()?'zh':'en',current:connected?{mode:connected.mode,origin:connected.origin}:null};});
+ ipcMain.handle('desktop:preferences',async(event,input)=>{if(!trusted(event))throw Error('Forbidden');const value=desktopPreference(input);await mkdir(join(base,'desktop'),{recursive:true,mode:0o700});const temp=desktopPreferencesFile+'.tmp';await writeFile(temp,JSON.stringify(value,null,2)+'\n',{mode:0o600});await rename(temp,desktopPreferencesFile);desktopPreferences=value;return value;});
  ipcMain.handle('connection:connect',async(event,input)=>{if(!trusted(event))throw Error('Forbidden');try{return await connect(input);}catch(error){return {error:message(error)};}});
  try{preference=connectionPreference(JSON.parse(await readFile(preferences,'utf8')));await connect(preference);}catch(error){if(error.code!=='ENOENT')console.error('[shiwen-client]',message(error));await showSettings(error.code==='ENOENT'?'':message(error));}
  }).catch(error=>{console.error('[shiwen-client]',message(error));app.exit(1);});

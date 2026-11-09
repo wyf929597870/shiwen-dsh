@@ -11,9 +11,20 @@ export function connectionPreference(input){
  if(input?.mode!=='local')throw Error('请选择连接方式 / Choose a connection mode');
  const port=Number(input.port??3080);
  if(!Number.isInteger(port)||port<1||port>65535)throw Error('端口必须为 1–65535 / Invalid port');
- return {mode:'local',lan:!!input.lan,port,...(input.manualStart===true?{manualStart:true}:{})};
+ const lanHost=String(input.lanHost??'').trim();
+ if(lanHost&&isIP(lanHost)!==4)throw Error('请选择有效的局域网地址 / Choose a valid LAN address');
+ return {mode:'local',lan:!!input.lan,port,...(input.lan&&lanHost?{lanHost}:{}),...(input.manualStart===true?{manualStart:true}:{})};
 }
 export function connectionPartition(mode,origin){return 'persist:shiwen-'+createHash('sha256').update(mode+'\n'+origin).digest('hex').slice(0,24);}
+export function desktopPreference(input={}){
+ const closeAction=input.closeAction??'quit';
+ if(!['quit','tray'].includes(closeAction))throw Error('无效的窗口关闭方式 / Invalid window close action');
+ return {closeAction};
+}
+export function closeWindow({preference,trayAvailable,hide,quit}){
+ if(preference.closeAction==='tray'&&trayAvailable){hide();return;}
+ return quit();
+}
 export async function quitConnection({local,choose,stop,quit}){
  if(!local){quit();return;}
  const choice=await choose();

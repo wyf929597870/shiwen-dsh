@@ -5,6 +5,9 @@ import {mkdirSync,chmodSync} from 'node:fs';
 import {join} from 'node:path';
 import {randomBytes,createHash,scrypt as derive,timingSafeEqual} from 'node:crypto';
 import {promisify} from 'node:util';
+import {createServer as createHttpServer} from 'node:http';
+import {AsyncLocalStorage} from 'node:async_hooks';
+import {startServiceNetwork} from './service-network.mjs';
 import {authPage} from './password-page.mjs';
 const scrypt=promisify(derive),day=86400000;
 const hash=value=>createHash('sha256').update(value).digest('hex');
@@ -97,19 +100,22 @@ export function installPasswordAuth(ctx,directory){
  const connection=ctx.connection,server=ctx.webServer,store=new PasswordStore(directory);
  const original={admit:connection.admit.bind(connection),index:connection.authorizeIndex.bind(connection),url:connection.authenticatedUrl.bind(connection)};
  const bootstrap=new Map(),sockets=new Map(),disposers=[];
- const audience=req=>`${server.protocol}//${header(req,'host')}`;
+ const gatewayContext=new AsyncLocalStorage();let network,localServer,localOrigin;
+ const audience=req=>`${gatewayContext.getStore()?.local?'http:':server.protocol}//${header(req,'host')}`;
  const cookieName=req=>'shiwen-session-'+hash(audience(req)).slice(0,16);
  const session=req=>{
+  const delegated=gatewayContext.getStore();if(delegated?.id&&store.valid(delegated.id))return delegated;
   const name=cookieName(req)+'=';
   const token=String(header(req,'cookie')??'').split(';').map(s=>s.trim()).find(s=>s.startsWith(name))?.slice(name.length);
   return store.authenticate(token,audience(req));
  };
- const cookie=(req,issued)=>`${cookieName(req)}=${issued?.token??''}; Path=/; HttpOnly; SameSite=Strict${server.protocol==='https:'?'; Secure':''}${!issued?'; Max-Age=0':issued.remember?'; Max-Age=2592000':''}`;
+ const cookie=(req,issued)=>`${cookieName(req)}=${issued?.token??''}; Path=/; HttpOnly; SameSite=Strict${audience(req).startsWith('https:')?'; Secure':''}${!issued?'; Max-Age=0':issued.remember?'; Max-Age=2592000':''}`;
  // Mint a DSH cookie only inside the adapter. It never leaves this process.
  // Passing it through original.admit preserves the pinned DSH trust fence.
  function trusted(req,navigation=false){
   let value;
   const requestHeaders=req.headers instanceof Headers?Object.fromEntries(req.headers):{...req.headers};
+  if(gatewayContext.getStore()){const origin=new URL(server.getOrigin());requestHeaders.host=origin.host;requestHeaders.origin=origin.origin;delete requestHeaders['sec-fetch-site'];}
   // A link from another page may open the login document. This exception never
   // applies to API requests, credential POSTs, embedded documents or upgrades.
   if(navigation&&req.method==='GET'&&header(req,'sec-fetch-mode')==='navigate'&&header(req,'sec-fetch-dest')==='document')delete requestHeaders['sec-fetch-site'];
@@ -161,9 +167,9 @@ export function installPasswordAuth(ctx,directory){
    if(req.method==='GET'&&(path==='/auth/login'||path==='/auth/manage')){
     if(path==='/auth/manage'&&!own){res.writeHead(303,{Location:'/auth/login'}).end();return;}
     const nonce=secret();
-    res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff','Content-Security-Policy':`default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`}).end(authPage({nonce,manage:path==='/auth/manage'}));return;
+    res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff','Content-Security-Policy':`default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; connect-src 'self'; img-src data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`}).end(authPage({nonce,manage:path==='/auth/manage'}));return;
    }
-   if(req.method==='GET'&&path==='/auth/status'){respond(res,200,{configured:store.configured(),authenticated:!!own,...(own?{current:own.id,devices:store.list()}: {})});return;}
+   if(req.method==='GET'&&path==='/auth/status'){respond(res,200,{configured:store.configured(),authenticated:!!own,...(own?{current:own.id,owner:!!own.owner,devices:store.list()}: {})});return;}
    if(req.method!=='POST')throw fail(405,'Method not allowed');
    // Explicit Origin for all credential-changing POSTs; protects even HTTP LAN.
    if(header(req,'origin')!==audience(req))throw fail(403,'Forbidden origin');
@@ -178,9 +184,15 @@ export function installPasswordAuth(ctx,directory){
     res.setHeader('Set-Cookie',cookie(req,issued));respond(res,200,{ok:true});return;
    }
    if(!own)throw fail(401,'请重新登录 / Please sign in');
+   if(path==='/auth/pairing'){
+    if(!own.owner)throw fail(403,'请从服务电脑配对手机');
+    if(!network)throw fail(503,'安全连接正在启动');
+    respond(res,200,await network.pairing());return;
+   }
    if(path==='/auth/password'){
     store.throttle(req.socket.remoteAddress);
     await store.change({password:body.password,currentPassword:body.currentPassword,owner:!!own.owner});
+    network?.revokeTickets();
     const issued=store.issue({...options,name:own.name,remember:true,owner:!!own.owner});
     res.setHeader('Set-Cookie',cookie(req,issued));res.once('finish',()=>setImmediate(disconnectRevoked));respond(res,200,{ok:true});return;
    }
@@ -197,11 +209,36 @@ export function installPasswordAuth(ctx,directory){
  disposers.push(server.register({kind:'prefix',path:'/auth',handler:handle}));
  gateReady=true;
  return {
+  async startNetwork(options={}){
+   // A permanent loopback route keeps the desktop usable while LAN NICs change.
+   // It admits only exact loopback authority/origin; native trust adaptation stays
+   // process-local and cannot be requested by an HTTP header.
+   if(server.host!=='127.0.0.1'&&server.host!=='::1'){
+    const local=(req,res,head)=>{
+     const allowed=req.headers.host===new URL(localOrigin).host &&
+      (!req.headers.origin||req.headers.origin===localOrigin) &&
+      (!req.headers['sec-fetch-site']||['none','same-origin'].includes(req.headers['sec-fetch-site']));
+     if(!allowed){if(head!==undefined)res.destroy();else res.writeHead(403).end();return;}
+     gatewayContext.run({local:true},()=>server.server.emit(head!==undefined?'upgrade':'request',req,res,...(head!==undefined?[head]:[])));
+    };
+    localServer=createHttpServer(local);localServer.on('upgrade',local);
+    await new Promise((resolve,reject)=>{localServer.once('error',reject);localServer.listen(0,'127.0.0.1',resolve);});
+    localOrigin=`http://127.0.0.1:${localServer.address().port}`;
+   }
+   network=await startServiceNetwork({directory,store,...options,dispatch(req,res,own){
+    const origin=new URL(server.getOrigin());
+    req.headers={host:origin.host,origin:origin.origin,'content-type':req.headers['content-type']??'application/json',...(req.headers['content-length']?{'content-length':req.headers['content-length']}: {})};
+    track(req,own.id);gatewayContext.run(own,()=>server.server.emit('request',req,res));
+   }});
+   return network;
+  },
+  networkInfo(){return network?{fingerprint:network.fingerprint,endpoints:network.endpoints()}:null;},
   localLoginUrl(url){
+   if(localOrigin)url=localOrigin+'/';
    for(const [key,value]of bootstrap)if(value.until<=Date.now())bootstrap.delete(key);
    if(bootstrap.size>=100)bootstrap.delete(bootstrap.keys().next().value);
    const target=new URL(url),token=secret();bootstrap.set(hash(token),{audience:target.origin,until:Date.now()+5*60*1000});target.searchParams.set('token',token);return target.href;
   },
-  close(){gateReady=false;clearInterval(timer);for(const set of sockets.values())for(const socket of set)socket.destroy();for(const dispose of disposers)dispose();connection.admit=original.admit;connection.authorizeIndex=original.index;store.close();}
+  close(){localServer?.close();localServer?.closeAllConnections();network?.close();gateReady=false;clearInterval(timer);for(const set of sockets.values())for(const socket of set)socket.destroy();for(const dispose of disposers)dispose();connection.admit=original.admit;connection.authorizeIndex=original.index;store.close();}
  };
 }

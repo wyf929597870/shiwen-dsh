@@ -16,6 +16,7 @@ const syncText = (value,t) => ({synced:t('人设已同步','Persona synced'), ca
 const syncProgressText = (value,t) => ({queued:t('排队中','Queued'),running:t('同步中','Syncing'),completed:t('已完成','Completed'),failed:t('失败','Failed'),cancelled:t('已取消','Cancelled'),paused:t('已暂停','Paused'),error:t('出错','Error'),initializing:t('初始化中','Initializing'),idle:t('空闲','Idle')}[value]||value||t('状态未知','Unknown status'));
 const displayDate = value => { if (!value || value === 'null') return ''; const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString(); };
 const syncPhaseText = (value,t) => ({identity:t('核对服务身份','Checking server identity'),bootstrap:t('读取资料库','Reading library'),push:t('上传本机更改','Uploading local changes'),receipts:t('核对写入回执','Checking write receipts'),pull:t('接收更新','Receiving updates'),attachments:t('传输附件','Transferring attachments'),ack:t('确认同步进度','Confirming sync progress'),finalize:t('完成收尾','Finalizing')}[value]||value||'');
+const nodeStatus=(node,t)=>({online:t('在线','Online'),'login-required':t('在线 · 需要登录','Online · sign in required'),offline:t('服务节点离线','Server offline'),'no-network':t('手机网络不可用','No network'),'identity-mismatch':t('服务身份不匹配','Server identity mismatch'),'service-error':t('服务响应异常','Service error'),checking:t('正在检查连接','Checking connection')}[node.connectionState]||t('尚未检查','Not checked'));
 const serviceErrorText = (error,t) => ({NODE_MANAGEMENT_API_UNSUPPORTED:t('此服务器的拾文插件版本较旧，请更新服务器端拾文插件后重试。','This server has an older Shiwen plugin. Update it and try again.'),NODE_AUTH_REQUIRED:t('登录状态已失效，请返回设置重新登录。','Sign-in expired. Sign in again in Settings.')}[error?.code] || error?.message || t('请求失败，请检查服务连接后重试。','Request failed. Check the server connection and try again.'));
 const formatBytes = (value,t) => {
   if (!Number.isFinite(Number(value))) return t('未知','Unknown');
@@ -29,6 +30,7 @@ const formatBytes = (value,t) => {
 export function SettingsPanel({ready, libraryId, libraries=[], libraryContext, config, onConfig, onPageStateChange, pageState, onNavigation, onNavigate, onLibraryChange, onLibrariesRefresh}) {
   const {language,t}=useI18n();
   const [nodes, setNodes] = useState([]), [activeId, setActiveId] = useState(null);
+  const [discovered,setDiscovered]=useState([]);
   const [settingsPage, setSettingsPage] = useState('home');
   const [managementNode, setManagementNode] = useState(null);
   const managementDetailBack=useRef(null);
@@ -52,7 +54,7 @@ export function SettingsPanel({ready, libraryId, libraries=[], libraryContext, c
   const refreshNodes = useCallback(async () => {
     try {
       const snapshot = await call('nodeList');
-      setNodes(snapshot.items || []); setActiveId(snapshot.activeId ?? null); setNativeAvailable(true);
+      setNodes(snapshot.items || []); setDiscovered(snapshot.discovered||[]); setActiveId(snapshot.activeId ?? null); setNativeAvailable(true);
     } catch (error) {
       // Older preview/native builds may not yet include node APIs; do not draw
       // pretend controls. Keep this as a clearly stated unavailable capability.
@@ -65,6 +67,12 @@ export function SettingsPanel({ready, libraryId, libraries=[], libraryContext, c
     refreshModel(); refreshNodes();
     call('settingsGet').then(value=>{setTheme(value.theme||'system');setLanguage(value.language||'zh-CN');applyAppearance(value.theme||'system',value.systemDark);setAppearanceReady(true);}).catch(error=>setMessage(`${t('显示设置读取失败：','Could not read display settings: ')}${error.message}`));
   }, [ready, refreshModel, refreshNodes]);
+  useEffect(()=>{
+    if(!ready)return;
+    const timer=setInterval(()=>{if(document.visibilityState==='visible')refreshNodes();},5000);
+    return ()=>clearInterval(timer);
+  },[ready,refreshNodes]);
+  const scanNode=id=>run(async()=>{await call('nodeScan',id?{id}:{});await refreshNodes();});
   const run = async operation => {
     if (busy) return;
     onPageStateChange?.({dirty:false,busy:true});
@@ -122,12 +130,12 @@ export function SettingsPanel({ready, libraryId, libraries=[], libraryContext, c
   });
   const selectNode = id => run(async () => {
     const snapshot = await call('nodeSelect', {id});
-    setNodes(snapshot.items || []); setActiveId(snapshot.activeId ?? null);
+    setNodes(snapshot.items || []); setDiscovered(snapshot.discovered||[]); setActiveId(snapshot.activeId ?? null);
   });
   const checkNode = id => run(async () => {
     try {
       const snapshot = await call('nodeCheck', {id});
-      setNodes(snapshot.items || []); setActiveId(snapshot.activeId ?? null);
+      setNodes(snapshot.items || []); setDiscovered(snapshot.discovered||[]); setActiveId(snapshot.activeId ?? null);
       if(snapshot.syncError)setMessage(`${t('连接已核验，但资料库同步未能启动：','Connection verified, but library sync could not start: ')}${snapshot.syncError}`);
       else if(snapshot.sync?.operationId)await pollNodeSync(id,snapshot.sync.libraryId,snapshot.sync.operationId,snapshot.sync.state);
     } catch (error) {
@@ -137,13 +145,13 @@ export function SettingsPanel({ready, libraryId, libraries=[], libraryContext, c
   });
   const selectPhoneProfile = () => run(async () => {
     const snapshot = await call('nodeSelect', {id:''});
-    setNodes(snapshot.items || []); setActiveId(snapshot.activeId ?? null);
+    setNodes(snapshot.items || []); setDiscovered(snapshot.discovered||[]); setActiveId(snapshot.activeId ?? null);
   });
   const removeNode = id => {
     if (!window.confirm(t('从此手机移除此服务节点？服务端资料不会被删除。','Remove this server from the phone? Its server data will not be deleted.'))) return;
     run(async () => {
       const snapshot = await call('nodeRemove', {id});
-      setNodes(snapshot.items || []); setActiveId(snapshot.activeId ?? null);
+      setNodes(snapshot.items || []); setDiscovered(snapshot.discovered||[]); setActiveId(snapshot.activeId ?? null);
     });
   };
   const modelIsConfigured = Boolean(config?.configured);
@@ -220,13 +228,18 @@ export function SettingsPanel({ready, libraryId, libraries=[], libraryContext, c
       {activeId && <button className="chip local-profile" disabled={!ready || busy} onClick={selectPhoneProfile}>{t('仅使用手机人设','Use phone profile only')}</button>}
       {nodes.length > 0 ? <div className="node-list">{nodes.map(node => <article className="node-card" key={node.id}>
         <div className="settings-heading"><div><h3>{node.name}</h3><p className="secondary node-url">{node.baseUrl}</p></div>{node.refreshing && <span className="state-pill is-refreshing">{t('人设同步中','Syncing profile')}</span>}{!node.refreshing && activeId === node.id && <span className="state-pill is-ready">{t('当前节点','Active node')}</span>}</div>
-        <dl className="settings-details"><div><dt>{t('认证状态','Authentication')}</dt><dd>{node.authenticated ? t('上次核验已通过','Last check passed') : t('尚未核验通过','Not verified')}</dd></div><div><dt>{t('人设同步','Profile sync')}</dt><dd>{node.refreshing ? t('正在更新助手配置','Updating agent profile') : syncText(node.profileSyncStatus,t)}</dd></div>{node.profileUpdatedAt && <div><dt>{t('人设更新时间','Profile updated')}</dt><dd>{displayDate(node.profileUpdatedAt)}</dd></div>}{Number.isInteger(node.profileMemoryCount) && <div><dt>{t('记忆条目','Memory items')}</dt><dd>{node.profileMemoryCount} {t('条','items')}</dd></div>}{node.lastCheckedAt && <div><dt>{t('上次核验','Last checked')}</dt><dd>{displayDate(node.lastCheckedAt)}</dd></div>}</dl>
+        <dl className="settings-details"><div><dt>{t('连接状态','Connection')}</dt><dd>{nodeStatus(node,t)}</dd></div><div><dt>{t('认证状态','Authentication')}</dt><dd>{node.authenticated ? t('上次核验已通过','Last check passed') : t('尚未核验通过','Not verified')}</dd></div><div><dt>{t('人设同步','Profile sync')}</dt><dd>{node.refreshing ? t('正在更新助手配置','Updating agent profile') : syncText(node.profileSyncStatus,t)}</dd></div>{node.profileUpdatedAt && <div><dt>{t('人设更新时间','Profile updated')}</dt><dd>{displayDate(node.profileUpdatedAt)}</dd></div>}{Number.isInteger(node.profileMemoryCount) && <div><dt>{t('记忆条目','Memory items')}</dt><dd>{node.profileMemoryCount} {t('条','items')}</dd></div>}{node.lastCheckedAt && <div><dt>{t('上次核验','Last checked')}</dt><dd>{displayDate(node.lastCheckedAt)}</dd></div>}</dl>
+        {!node.fingerprint&&<p className="secondary">{t('此节点使用旧连接。扫描服务电脑的配对码后，可自动发现与切换地址。','Pair with the server to enable discovery and address switching.')}</p>}
+        {node.endpoints?.length>1&&<details><summary>{t('备用地址','Backup addresses')} · {node.endpoints.length-1}</summary>{node.endpoints.filter(url=>url!==node.baseUrl).map(url=><p className="node-url" key={url}>{url}</p>)}</details>}
+        <button className="chip" disabled={!ready||busy} onClick={()=>scanNode(node.id)}>{t(node.fingerprint?'重新配对':'扫码升级连接',node.fingerprint?'Pair again':'Pair secure connection')}</button>
         {node.profileRevision && <details><summary>{t('技术信息','Technical details')}</summary><p className="mono-value">{t('人设版本','Profile revision')}：{node.profileRevision}</p></details>}
         <div className="node-actions"><button className="chip" disabled={!ready || busy} onClick={() => checkNode(node.id)}>{t('检查连接','Check connection')}</button><button className="chip" disabled={!ready || busy} onClick={() => configureNode(node.id)}>{t('编辑登录','Edit sign-in')}</button>{activeId !== node.id && <button className="chip" disabled={!ready || busy} onClick={() => selectNode(node.id)}>{t('设为当前','Set active')}</button>}<button className="chip" disabled={!ready || busy} onClick={() => setAgentNode(node)}>{t('Agent 与记忆','Agent and memory')}</button><button className="text" disabled={!ready || busy} onClick={() => removeNode(node.id)}>{t('移除此节点','Remove this server')}</button></div>
         {nodeSync?.nodeId===node.id && <div className="sync-progress" role="status"><strong>{t('资料库同步','Library sync')} · {syncProgressText(nodeSync.state,t)}</strong>{nodeSync.phase&&<span>{syncPhaseText(nodeSync.phase,t)}</span>}{nodeSync.completed!=null&&<span>{nodeSync.total!=null?`${nodeSync.completed} / ${nodeSync.total}`:nodeSync.completed}</span>}{nodeSync.error&&<p>{nodeSync.error}</p>}{nodeSync.message&&<p>{nodeSync.message}</p>}</div>}
         <div className="settings-menu node-menu"><button className="management-row" disabled={!ready||busy} onClick={()=>setManagement({node,section:'plugins'})}><strong>{t('插件','Plugins')}</strong><span>{t('查看、安装与管理　›','View, install, and manage　›')}</span></button><button className="management-row" disabled={!ready||busy} onClick={()=>setManagement({node,section:'schedules'})}><strong>{t('自动化任务','Scheduled tasks')}</strong><span>{t('创建、编辑与查看执行历史　›','Create, edit, and review history　›')}</span></button><button className="management-row" disabled={!ready||busy} onClick={()=>setExternalNode(node)}><strong>{t('外部接入','External access')}</strong><span>{t('管理客户端凭据　›','Manage client credentials　›')}</span></button><button className="management-row" disabled={!ready||busy} onClick={()=>setRecoveryNode(node)}><strong>{t('初始化与恢复','Initialization and recovery')}</strong><span>{t('查看节点副本与分支恢复　›','Inspect replicas and recover branches　›')}</span></button></div>
       </article>)}</div> : <p className="empty-state">{t('还没有服务节点。添加并连接节点后，才能管理该节点的拾文助手与全局记忆。','No server is connected. Add one to manage its Shiwen agent and global memory.')}</p>}
-      <button className="primary" disabled={!ready || busy || !nativeAvailable} onClick={() => configureNode(null)}>{t('添加服务节点','Add server')}</button>
+      {discovered.length>0&&<p className="secondary">{t('发现局域网拾文入口','Discovered Shiwen endpoints')} · {discovered.length} {t('个，请扫描服务电脑的配对码确认身份。','— scan the server pairing code to verify its identity.')}</p>}
+      <button className="primary" disabled={!ready||busy||!nativeAvailable} onClick={()=>scanNode(null)}>{t('扫码连接服务','Scan to connect')}</button>
+      <button className="chip" disabled={!ready || busy || !nativeAvailable} onClick={() => configureNode(null)}>{t('添加服务节点','Add server')}</button>
     </section><LibraryReplicaPanel key={`${libraryId}:${registryGeneration}`} ready={ready} libraryId={libraryId} libraryContext={libraryContext} nodes={nodes} onLibraryChange={onLibraryChange} onPageStateChange={reportChildState}/></>}
     {settingsPage==='storage'&&<section className="settings-card storage-settings">
       <div className="settings-heading"><div><h2>{t('存储与资料库','Storage and library')}</h2><p className="secondary">{t('查看本机空间占用，管理当前资料库名称与临时分享缓存。','Review local storage, rename this library, and clear temporary share files.')}</p></div><button className="chip" disabled={!ready||busy} onClick={refreshStorage}>{t('刷新','Refresh')}</button></div>

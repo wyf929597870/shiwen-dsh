@@ -12,6 +12,12 @@
 
 服务只监听 `127.0.0.1`，不会向局域网或公网提供接口。凭据在拾文中仅保存哈希；可随时撤销。撤销会阻止已连接 MCP 客户端的后续调用。修改权限采用创建新凭据、撤销旧凭据的方式。
 
+日记（`kind: "journal"`）在同一资料库内按内容日期每天保留一篇。`shiwen_save` 的 `day` 指定补写日期；省略或为 `null` 时使用服务端当天日期。同一天再次保存会把新增正文追加到已有日记末尾，返回同一个记录 ID，插图和来源标记一并保留。重试必须沿用原 `requestId`，避免重复追加。修改整篇日记仍使用 `shiwen_update` 和最新 `revision`。
+
+手机首页也按此规则保存；离线新增在同步时与 MCP 的同日日记合并。已有重复日记在服务端打开资料库时归并，原记录、版本和附件保留在回收站中；手机独立资料库在打开列表时归并。同步资料库由服务端统一归并后下发。全文编辑冲突保留为待处理冲突，不覆盖另一端内容。日期未知的历史资料不会被擅自归到某一天。
+
+此规则需要更新服务端和 Android 客户端后生效；它约束当前日记记录，历史版本和回收站仍会保留恢复所需的数据。
+
 ## MCP 配置
 
 界面生成的配置包含实际安装位置和数据目录，优先直接复制。默认安装示例：
@@ -76,10 +82,10 @@ export SHIWEN_TOKEN_FILE="$HOME/.config/shiwen/workbuddy-token"
 
 | 权限 | 工具 |
 | --- | --- |
-| create | `shiwen_save`, `shiwen_collect` |
-| read | `shiwen_search`, `shiwen_read`, `shiwen_review`, `shiwen_image_read` |
-| update | `shiwen_update` |
-| delete | `shiwen_delete`, `shiwen_restore` |
+| create | `shiwen_save`, `shiwen_collect`, `shiwen_annotation_create` |
+| read | `shiwen_search`, `shiwen_read`, `shiwen_review`, `shiwen_image_read`, `shiwen_original_version`, `shiwen_annotation_list`, `shiwen_annotation_read` |
+| update | `shiwen_update`, `shiwen_correct_origin`, `shiwen_annotation_update` |
+| delete | `shiwen_delete`, `shiwen_restore`, `shiwen_annotation_delete`, `shiwen_annotation_restore` |
 
 拥有 create 或 update 权限的客户端还可使用图片暂存工具，具体用途分别要求 create 或 update 权限。拾文内部的会话读取、个人记忆和凭据管理不在外部接口中。
 
@@ -89,9 +95,15 @@ export SHIWEN_TOKEN_FILE="$HOME/.config/shiwen/workbuddy-token"
 
 CLI 可使用 `shiwen-bridge upload-image ./photo.png` 上传，命令输出附件 ID；为已有记录添加时使用 `--purpose update --record RECORD_ID`。上传文件由 CLI 读取，不依赖 `source.file`。读取凭据可通过 `shiwen_image_read` 分块获取记录所属图片。
 
-`shiwen_update` 要求最近读到的 `id` 和 `revision`，只更新提供的字段。正文替换前读完所有分页；内容变化时重新读取后决定如何处理。新增 AI 文字保留 AI 片段来源。`kind` 不自动改变 `origin`；只有用户明确纠正作者归属时才修改来源。素材与文章之间不能直接互改，创建文章并关联素材即可。
+`shiwen_update` 要求最近读到的 `id` 和 `revision`，只更新提供的字段。正文替换前读完所有分页；内容变化时重新读取后决定如何处理。普通更新不接收 `origin`；更正来源使用独立的 `shiwen_correct_origin`，同样要求最新版本和请求 ID。`kind` 不自动改变作者来源。AI 总结、分析和改写必须使用 `shiwen_annotation_create` 独立保存，不能拼入原文。素材与文章之间不能直接互改，创建文章并关联素材即可。
 
 `day` 为内容日期，未知时省略或传 null，不会用保存日期伪造内容日期。撤销删除使用删除响应中的 revision，并提供新的 requestId。纯分类、来源或日期修改不凭空增加写作字数。
+
+## 原文与 AI 标注
+
+先保存原文，再调用 `shiwen_original_version({id})` 获取 `recordId/versionId/contentHash`；用 `shiwen_annotation_create({requestId,originalId,originalVersionId,originalContentHash,title,body})` 保存标注。标注拥有独立 ID、版本和附件，原文后续编辑不会更新标注锚点。`shiwen_annotation_list` 默认只列未删除标注，`deleted:true` 列已删除标注；恢复使用标注自己的删除后 revision。父原文删除时隐藏其标注，恢复父原文不会复活被单独删除的标注。标注图片上传和普通图文使用相同的分块流程。
+
+独立 AI 文章仍以普通 `origin:ai` 文档保存。来源含义、同步兼容性及预览统计口径见 [原文与 AI 标注](original-annotations.md)。
 
 ## Skill 与出处
 

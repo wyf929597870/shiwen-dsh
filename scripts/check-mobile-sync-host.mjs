@@ -17,7 +17,7 @@ try{
     return {status:response.status,body,data:body.result?.data};
   };
   const call=async(action,request)=>{const result=await rpc(action,request);assert.equal(result.status,200,`${action}: ${JSON.stringify(result.body)}`);return result.data;};
-  const deviceId=randomUUID(),protocolVersion='1.0.0-draft.2';
+  const deviceId=randomUUID(),protocolVersion='1.0.0-draft.3';
   assert.equal((await rpc('identity',{deviceId,protocolVersion},false)).status,401);
   const identity=await call('identity',{deviceId,protocolVersion});
   const binding={libraryId:identity.libraryId,epoch:identity.epoch,deviceId};

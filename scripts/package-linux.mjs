@@ -5,6 +5,8 @@ import {dirname,join,resolve} from 'node:path';
 import {execFileSync} from 'node:child_process';
 
 const root=resolve(import.meta.dirname,'..');
+const outputIndex=process.argv.indexOf('--out-dir');
+const outputDirectory=outputIndex<0?join(root,'release'):resolve(process.argv[outputIndex+1]);
 const desktop=join(root,'upstream/dsh/apps/desktop');
 const target=join(desktop,'.desktop-build/targets/linux-x64');
 const stage=join(root,'.runtime/linux-package');
@@ -85,7 +87,7 @@ SHIWEN_SERVICE_RESOURCES="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 export SHIWEN_SERVICE_RESOURCES
 exec "$SHIWEN_SERVICE_RESOURCES/../runtime/primary-runtime/dependencies/node/bin/node" "$SHIWEN_SERVICE_RESOURCES/scripts/server.mjs" "$@"
 `,{mode:0o755});
-await collect(['diff','js-yaml','markdown-it','@modelcontextprotocol/server','zod'],join(root,'package.json'),join(shiwen,'node_modules'));
+await collect(['diff','js-yaml','markdown-it','@modelcontextprotocol/server','zod','selfsigned','bonjour-service','qrcode'],join(root,'package.json'),join(shiwen,'node_modules'));
 // hicolor themes discover standard size directories; the design source is 1254px.
 const icons=join(stage,'icons');await mkdir(icons,{recursive:true});
 const sharp=createRequire(join(desktop,'package.json'))('sharp');
@@ -94,7 +96,7 @@ for(const size of [16,24,32,48,64,128,256,512]){
 }
 const artifacts=await build({targets:Platform.LINUX.createTarget(process.argv.includes('--dir')?['dir']:['deb'],Arch.x64),publish:'never',config:{
  appId:'io.shiwen.dsh',productName:'拾文',executableName:'shiwen-dsh',
- directories:{app,output:join(root,'release')},electronVersion:'44.7.0',electronDist:join(root,'.runtime/electron-44.7.0'),
+ directories:{app,output:outputDirectory},electronVersion:'44.7.0',electronDist:join(root,'.runtime/electron-44.7.0'),
  npmRebuild:false,asar:true,electronFuses:{runAsNode:true},
  files:['**/*','!node_modules/**/*.map'],
  extraResources:[

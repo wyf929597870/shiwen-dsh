@@ -14,7 +14,7 @@ import {createMobileSyncAdapter} from '../../mobile/src/sync-adapter.mjs';
 export const inject=['connection','shiwenLibrary','sessionQuery','shiwenExternal'];
 const ownerMethods=new Set(['mobileAgentProfile','agentState','agentDocumentSave','memorySave','memoryDelete','memoryDecide',
   'externalStatus','externalClientCreate','externalClientRevoke','mobileManagement','mobileSync','mobileSessions',
-  'readImage','stageImage','discardStagedImages','workbenchDraft']);
+  'readImage','stageImage','discardStagedImages','workbenchDraft','originalVersionInfo','annotationList','annotationRead','annotationCreate','annotationUpdate','annotationDelete','annotationRestore','reviewPreview','correctRecordOrigin','exportDocumentBundle']);
 export function apply(ctx){
   const management=createManagementAdapter(ctx);
   const mobileSessions=createRemoteSessionsAdapter({ctx,library:ctx.shiwenLibrary});
@@ -78,6 +78,10 @@ export function apply(ctx){
         const operationId='message:'+createHash('sha256').update(sessionId+'\0'+messageId).digest('hex');
         const row=library.saveDsh({kind:'ai',body:source.body,origin:'ai',day:null,sessionId,messageId,role:'assistant',operationId});
         result={id:row.id,title:row.title};
+      }else if(method==='exportDocumentBundle'){
+        const {exportDocumentBundle}=await import('../../../integration/document-export.mjs');result=exportDocumentBundle(library,args);
+      }else if(method==='annotationRead'){
+        const row=library.annotationRead(args);result={...row,markdown:markdownSource(row.doc)};
       }else if(method==='readMarkdown'){
         const row=library.get(args.id);if(!row||row.deleted)throw new Error('记录不存在');
         result={...row,markdown:markdownSource(row.doc),dshSources:library.dshSources({id:row.id})};
@@ -97,7 +101,7 @@ export function apply(ctx){
         result=library.workbenchDraft(args);
       }else if(method==='saveMarkdown'){
         const requestPayload={id:args.id,revision:args.revision,kind:args.kind,title:args.title,body:args.body,stage:args.stage,sourceIds:args.sourceIds,imageIds:args.imageIds};
-        const replay=args.imageIds?.length?library.workbenchImageReceipt({requestId:args.requestId,requestPayload}):null;
+        const replay=args.requestId?library.workbenchImageReceipt({requestId:args.requestId,requestPayload}):null;
         if(replay)result=replay;
         else{
           const row=args.id?library.get(args.id):null;
@@ -106,10 +110,10 @@ export function apply(ctx){
           library.validateWorkbenchImages({id:args.id,body:args.body,imageIds:args.imageIds??[]});
           const doc=row?updateMarkdownDoc(row.doc,args.body,'personal',row.origin):plainDoc(args.body,'personal');
           const input={id:args.id,revision:args.revision,kind:args.kind,title:args.title,stage:args.stage,sourceIds:args.sourceIds,doc};
-          result=args.imageIds?.length?library.saveWorkbenchMarkdown(input,args.imageIds,args.requestId,requestPayload):library.save(input);
+          result=args.requestId||args.imageIds?.length?library.saveWorkbenchMarkdown(input,args.imageIds??[],args.requestId,requestPayload):library.save(input);
         }
       }else{
-        if(!['snapshot','review','draft','editingDraft','versions','restoreVersion','remove','restoreRemoved','updateRecord','importDate','recordDate','searchRecords','agentState','agentDocumentSave','memorySave','memoryDelete','memoryDecide'].includes(method))throw new Error('未知操作');
+        if(!['snapshot','review','draft','editingDraft','versions','restoreVersion','remove','restoreRemoved','updateRecord','importDate','recordDate','searchRecords','agentState','agentDocumentSave','memorySave','memoryDelete','memoryDecide','originalVersionInfo','annotationList','annotationCreate','annotationUpdate','annotationDelete','annotationRestore','reviewPreview','correctRecordOrigin'].includes(method))throw new Error('未知操作');
         result=library[method](args);
       }
       return Response.json({result},{headers:{'Cache-Control':'no-store'}});

@@ -14,11 +14,11 @@ import java.util.concurrent.Callable
 internal class LibraryReview(private val repo: LibraryRepository, private val clock: Clock = Clock.systemDefaultZone()) {
     private data class Snapshot(val records: List<LibraryRecord>,val versions: List<LibraryVersion>,
         val activities: List<LibraryActivity>,val provenance: List<LibraryProvenance>,val pending: Int)
-    fun read(period: String, month: String? = null): JSONObject {
+    fun read(period: String, month: String? = null, personalOnly: Boolean = false): JSONObject {
         val today=LocalDate.now(clock);val zone=clock.zone
         val from: LocalDate;val through: LocalDate
         if(period=="month") { require(month?.matches(Regex("\\d{4}-(0[1-9]|1[0-2])"))==true) { "INVALID_REVIEW_MONTH" }
-            val selected=YearMonth.parse(month);from=selected.atDay(1);through=selected.atEndOfMonth()
+            val selected=YearMonth.parse(month);from=selected.atDay(1);through=if(selected==YearMonth.from(today)) today else selected.atEndOfMonth()
         } else { require(period in setOf("1","7","14","30")) { "INVALID_REVIEW_PERIOD" };from=today.minusDays(period.toLong()-1);through=today }
         val data=repo.db.runInTransaction(Callable { Snapshot(repo.dao.allRecords(),repo.dao.allVersions(),repo.dao.allActivities(),repo.dao.allProvenance(),repo.dao.pendingOutbox(100_000).size) })
         val days=linkedMapOf<String,JSONObject>();var day=from
@@ -47,7 +47,7 @@ internal class LibraryReview(private val repo: LibraryRepository, private val cl
         for(activity in data.activities.distinctBy { it.activityId }){
             val activityDay=dayOf(activity.occurredAt)?:continue
             if(!inPeriod(activityDay))continue
-            if(activity.action!="write")continue
+            if(activity.action!="write" || recordsById[activity.recordId]?.kind == "ai_annotation" || personalOnly && activity.authorship != "personal")continue
             if(recordsById[activity.recordId]?.let { it.kind=="article"&&!it.deleted }==true)activeArticles.add(activity.recordId)
             // Legacy-derived activities are emitted once per origin. Modern activities
             // carry a complete mixed-source snapshot; their aggregate label can be unknown.
@@ -75,6 +75,26 @@ internal class LibraryReview(private val repo: LibraryRepository, private val cl
             .put("completeThrough",repo.registryItem().lastSyncedAt?:JSONObject.NULL).put("localPending",data.pending)
             .put("missingBaselines",missingBaselines).put("complexEdits",complexEdits)
     }
+    fun preview(period: String, month: String? = null): JSONObject = repo.db.runInTransaction(Callable {
+        val observed = read(period, month, personalOnly = true)
+        val start = observed.getString("start"); val end = observed.getString("end")
+        val originals = repo.dao.allRecords().filter { !it.deleted && it.kind != "ai_annotation" && it.origin == "personal" &&
+            it.contentDay != null && it.contentDay >= start && it.contentDay <= end }
+            .sortedWith(compareByDescending<LibraryRecord> { it.contentDay }.thenByDescending { it.createdAt }.thenByDescending { it.id })
+        val records = originals.map { JSONObject().put("id", it.id).put("title", it.title).put("kind", it.kind)
+            .put("contentDay", it.contentDay).put("characters", WritingDelta.count(it.markdown)) }
+        val stock = records.sumOf { it.getLong("characters") }
+        val daily = JSONArray(); var date = LocalDate.parse(start)
+        while (!date.isAfter(LocalDate.parse(end))) {
+            val rows = records.filter { it.getString("contentDay") == date.toString() }
+            daily.put(JSONObject().put("day", date.toString()).put("personalOriginalCharacters", rows.sumOf { it.getLong("characters") })
+                .put("personalOriginalRecords", rows.size)); date = date.plusDays(1)
+        }
+        val totals = observed.getJSONObject("totals")
+        JSONObject().put("personalOriginalCharacters", stock).put("observedEdits", JSONObject()
+            .put("added", totals.getLong("added")).put("removed", totals.getLong("removed")).put("net", totals.getLong("net")))
+            .put("start", start).put("end", end).put("records", JSONArray(records)).put("daily", daily)
+    })
     private fun join(values: JSONArray)=(0 until values.length()).joinToString(""){values.getJSONObject(it).getString("text")}
     private fun personal(values: JSONArray)=(0 until values.length()).map(values::getJSONObject).filter { it.optString("origin")=="personal" }.joinToString(""){it.getString("text")}
     private fun hash(markdown: String, sources: JSONArray)=Canonical.hash(mapOf("markdown" to markdown,"segments" to plain(sources)))

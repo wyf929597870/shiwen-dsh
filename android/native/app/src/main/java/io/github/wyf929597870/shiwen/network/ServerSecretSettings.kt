@@ -15,7 +15,7 @@ internal class ServerSecretSettings(private val store: NodeSettingsStore) {
         check(node.getString("configRevision") == configRevision) { "NODE_CHANGED" }
         check(node.optBoolean("authenticated")) { "NODE_AUTH_REQUIRED" }
         val cookies = node.optJSONArray("cookies") ?: JSONArray()
-        val client = NodeClient(url, node.optBoolean("allowPrivateHttp"), (0 until cookies.length()).map(cookies::getString)) { next ->
+        val client = NodeClient(url, node.optBoolean("allowPrivateHttp"), (0 until cookies.length()).map(cookies::getString), node.optString("fingerprint").takeIf { it.isNotEmpty() }, node.optString("token").takeIf { it.isNotEmpty() }) { next ->
             store.update(id, url, configRevision) { it.put("cookies", JSONArray(next)) }
         }
         try {

@@ -12,7 +12,7 @@
 
 可下载 **[Android 0.1.2](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.2)**、**[Linux 0.1.9](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.9)**、**[Windows 0.1.9 预览版](https://github.com/wyf929597870/shiwen-dsh/releases/tag/windows-v0.1.9)**，以及 [DSH 插件 0.2.0-dev.4](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.4)。项目采用 [MIT](LICENSE) 许可证。Android 0.1.2 修复正文图片重新渲染后持续显示加载中的问题；Windows 旧版已验证虚拟机安装与服务启停，新版完整图形界面仍待验收。macOS 未提供本项目安装包。
 
-**本次更新：** 改进 Android Markdown 显示，支持图片插入、系统分享、外部传入、跨库复制、同步和备份恢复。图片同步需要同步更新服务端；旧服务会提示升级，不会静默丢弃图片。
+**当前源码：** Linux 0.1.13 / Android 0.1.6。新增原文与 AI 标注分离、个人原文字数回顾、每日单份日记、节点发现与备用地址，并恢复桌面关闭到托盘设置。上述新版本目前仅本地构建，公开下载仍见上方已发布版本。同步协议有更新，请配套升级服务端与 Android；详见 [更新记录](CHANGELOG.md)、[原文与 AI 标注](docs/original-annotations.md) 和 [服务节点连接](docs/node-connectivity.md)。
 
 ## 为什么做拾文
 
@@ -37,7 +37,7 @@
 | 随手留下记录 | 保存日记、想法、自由书写和参考资料，支持 Markdown 编辑、可读预览和库内图片 |
 | 和 AI 一起思考 | 使用 DSH 原生对话；从资料详情进入讨论，讨论中的 AI 内容也可保存为素材 |
 | 整理已有资料 | 按类型筛选、搜索正文；Agent 可修改类型、作者来源、日期和内容，以及删除、恢复资料 |
-| 回顾一段时间 | 按当日、近 7/14/30 天或自然月查看资料与写作统计；让 Agent 检索并阅读对应记录 |
+| 回顾一段时间 | 按内容日期查看个人原文字数、趋势与明细，包含 MCP 归档原文；实际编辑增减单独显示 |
 | 从素材写成文章 | 创建文章、关联素材，获得发布前检查提示 |
 | 接入其他 Agent | 通过 MCP、HTTP API、CLI 和配套 Skill 保存、查询和管理资料 |
 
@@ -76,7 +76,7 @@ npm run start:web -- --no-open
 
 [Web 安装、数据目录与验收范围](docs/web-plugin.md) · [插件配置](bundle/README.md)
 
-### PC 客户端与独立服务（v0.1.9）
+### PC 客户端与独立服务
 
 Linux 安装包同时包含客户端、独立服务与 Node 运行环境，无需额外安装 Node。资料保存在**运行服务的电脑**上：本机模式使用这台电脑的资料库，远端模式访问另一台电脑的资料库，不会自动复制或合并资料。
 
@@ -84,6 +84,8 @@ Linux 安装包同时包含客户端、独立服务与 Node 运行环境，无�
 | --- | --- |
 | 本机服务 | 已运行就连接，未运行则自动启动；退出时选择保留服务、停止服务或取消 |
 | 局域网 / 其他电脑 | 输入服务地址和访问密码；退出只关闭客户端，不停止远端服务 |
+
+在 **拾文菜单 → 连接与桌面设置** 中选择点击窗口关闭按钮时“关闭到托盘”或“退出应用”，选择后立即保存。菜单和托盘中的“退出”始终执行退出流程；本机模式仍提示是否停止服务节点。
 
 **首次使用：**
 
@@ -99,7 +101,7 @@ Linux 安装包同时包含客户端、独立服务与 Node 运行环境，无�
 ```bash
 npm run package:linux
 # 退出客户端并停止旧服务后安装
-sudo apt install ./release/shiwen-dsh_0.1.9_amd64.deb
+sudo apt install ./release/shiwen-dsh_0.1.13_amd64.deb
 ```
 
 源码启动的服务可在同一数据根目录下执行 `npm run server:stop` 停止；安装包也提供无需系统 Node 的管理命令，见 [独立服务说明](docs/server.md)。升级后重新启动本机服务。无需自行构建时，可直接下载下方的 v0.1.9 安装包。

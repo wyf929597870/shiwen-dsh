@@ -56,7 +56,7 @@ test('备份恢复保留 DSH 来源；旧版备份仍可导入',t=>{
   const dir=mkdtempSync(join(tmpdir(),'shiwen-dsh-backup-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));
   const source=createStore(join(dir,'source.sqlite')),target=createStore(join(dir,'target.sqlite'));t.after(()=>{source.close();target.close();});
   const saved=source.saveDsh({kind:'idea',body:'历史消息',origin:'personal',day:null,sessionId:'s',messageId:'m',role:'user',operationId:'dsh:a'});
-  const backup=source.exportBackup();assert.equal(JSON.parse(backup).payload.schema,13);
+  const backup=source.exportBackup();assert.equal(JSON.parse(backup).payload.schema,15);
   target.restoreBackup(backup);assert.equal(target.get(saved.id).body,'历史消息');assert.equal(target.dshSources({id:saved.id})[0].message_id,'m');
 });
 

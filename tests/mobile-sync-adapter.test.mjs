@@ -13,7 +13,7 @@ test('near-limit Unicode bootstrap record is referenced and range-download verif
   const library=createStore(join(dir,'library.sqlite'));library.paths={library:dir};t.after(()=>library.close());
   const adapter=createMobileSyncAdapter({ctx:{connection:{browserPeer:{id:'owner'}}},library});t.after(()=>adapter.close());
   const saved=library.save({kind:'journal',title:'大正文',body:'中'.repeat(800_000)}),deviceId=randomUUID();
-  const identity=adapter.identity({protocolVersion:'1.0.0-draft.2',deviceId});
+  const identity=adapter.identity({protocolVersion:'1.0.0-draft.3',deviceId});
   const begun=await adapter.execute('bootstrapBegin',{libraryId:identity.libraryId,epoch:identity.epoch,deviceId});
   const page=await adapter.execute('bootstrapPage',{libraryId:identity.libraryId,epoch:identity.epoch,deviceId,snapshotId:begun.snapshotId,entityType:'records',limit:1});
   assert.ok(page.items[0].payloadRef);assert.ok(page.items[0].byteLength>512*1024);
@@ -37,7 +37,7 @@ test('attachment upload is chunked, idempotent and downloadable with a verified 
   const dir=mkdtempSync(join(tmpdir(),'shiwen-sync-blob-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));
   const library=createStore(join(dir,'library.sqlite'));library.paths={library:dir};t.after(()=>library.close());
   const adapter=createMobileSyncAdapter({ctx:{connection:{browserPeer:{id:'owner'}}},library});t.after(()=>adapter.close());
-  const record=library.save({kind:'reference',body:'资料'}),deviceId=randomUUID(),identity=adapter.identity({protocolVersion:'1.0.0-draft.2',deviceId});
+  const record=library.save({kind:'reference',body:'资料'}),deviceId=randomUUID(),identity=adapter.identity({protocolVersion:'1.0.0-draft.3',deviceId});
   const bytes=Buffer.from('原始文件内容🌿'),attachmentId=randomUUID(),digest=sha256(bytes);
   const base={libraryId:identity.libraryId,epoch:identity.epoch,deviceId};
   const begin=await adapter.execute('blobBegin',{...base,recordId:record.id,attachmentId,name:'原件.md',byteLength:bytes.length,digest});
@@ -52,7 +52,7 @@ test('setup can stage a large entity through authenticated payload chunks',async
   const dir=mkdtempSync(join(tmpdir(),'shiwen-sync-setup-payload-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));
   const source=createStore(join(dir,'source.sqlite')),target=createStore(join(dir,'target.sqlite'));source.paths={library:join(dir,'source')};target.paths={library:join(dir,'target')};t.after(()=>{source.close();target.close();});
   const sourceAdapter=createMobileSyncAdapter({ctx:{connection:{browserPeer:{id:'owner'}}},library:source}),targetAdapter=createMobileSyncAdapter({ctx:{connection:{browserPeer:{id:'owner'}}},library:target});t.after(()=>{sourceAdapter.close();targetAdapter.close();});
-  source.save({kind:'journal',title:'large',body:'中'.repeat(800_000)});const deviceId=randomUUID(),sourceIdentity=sourceAdapter.identity({protocolVersion:'1.0.0-draft.2',deviceId}),targetIdentity=targetAdapter.identity({protocolVersion:'1.0.0-draft.2',deviceId});
+  source.save({kind:'journal',title:'large',body:'中'.repeat(800_000)});const deviceId=randomUUID(),sourceIdentity=sourceAdapter.identity({protocolVersion:'1.0.0-draft.3',deviceId}),targetIdentity=targetAdapter.identity({protocolVersion:'1.0.0-draft.3',deviceId});
   const snapshot=source.mobileSync().bootstrapBegin({libraryId:sourceIdentity.libraryId,epoch:sourceIdentity.epoch,deviceId}),page=source.mobileSync().bootstrapPage({snapshotId:snapshot.snapshotId,entityType:'records',limit:1}),item=page.items[0],bytes=Buffer.from(canonicalJSON(item));
   assert.ok(bytes.length>512*1024);const setupId=randomUUID(),base={setupId,targetLibraryId:targetIdentity.libraryId,fencingToken:1};
   const setup=await targetAdapter.execute('setupBegin',{setupId,mode:'initialize',libraryId:sourceIdentity.libraryId,sourceEpoch:sourceIdentity.epoch,manifestDigest:snapshot.manifest.manifestDigest,manifest:snapshot.manifest,expectedLibraryId:targetIdentity.libraryId,expectedEpoch:targetIdentity.epoch,targetGeneration:targetIdentity.targetGeneration});

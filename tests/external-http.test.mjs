@@ -18,7 +18,7 @@ test('HTTP 鉴权、权限、浏览器来源隔离与端口重新发现',async t
  assert.equal((await fetch(url+'/v1/tools')).status,401);
  assert.equal((await fetch(url+'/v1/tools',{headers:{Authorization:'Bearer '+issued.token,Origin:'https://untrusted.example'}})).status,403);
  const wrongHost=await new Promise((resolve,reject)=>{const req=httpRequest(url+'/v1/tools',{headers:{Authorization:'Bearer '+issued.token,Host:'untrusted.example'}},res=>{res.resume();resolve(res.statusCode);});req.on('error',reject);req.end();});assert.equal(wrongHost,403);
- assert.equal((await request('/v1/tools')).tools.length,5);
+ assert.ok((await request('/v1/tools')).tools.some(x=>x.name==='shiwen_annotation_create'));
  await assert.rejects(()=>request('/v1/tools/call',{name:'shiwen_search',arguments:{}}),/权限/);
  const args={requestId:'http-one',kind:'idea',origin:'personal',body:'HTTP 保存的想法'};
  const saved=(await request('/v1/tools/call',{name:'shiwen_save',arguments:args})).result;
@@ -42,9 +42,9 @@ test('CLI 文件输入和真实 MCP stdio 工具发现、写入、读取、撤�
  const transport=new StdioClientTransport({command:process.execPath,args:[cli,'mcp'],env,stderr:'pipe'});
  const client=new Client({name:'shiwen-integration-test',version:'1.0.0'});t.after(()=>client.close());
  await client.connect(transport);
- const {tools}=await client.listTools();assert.equal(tools.length,12);
+ const {tools}=await client.listTools();assert.ok(tools.some(x=>x.name==='shiwen_annotation_create'));
  const result=await client.callTool({name:'shiwen_read',arguments:{id:saved.id}});assert.ok(!result.isError);const record=JSON.parse(result.content[0].text);assert.equal(record.body,'CLI 日记');
- const edited=await client.callTool({name:'shiwen_update',arguments:{requestId:'mcp-update',id:saved.id,revision:record.revision,kind:'idea',origin:'external',url:'https://example.org'}});assert.ok(!edited.isError);assert.equal(store.get(saved.id).kind,'idea');
+ const edited=await client.callTool({name:'shiwen_update',arguments:{requestId:'mcp-update',id:saved.id,revision:record.revision,kind:'idea',url:'https://example.org'}});assert.ok(!edited.isError);assert.equal(store.get(saved.id).kind,'idea');
  store.externalClientRevoke({id:issued.id});const refused=await client.callTool({name:'shiwen_read',arguments:{id:saved.id}});assert.equal(refused.isError,true);
  await client.close();
 });

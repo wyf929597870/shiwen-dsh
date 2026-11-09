@@ -12,7 +12,7 @@ Shiwen is a personal AI workspace built on [DeepSeek Harness (DSH)](https://gith
 
 Downloads: **[Android 0.1.2](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.2)**, **[Linux 0.1.9](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.9)**, **[Windows 0.1.9 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/windows-v0.1.9)** and [DSH plugin 0.2.0-dev.4](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.4). Licensed under [MIT](LICENSE). Android 0.1.2 fixes inline images reverting to a loading placeholder after the view rerenders. Windows installation and service lifecycle were checked for the previous version; full GUI validation of the new version remains outstanding. No project macOS installer is provided.
 
-**This update:** Android Markdown rendering now supports inline images, image sharing, external ingestion, cross-library copying, synchronization and backups. Image synchronization requires an updated service; older services report that an upgrade is needed rather than silently dropping images.
+**Current source:** Linux 0.1.13 / Android 0.1.6 adds separate originals and AI annotations, original-character review, one diary per day, service discovery and alternative addresses, and a desktop close-to-tray preference. These versions have only been built locally; public downloads remain the published versions above. Upgrade the service and Android together for the updated sync protocol. See the [changelog](CHANGELOG.md), [originals and annotations](docs/original-annotations.md), and [node connectivity](docs/node-connectivity.md).
 
 ## Why Shiwen
 
@@ -59,6 +59,9 @@ These are example requests; results depend on your material, model and tool conf
 
 ## Getting started
 
+Under **Shiwen menu → Connection and desktop settings**, choose whether closing the window hides it to the tray or quits. Explicit Quit retains the local-service keep, stop or cancel prompt.
+
+
 ### Web plugin preview
 
 With **DSH 0.2.2-alpha.3 / Node.js >=24.9**, download the **[prebuilt plugin (.tgz)](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.2.0-dev.4/dsh-shiwen-0.2.0-dev.4.tgz)** without cloning this repository. See the [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.4) for installation, checksums and limitations.
@@ -97,7 +100,7 @@ Under **Settings → Shiwen data → Manage password and devices**, change the p
 ```bash
 npm run package:linux
 # Quit the client and stop the old service before installing
-sudo apt install ./release/shiwen-dsh_0.1.9_amd64.deb
+sudo apt install ./release/shiwen-dsh_0.1.13_amd64.deb
 ```
 
 For a service launched from source, use `npm run server:stop` with the same data root. The package also includes management commands that need no system Node; see the [standalone service guide](docs/server.md). Restart the local service after upgrading. To use a prebuilt package, download the v0.1.9 installer below.

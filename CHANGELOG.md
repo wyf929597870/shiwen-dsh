@@ -3,6 +3,30 @@
 0.1.4 是本仓库首次公开的 Linux 预览版；0.1.0–0.1.3 为本地开发与打包记录。
 0.1.4 is this repository's first public Linux preview; 0.1.0–0.1.3 are local development builds.
 
+## 未发布 / Unreleased — Linux 0.1.13 · Android 0.1.6
+
+### 中文
+
+- 原文与 AI 标注独立保存、编辑、同步和导出，标注关联不可变原文版本；MCP 与配套 Skill 区分作者来源和保存渠道，作者归属通过专用接口纠正。
+- 回顾主卡片、每日趋势与明细统一按内容日期统计当前个人原文字数，包含 MCP 保存的个人原文；编辑增减单独显示，独立 AI 标注不计入个人原文。
+- 同一天新增日记追加到同一份记录，改进跨端同步、版本与附件保留、恢复和重试。
+- 服务节点增加身份校验、备用地址、局域网发现及连通性监测；手机顶部显示当前节点状态，改进多网卡连接和离线恢复。
+- Web/桌面创作支持阅读素材后加入文章、引用插入及更宽的编辑区域；AI 标注支持收起按钮、标题切换及 Esc 关闭。
+- 桌面设置增加关闭到托盘或退出应用。真正退出时保留“保留服务并退出 / 停止服务并退出 / 取消”，设置持久化且不需要重新连接。
+- 同步协议升级到 `1.0.0-draft.3`，服务端和 Android 需配套更新；旧协议不会静默写入新结构。本次不自动整理或改写历史资料。
+- Linux 和 Android 已本地构建；桌面成品交互、隔离浏览器及 JVM 测试通过，Android 仪器测试已编译。本轮 Android 真机覆盖安装尚未验收，尚未创建对应 GitHub Release。
+
+### English
+
+- Store, edit, synchronize and export originals and AI annotations independently, with immutable original-version anchors. MCP and its Skill distinguish authorship from the saving client; a dedicated operation corrects attribution.
+- Review cards, daily trends and details count current personal originals by content date, including personal text archived through MCP. Show observed edits separately and exclude independent AI annotations.
+- Append new diary entries to one record per day, with improved cross-device synchronization, version and attachment preservation, recovery and retries.
+- Add service identity checks, alternative addresses, LAN discovery and reachability monitoring, including mobile header status and improved multi-adapter connections.
+- Let Web/desktop writers read material before selecting or quoting it. Add annotation collapse buttons, title toggling and Escape support.
+- Restore the desktop close-to-tray versus quit preference. Explicit quit retains keep-service, stop-service and cancel choices; preferences persist without reconnecting.
+- Synchronization now uses `1.0.0-draft.3`; upgrade the service and Android together. Legacy protocols do not silently write the new format. Historical content is not automatically reorganized.
+- Linux and Android packages were built locally. Packaged desktop, isolated browser and JVM checks passed; Android instrumentation compiled. This round has not completed Android device upgrade acceptance or published a GitHub Release.
+
 ## android-v0.1.2 - 2026-11-08
 
 - 修复安卓正文在重新渲染后，已同步的图片重新显示“图片加载中”的问题。

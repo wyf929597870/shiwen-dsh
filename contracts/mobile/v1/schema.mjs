@@ -1,7 +1,7 @@
 import {z} from 'zod';
 
 // P0 contracts. These are not advertised by the running desktop service yet.
-export const protocolVersion = '1.0.0-draft.2';
+export const protocolVersion = '1.0.0-draft.3';
 export const limits = Object.freeze({maxBodyCodeUnits: 1_000_000, maxBatchOperations: 100,
   maxRequestBytes: 4 * 1024 ** 2, maxInlineBytes: 512 * 1024, maxPartBytes: 1024 ** 2,
   maxCanonicalOperationBytes: 64 * 1024 ** 2});
@@ -20,9 +20,10 @@ const origin = z.enum(['personal', 'external', 'ai', 'translation', 'unknown']);
 export const segment = object({text: z.string().max(limits.maxBodyCodeUnits), origin,
   sourceRef: z.string().max(2048).optional()});
 const segments = z.array(segment).max(100_000);
+const annotationOf = object({recordId:id,versionId:uuid,contentHash:digest});
 export const record = object({
-  id, kind: z.enum(['journal', 'freewrite', 'idea', 'web', 'ai', 'reference', 'article']),
-  title: z.string().max(200), markdown: z.string().max(limits.maxBodyCodeUnits), origin,
+  id, kind: z.enum(['journal', 'freewrite', 'idea', 'web', 'ai', 'reference', 'article', 'ai_annotation']),
+  annotationOf: annotationOf.optional(), title: z.string().max(200), markdown: z.string().max(limits.maxBodyCodeUnits), origin,
   processing: z.enum(['original', 'formatting', 'ai-organized', 'translation', 'unknown']),
   contentDay: z.iso.date().nullable(), dateBasis: z.string().max(200),
   url: z.union([z.literal(''), z.url({protocol: /^https?$/}).max(2048)]),
@@ -33,7 +34,7 @@ export const record = object({
   createdAt: dateTime, updatedAt: dateTime, deleted: z.boolean(), createdByDevice: uuid.nullable(),
 });
 export const version = object({id:uuid,recordId:id,revision:integer.min(1),markdown:z.string().max(limits.maxBodyCodeUnits),
-  doc:z.record(z.string(),z.unknown()),sources:segments,parentVersionIds:z.array(uuid).max(1000),title:z.string().max(200),
+  doc:z.record(z.string(),z.unknown()),annotationOf:annotationOf.optional(),journalInput:record.optional(),sources:segments,parentVersionIds:z.array(uuid).max(1000),title:z.string().max(200),
   createdAt:dateTime,reason:z.string().max(100)});
 export const activity = object({activityId: uuid, recordId:id.optional(), changeId:uuid.nullable().optional(), originDeviceId: uuid.nullable(),
   occurredAt: dateTime, timeZone: z.string().min(1).max(100), beforeHash: digest, afterHash: digest,
@@ -78,6 +79,7 @@ export function parseOperation(input) {
   const result = operation.safeParse(input);
   if (!result.success) fail('VALIDATION_ERROR', {issues: result.error.issues});
   const op = result.data;
+  if ((op.payload.kind==='ai_annotation') !== Boolean(op.payload.annotationOf) || op.payload.kind==='ai_annotation' && op.payload.origin!=='ai') fail('VALIDATION_ERROR', {field:'annotationOf'});
   if (op.recordId !== op.payload.id || op.payload.sources.map(s => s.text).join('') !== op.payload.markdown)
     fail('VALIDATION_ERROR', {field: 'sources'});
   if ((op.action === 'create') !== (op.baseRevision === null && op.baseVersionId === null)

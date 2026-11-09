@@ -98,7 +98,7 @@ class LibraryRecoveryHostTest {
             assertEquals(continued.markdown, remoteRecord(nodes, nodeId, configRevision, libraryId,
                 checkNotNull(manager.row(libraryId).epoch), deviceId, first.id).getString("markdown"))
 
-            val identity = NodeConnection(nodes).mobileSync(nodeId,"identity",JSONObject().put("protocolVersion","1.0.0-draft.2")
+            val identity = NodeConnection(nodes).mobileSync(nodeId,"identity",JSONObject().put("protocolVersion","1.0.0-draft.3")
                 .put("deviceId",deviceId),configRevision).getJSONObject("data")
             assertEquals(libraryId,identity.getString("libraryId"))
 
@@ -144,7 +144,7 @@ class LibraryRecoveryHostTest {
                 assertEquals(6, repo.dao.allActivities().size)
                 assertEquals(0, replica.dao.pendingOutbox(100).size)
                 val rebuiltIdentity = NodeConnection(nodes).mobileSync(nodeId, "identity",
-                    JSONObject().put("protocolVersion", "1.0.0-draft.2").put("deviceId", deviceId), configRevision)
+                    JSONObject().put("protocolVersion", "1.0.0-draft.3").put("deviceId", deviceId), configRevision)
                     .getJSONObject("data")
                 assertEquals(libraryId, rebuiltIdentity.getString("libraryId"))
             } finally {

@@ -99,7 +99,7 @@ class LibrarySyncHostTest {
             val remoteDevice = UUID.randomUUID().toString()
             val revision = nodes.get(nodeId).getString("configRevision")
             fun remote(action:String,body:JSONObject) = connection.mobileSync(nodeId,action,body,revision).getJSONObject("data")
-            remote("identity",JSONObject().put("protocolVersion","1.0.0-draft.2").put("deviceId",remoteDevice))
+            remote("identity",JSONObject().put("protocolVersion","1.0.0-draft.3").put("deviceId",remoteDevice))
             val remoteText = "服务端并发编辑"
             val remoteSources = JSONArray().put(JSONObject().put("text",remoteText).put("origin","personal"))
             val remotePayload = JSONObject(remoteHead.recordJson).apply {

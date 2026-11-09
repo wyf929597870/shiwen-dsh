@@ -3,3 +3,7 @@
 #remote>label{display:block;margin-top:10px}
 
 .brand small{font-size:12px;font-weight:400;color:#a2aba8;margin-left:8px}
+
+#lanHost{min-width:0;max-width:290px;background:#252b30;border:1px solid #4b5557;border-radius:6px;color:inherit;font:inherit;padding:9px}#lanHost:focus-visible{outline:2px solid #8bd7bf;outline-offset:3px}
+
+.desktop-settings{border-bottom:1px solid #414a4c;padding:6px 0 14px;margin:12px 0}.desktop-settings h2{font-size:17px}.desktop-settings label{display:block;margin-bottom:6px}#closeAction{width:100%;background:#252b30;border:1px solid #4b5557;border-radius:6px;color:inherit;font:inherit;padding:9px}#closeAction:focus-visible{outline:2px solid #8bd7bf;outline-offset:3px}

@@ -47,6 +47,22 @@ class NodeSettingsStoreTest {
             assertNull(restored.selectedProfile()); assertEquals(1, restored.list().getJSONArray("items").length())
         } finally { store.clearForTest() }
     }
+    @Test fun pairedAddressChangesKeepBindingAndRejectStaleHealthResults() {
+        val store = NodeSettingsStore(ApplicationProvider.getApplicationContext(), "node-test-${UUID.randomUUID()}")
+        try {
+            val legacy = store.save(null, "电脑", "http://127.0.0.1:3080/", true)
+            val id = legacy.getString("id"); val revision = legacy.getString("configRevision")
+            val paired = store.paired(id, "电脑", "a".repeat(64), listOf("https://127.0.0.1:3081/"), "t".repeat(43))
+            assertEquals(revision, paired.getString("configRevision"))
+            val generation = paired.getLong("connectionGeneration")
+            val updated = store.save(id, "电脑改名", "https://127.0.0.2:3081/", false)
+            assertEquals(revision, updated.getString("configRevision"))
+            assertEquals("t".repeat(43), updated.getString("token"))
+            assertEquals("NODE_CHANGED", runCatching { store.connection(id, revision, generation) { it.put("connectionState", "online") } }.exceptionOrNull()?.message)
+            assertFalse(store.list().toString().contains("t".repeat(43)))
+            assertEquals("NODE_IDENTITY_MISMATCH", runCatching { store.paired(id, "另一台", "b".repeat(64), listOf("https://127.0.0.2:3081/"), "s".repeat(43)) }.exceptionOrNull()?.message)
+        } finally { store.clearForTest() }
+    }
     @Test fun localModeAndProfileValidationFailClosed() {
         val store = NodeSettingsStore(ApplicationProvider.getApplicationContext(), "node-test-${UUID.randomUUID()}")
         try {

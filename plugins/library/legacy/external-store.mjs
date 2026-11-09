@@ -23,6 +23,7 @@ export function imageType(bytes){
 }
 export class AccessError extends Error{constructor(message,status=403){super(message);this.status=status;}}
 export const recordSummary=row=>({id:row.id,revision:row.revision,title:row.title,kind:row.kind,origin:row.origin,day:row.importInfo?row.importInfo.day:row.dateInfo?row.dateInfo.day:dateKey(row.created),url:row.url,annotation:row.annotation,stage:row.stage,sourceIds:row.sourceIds});
+const recordSummaryWithAnchor=row=>({...recordSummary(row),...(row.annotationOf?{annotationOf:row.annotationOf}:{})});
 export function externalStore(db,api){
  const active=id=>{const row=db.prepare('SELECT * FROM external_clients WHERE id=? AND revoked IS NULL').get(id);if(!row)throw new AccessError('凭据无效或已撤销',401);return {...row,scopes:JSON.parse(row.scopes)};};
  return {
@@ -74,8 +75,12 @@ export function externalStore(db,api){
    })();
    const read=()=>{
     if(name==='shiwen_search')return api.searchRecords({...args,limit:20});
+    if(name==='shiwen_original_version')return api.originalVersionInfo(args);
+    if(name==='shiwen_annotation_list')return api.annotationList(args).map(recordSummaryWithAnchor);
     if(name==='shiwen_review'){const r=api.review(args);return {start:r.start,end:r.end,totals:r.totals,daily:r.daily,undated:r.undated};}
     const row=api.get(args.id);if(!row||row.deleted)throw new AccessError('记录不存在',404);
+    if(name==='shiwen_annotation_read'&&row.kind!=='ai_annotation')throw new AccessError('批注不存在',404);
+    if(name==='shiwen_read'&&row.kind==='ai_annotation')throw new AccessError('请使用批注读取工具',400);
     if(name==='shiwen_image_read'){
      const attachment=api.attachment({id:args.attachmentId});if(!attachment||attachment.record!==row.id)throw new AccessError('附件不存在',404);
      const bytes=Buffer.from(attachment.data,'base64');imageType(bytes);const offset=args.offset??0;if(offset>bytes.length)throw Error('读取偏移无效');
@@ -83,14 +88,15 @@ export function externalStore(db,api){
     }
     if(args.revision!==undefined&&args.revision!==row.revision)throw new AccessError('内容已更新，请重新读取',409);
     const body=markdownSource(row.doc),offset=args.offset??0;
-    return {...recordSummary(row),format:'markdown',body:body.slice(offset,offset+6000),totalLength:body.length,nextOffset:body.length>offset+6000?offset+6000:null,attachments:api.attachments({record:row.id}),contentOrigins:Object.entries(readDoc(row.doc,row.origin).groups).filter(([,text])=>text.trim()).map(([origin])=>origin),externalSources:row.externalSources};
+    return {...recordSummaryWithAnchor(row),format:'markdown',body:body.slice(offset,offset+6000),totalLength:body.length,nextOffset:body.length>offset+6000?offset+6000:null,attachments:api.attachments({record:row.id}),contentOrigins:Object.entries(readDoc(row.doc,row.origin).groups).filter(([,text])=>text.trim()).map(([origin])=>origin),externalSources:row.externalSources};
    };
    if(definition.permission==='read'){const result=read();db.prepare('UPDATE external_clients SET last_used=? WHERE id=?').run(now(),client.id);return result;}
    return db.transaction(()=>{
     const fingerprint=hash(JSON.stringify([name,args]));
     const previous=db.prepare('SELECT fingerprint,result FROM external_requests WHERE client_id=? AND request_id=?').get(client.id,args.requestId);
     if(previous){if(previous.fingerprint!==fingerprint)throw new AccessError('requestId 已用于不同请求，请使用新的 ID',409);return JSON.parse(previous.result);}
-    const {requestId,source,imageIds:uploads=[],...fields}=args;let result;
+    const {requestId,source,imageIds:uploads=[],...fields}=args;const operationId=hash(JSON.stringify([client.id,requestId]));let result;
+    if(['shiwen_update','shiwen_delete','shiwen_restore','shiwen_correct_origin'].includes(name)){const row=api.get(fields.id);if(row?.kind==='ai_annotation')throw new AccessError('请使用批注操作',400);}
     if(new Set(uploads).size!==uploads.length)throw Error('图片引用重复');
     if(typeof fields.body==='string'&&['create','update'].includes(definition.permission)){
      const references=attachmentImageIds(fields.body),current=definition.permission==='update'?api.get(fields.id):null;
@@ -109,13 +115,17 @@ export function externalStore(db,api){
      return {item,bytes};
     });
     const attach=record=>{for(const {item,bytes} of staged){db.prepare('INSERT INTO attachments VALUES(?,?,?,?,?)').run(item.id,record.id,item.name,bytes.toString('base64'),now());db.prepare('DELETE FROM external_image_parts WHERE upload_id=?').run(item.id);db.prepare('DELETE FROM external_image_uploads WHERE id=?').run(item.id);}};
-    if(definition.permission==='create'){
+    if(name==='shiwen_annotation_create'){const row=api.annotationCreate({...fields,requestId:operationId},{beforeSync:attach});result={saved:true,...recordSummaryWithAnchor(row)};
+    }else if(name==='shiwen_annotation_update'){const row=api.annotationUpdate({...fields,requestId:operationId},{beforeSync:attach});result={updated:true,...recordSummaryWithAnchor(row)};
+    }else if(name==='shiwen_annotation_delete'){const row=api.annotationDelete({...fields,requestId:operationId});result={deleted:true,...recordSummaryWithAnchor(row)};
+    }else if(name==='shiwen_annotation_restore'){const row=api.annotationRestore({...fields,requestId:operationId});result={restored:true,...recordSummaryWithAnchor(row)};
+    }else if(name==='shiwen_correct_origin'){const row=api.correctRecordOrigin({...fields,requestId:operationId});result={updated:true,...recordSummary(row)};
+    }else if(definition.permission==='create'){
      const content=name==='shiwen_collect'?{...fields,kind:'web',origin:'external'}:fields;
      const day=content.day??null;if(day!==null&&validDay(day)!==day)throw Error('请输入有效内容日期');
-     const row=api.save({...content,reason:'外部客户端保存'},{inTransaction:true,archive:true,beforeSync:attach});
-     db.prepare('INSERT INTO record_dates(record,day,basis) VALUES(?,?,?)').run(row.id,day,'外部客户端提供的内容日期');
+     const row=api.save({...content,reason:'外部客户端保存'},{inTransaction:true,archive:true,beforeSync:record=>{attach(record);if(content.kind!=='journal')db.prepare('INSERT INTO record_dates(record,day,basis) VALUES(?,?,?)').run(record.id,day,'外部客户端提供的内容日期');}});
      result={saved:true,...recordSummary(api.get(row.id))};
-    }else if(name==='shiwen_update')result={updated:true,...recordSummary(api.updateRecord(fields,{addedOrigin:'ai',beforeSync:attach}))};
+    }else if(name==='shiwen_update')result={updated:true,...recordSummary(api.updateRecord(fields,{beforeSync:attach}))};
     else if(name==='shiwen_delete')result={deleted:true,...api.remove(fields)};
     else result={restored:true,...api.restoreRemoved(fields)};
     db.prepare('INSERT INTO external_sources VALUES(?,?,?,?,?,?,?,?,?)').run(randomUUID(),result.id,client.id,identity.name,name,source?.sessionId??'',source?.messageId??'',source?.file??'',now());

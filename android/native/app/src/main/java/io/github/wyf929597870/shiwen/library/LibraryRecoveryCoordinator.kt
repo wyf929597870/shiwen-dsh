@@ -192,9 +192,26 @@ internal class LibraryRecoveryCoordinator(context: Context, private val manager:
                 .getJSONArray("receipts")
             for (index in 0 until receipts.length()) {
                 val receipt = receipts.getJSONObject(index)
-                if (receipt.optString("status") == "applied") continue
                 val item = batch[index]
                 val op = item.getJSONObject("operation")
+                if (receipt.optString("status") == "applied") {
+                    val result = receipt.optJSONObject("result") ?: error("RECOVERY_RECEIPT_RESULT_MISSING")
+                    if (op.getJSONObject("payload").optString("kind") == "journal" &&
+                        result.optString("recordId") != op.getString("recordId")) {
+                        check(result.optBoolean("journalMerged")) { "RECOVERY_JOURNAL_MAPPING_MISSING" }
+                        val sent = checkNotNull(repo.dao.outbox(op.getString("operationId"))) { "RECOVERY_OUTBOX_MISSING" }
+                        check(Canonical.hash(plain(JSONObject(sent.payloadJson))) == Canonical.hash(plain(op))) { "RECOVERY_OUTBOX_CHANGED" }
+                        val epoch = current.getJSONObject("target").getString("epoch")
+                        val record = result.optJSONObject("currentRecord") ?: result.optJSONObject("currentRecordRef")?.let {
+                            syncCoordinator.downloadPayloadObject(repo, nodeId, configRevision, epoch, it)
+                        } ?: error("RECOVERY_JOURNAL_RECORD_MISSING")
+                        val version = result.optJSONObject("currentVersion") ?: result.optJSONObject("currentVersionRef")?.let {
+                            syncCoordinator.downloadPayloadObject(repo, nodeId, configRevision, epoch, it)
+                        } ?: error("RECOVERY_JOURNAL_VERSION_MISSING")
+                        repo.acceptJournalAppend(sent, result, record, version)
+                    }
+                    continue
+                }
                 check(op.getString("recordId") in decidedRecords) { "RECOVERY_OPERATION_REQUIRES_BRANCH_DECISION" }
                 val result = rpc(nodeId, configRevision, "reconcileApply", remoteTaskRequest(repo, current)
                     .put("resolutionId", stableTransferId("operation-discard\u0000${current.getString("taskId")}\u0000${op.getString("operationId")}"))
@@ -527,6 +544,10 @@ internal class LibraryRecoveryCoordinator(context: Context, private val manager:
                 .put("doc", versionDocument(markdown, sources, item.optJSONObject("doc")))
                 .put("sources", sources).put("parentVersionIds", item.optJSONArray("parentVersionIds") ?: JSONArray())
                 .put("title", item.optString("title")).put("createdAt", item.getString("createdAt")).put("reason", item.optString("reason", "保存"))
+                .apply {
+                    item.optJSONObject("journalInput")?.let { put("journalInput", it) }
+                    records.firstOrNull { it.getString("id") == item.getString("recordId") }?.optJSONObject("annotationOf")?.let { put("annotationOf", it) }
+                }
         }.sortedWith(compareBy<JSONObject> { it.getString("recordId") }.thenBy { it.getLong("revision") }.thenBy { it.getString("id") })
         val activities = arr(raw, "activities").map { item ->
             val result = JSONObject().put("activityId", item.getString("activityId")).put("recordId", item.getString("recordId"))
@@ -615,6 +636,7 @@ internal class LibraryRecoveryCoordinator(context: Context, private val manager:
             .put("sources", value.optJSONArray("sources") ?: JSONArray()).put("attachmentDescriptors", value.optJSONArray("attachmentDescriptors") ?: JSONArray())
             .put("createdAt", value.getString("createdAt")).put("updatedAt", value.getString("updatedAt"))
             .put("deleted", value.optBoolean("deleted")).put("createdByDevice", nullable(value, "createdByDevice") ?: JSONObject.NULL)
+        value.optJSONObject("annotationOf")?.let { result.put("annotationOf", it) }
         return result
     }
     private fun provenanceDto(value: JSONObject, recordId: String, record: JSONObject?): JSONObject =
@@ -857,7 +879,7 @@ internal class LibraryRecoveryCoordinator(context: Context, private val manager:
     companion object {
         private const val TASK_META = "mobile-recovery-task-v2"
         private const val SOURCE_EPOCH_META = "mobile-recovery-source-epoch-v1"
-        private const val PROTOCOL_VERSION = "1.0.0-draft.2"
+        private const val PROTOCOL_VERSION = "1.0.0-draft.3"
 
         /** Safe, action-scoped failure code suitable for durable task status. */
         internal fun failureCode(action: String, message: String?, entityType: String? = null): String {

@@ -8,9 +8,28 @@ const pause = () => new Promise(resolve => setTimeout(resolve, 10));
 async function until(check) { for (let i=0;i<150;i++) { if(check())return; await pause(); } throw Error('Timed out: '+check); }
 const button = label => [...document.querySelectorAll('button')].find(node=>node.textContent.trim()===label);
 let row, draft, writes, receipts, pageState, failAfterWrite, failDraft, root, deletedStages, imageDelay;
+let annotationDrafts=new Map(),annotations=[],annotationReceipts=new Map(),annotationWrites=[];
 const base = () => ({id:'record-1',title:'Fixture',markdown:'Original',kind:'journal',origin:'personal',processing:'original',contentDay:'2026-11-07',dateBasis:'',url:null,annotation:null,stage:null,sourceIds:[],sources:[],revision:1,state:'synced',syncState:'synced',attachmentDescriptors:[],versionId:'old-version',serverRevision:1,deleted:false});
 export const isNative = true;
 export async function call(method, args) {
+  if(method.startsWith('recordDraft')&&args.slot?.startsWith('annotation:')){
+    const current=annotationDrafts.get(args.slot);
+    if(method==='recordDraftRead')return {draft:clone(current||null),nextGeneration:(current?.localGeneration||0)+1};
+    if(method==='recordDraftSave'){if(current?.pendingMutation)assert(args.localGeneration===current.localGeneration&&JSON.stringify(args.pendingMutation)===JSON.stringify(current.pendingMutation),'ANNOTATION_PENDING_CHANGED');annotationDrafts.set(args.slot,clone(args));return {saved:true};}
+    if(method==='recordDraftAcknowledge'){const cleared=current?.requestId===args.requestId&&current?.localGeneration===args.localGeneration;if(cleared)annotationDrafts.delete(args.slot);return {cleared};}
+  }
+  if(method==='originalVersionInfo')return {recordId:row.id,versionId:row.versionId,contentHash:'b'.repeat(64),revision:row.revision};
+  if(method==='annotationList')return {items:clone(annotations.filter(x=>!!x.deleted===!!args.deleted))};
+  if(method==='annotationCreate'||method==='annotationUpdate'||method==='annotationDelete'||method==='annotationRestore'){
+    if(!annotationReceipts.has(args.requestId)){
+      let item=annotations.find(x=>x.id===args.id);
+      if(method==='annotationCreate'){item={id:'annotation-'+annotations.length,kind:'ai_annotation',origin:'ai',revision:1,versionId:'annotation-version',title:args.title||'',markdown:args.body,annotationOf:{recordId:args.originalId,versionId:args.originalVersionId,contentHash:args.originalContentHash},attachmentDescriptors:args.attachmentDescriptors||[],deleted:false};annotations.push(item);}
+      else{assert(item&&item.revision===args.revision,'RECORD_REVISION_CONFLICT');if(method==='annotationUpdate'){item.markdown=args.body;item.title=args.title;item.attachmentDescriptors=args.attachmentDescriptors||item.attachmentDescriptors;}else item.deleted=method==='annotationDelete';item.revision++;}
+      annotationWrites.push(clone(args));annotationReceipts.set(args.requestId,{args:JSON.stringify(args),id:item.id});
+    }else assert(annotationReceipts.get(args.requestId).args===JSON.stringify(args),'REQUEST_REUSED');
+    if(failAfterWrite){failAfterWrite=false;throw Error('BRIDGE_RESPONSE_LOST');}
+    return clone(annotations.find(x=>x.id===annotationReceipts.get(args.requestId).id));
+  }
   if(method==='recordDraftRead')return {draft:clone(draft),nextGeneration:draft?.localGeneration+1||0};
   if(method==='recordDraftSave') {
     if(failDraft){failDraft=false;throw Error('RECORD_DRAFT_TOO_LARGE');}
@@ -50,7 +69,7 @@ async function mount(mode='materials'){
   await until(()=>pageState&&!pageState.busy);
 }
 async function reset(mode='materials'){
-  if(root)root.unmount();row=base();draft=null;writes=[];deletedStages=[];receipts=new Map();pageState=null;failAfterWrite=false;failDraft=false;imageDelay=0;
+  if(root)root.unmount();row=base();draft=null;writes=[];deletedStages=[];receipts=new Map();pageState=null;failAfterWrite=false;failDraft=false;imageDelay=0;annotationDrafts=new Map();annotations=[];annotationReceipts=new Map();annotationWrites=[];
   if(mode==='articles'){row.kind='article';row.sourceIds=['source-1'];}
   await mount(mode);
 }
@@ -99,7 +118,7 @@ async function run(){
   await until(()=>document.querySelector('.record-list-row'));document.querySelector('.record-list-row').click();await until(()=>document.querySelector('.markdown-view img'));
   const history=document.querySelector('.record-versions');history.open=true;history.dispatchEvent(new Event('toggle'));await until(()=>document.querySelector('.version-row'));
   await until(()=>document.querySelector('.version-row .markdown-view img'));
-  assert(document.querySelector('.record-detail > .markdown-view img'),'current image survives record panel rerenders: '+[...document.querySelectorAll('.markdown-view')].map(x=>`${x.parentElement.className}:${x.querySelectorAll('img').length}:${x.querySelectorAll('.md-attachment-pending').length}`).join(','));
+  assert(document.querySelector('.record-detail .annotation-panel .markdown-view img'),'current image survives record panel rerenders: '+[...document.querySelectorAll('.markdown-view')].map(x=>`${x.parentElement.className}:${x.querySelectorAll('img').length}:${x.querySelectorAll('.md-attachment-pending').length}`).join(','));
   passed.push('current and historical images use attachment identity');
 
   await reset();await edit();await typeBody('![missing](attachment:99999999-9999-4999-8999-999999999999)');await save();
@@ -123,6 +142,13 @@ async function run(){
   await reset();await edit();failDraft=true;await save();
   assert(!writes.length&&button('保存')&&!document.querySelector('textarea').disabled,'definitive draft failure remains editable');
   await save();assert(writes.length===1&&!draft,'draft failure can be corrected and retried');passed.push('draft failure before mutation');
+
+  await reset();await until(()=>document.querySelector('.record-list-row'));document.querySelector('.record-list-row').click();await until(()=>button('AI 标注'));button('AI 标注').click();await until(()=>button('新建标注'));button('新建标注').click();await until(()=>document.querySelector('.annotation-panel textarea'));await typeBody('手机 AI 标注');
+  button('插入图片').click();await until(()=>document.querySelector('.annotation-panel textarea').value.includes('attachment:'));failAfterWrite=true;button('保存').click();await until(()=>button('再次核对保存结果')&&!button('再次核对保存结果').disabled);
+  assert(row.markdown==='Original'&&annotations.length===1,'annotation create leaves original unchanged');
+  assert(document.querySelector('.annotation-panel textarea').disabled,'uncertain annotation frozen');
+  root.unmount();pageState=null;await mount();await until(()=>document.querySelector('.record-list-row'));document.querySelector('.record-list-row').click();await until(()=>button('再次核对保存结果')&&!button('再次核对保存结果').disabled);button('再次核对保存结果').click();await until(()=>!document.querySelector('.annotation-panel textarea'));
+  assert(!annotationDrafts.size,'annotation pending draft acknowledged after remount');assert(annotations.length===1&&annotationWrites.length===1,'annotation retry is idempotent after remount');assert(annotations[0].attachmentDescriptors.length===1,'annotation image descriptors preserved');passed.push('annotation independent image save and durable retry');
 
   root.unmount();document.body.innerHTML='<pre id="result"></pre>';document.getElementById('result').textContent=JSON.stringify({passed});
 }

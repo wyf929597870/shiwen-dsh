@@ -1,6 +1,6 @@
 {
   "name": "shiwen-dsh-desktop",
-  "version": "0.1.9",
+  "version": "0.1.13",
   "private": true,
   "type": "module",
   "description": "拾文桌面客户端，以 DSH 为底座、以插件集成个人知识与创作功能",
@@ -35,12 +35,15 @@
   },
   "dependencies": {
     "@deepseek-ai/dsh": "0.2.2-alpha.3",
+    "@deepseek-ai/schemastery": "~3.18.6-alpha.2",
     "@modelcontextprotocol/server": "2.2.0",
+    "bonjour-service": "^1.4.4",
     "diff": "^8.0.0",
     "js-yaml": "^4.3.2",
     "markdown-it": "^15.0.3",
-    "zod": "4.4.3",
-    "@deepseek-ai/schemastery": "~3.18.6-alpha.2"
+    "qrcode": "^1.5.4",
+    "selfsigned": "^5.5.0",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.2.0",

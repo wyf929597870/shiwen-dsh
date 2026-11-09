@@ -73,25 +73,29 @@ description: 在发布前检查文章结构、表达和来源。
 
 侧栏“插件 → 添加插件”可安装兼容当前 DSH 版本的组合包。Skills、MCP 服务器和 DSH 插件是不同形式：Skill 提供工作方法，MCP 提供外部工具，DSH 插件能扩展界面、服务及预设。
 
-## 拾文资料管理工具（0.1.2）
+## 拾文资料管理工具
 
 这些工具挂在全局，拾文助手和标准模式均可使用，无须另装 MCP：
 
 | 工具 | 用途 |
 | --- | --- |
 | `shiwen_read` | 读取 Markdown 原文、版本、来源、日期、链接和关联；长文分页，并可验证续读版本 |
-| `shiwen_update` | 修改 `kind/title/body/day/origin/url/annotation`，文章还支持 `stage/sourceIds` |
+| `shiwen_update` | 修改 `kind/title/body/day/url/annotation`，文章还支持 `stage/sourceIds` |
+| `shiwen_correct_origin` | 使用独立请求更正作者来源，不修改正文 |
+| `shiwen_original_version` | 获取创建标注所需的原文版本 UUID 和内容散列 |
+| `shiwen_annotation_*` | 独立创建、读取、列出、编辑、删除和恢复 AI 标注 |
+| `shiwen_review_preview` | 查看个人原文字数与观察到的个人编辑预览 |
 | `shiwen_collect` | 将已抓取的网页原文存为 `web + external`，保留原文链接和收藏请求出处 |
 | `shiwen_delete` | 软删除指定版本的记录，返回撤销所需版本 |
 | `shiwen_restore` | 撤销指定版本的删除 |
 
 例如：“把那篇散步记录改为日记，来源改成自己书写，日期改为 2026-10-12。”Agent 先搜索、读取，再提交记录 ID、读取到的 revision 和需要修改的字段。未传字段保持原值；冲突必须重新读取。素材与文章不能直接互改，以免破坏关联语义；创作文章时新建文章并关联素材。
 
-作者来源与操作人分开：代存用户原话是 personal；工具采集网络原文是 external；AI 自行生成或实质补写是 ai。`shiwen_save` 的 original 模式保存用户原话；organized 默认标 AI，只有用户确认归属、或仅排版其原话时才显式设 personal。来源可经 `shiwen_update.origin` 纠正，正文已有片段随之重标；同一次操作新增的 AI 文字仍保留 AI 片段来源，`shiwen_read.contentOrigins` 可显示混合来源。类型变更本身不改变来源。
+作者来源与操作人分开：代存用户原话是 personal；工具采集网络原文是 external；AI 自行生成或实质补写是 ai。`shiwen_save` 的 original 模式保存用户原话；organized 默认标 AI，只有用户确认归属、或仅排版其原话时才显式设 personal。来源通过独立的 `shiwen_correct_origin` 纠正。AI 总结、分析和原文改写通过 `shiwen_annotation_create` 保存为单独文档并关联不可变原文版本，不能混入原文。类型变更本身不改变来源。
 
 来源纠正保留旧正文版本，并在新版本原因中记录来源变更；不改原始导入文件，不凭空添加写作字数。历史编辑事件保持不变；记录数按当前分类、来源和内容日期统计。网页收藏工具存储调用方已获取的正文，不自行联网，也不能验证上游抓取内容是否真实，Agent 必须先通过网页工具读取原文。
 
-程序接口为 `POST /api/shiwen`，请求体 `{"method":"updateRecord","args":{"id":"记录ID","revision":1,"kind":"journal","origin":"personal","day":"2026-10-12"}}`，沿用 DSH 连接认证。正文 `body` 为完整 Markdown，`day` 为空字符串或 null 时清除日期。AI 调用在服务端固定新增文字为 AI 来源，客户端编辑的新增文字为 personal；调用方不能通过修改请求伪造编辑执行者。
+程序接口为 `POST /api/shiwen`，请求体 `{"method":"updateRecord","args":{"id":"记录ID","revision":1,"kind":"journal","day":"2026-10-12"}}`，沿用 DSH 连接认证。正文 `body` 为完整 Markdown，`day` 为空字符串或 null 时清除日期。原文普通编辑保留文档作者来源；来源更正使用 `correctRecordOrigin({id,revision,origin,requestId})`，AI 标注使用独立的 `annotation*` 接口。旧的来源混合文档不自动整理。
 
 ## 外部 Agent 调用拾文（0.1.3）
 

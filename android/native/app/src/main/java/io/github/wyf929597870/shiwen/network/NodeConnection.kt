@@ -21,22 +21,26 @@ internal class NodeConnection(private val store: NodeSettingsStore) {
         finally { count.decrementAndGet() }
     }
     private fun performRefresh(id: String, password: String?, expectedBaseUrl: String?, expectedConfigRevision: String?) {
-        val row = store.get(id); val url = row.getString("baseUrl")
+        val row = NodeReachability.resolve(store, id); val url = row.getString("baseUrl")
         val revision = row.getString("configRevision")
         check((expectedBaseUrl == null || expectedBaseUrl == url) &&
             (expectedConfigRevision == null || expectedConfigRevision == revision)) { "NODE_CHANGED" }
         val cookies = row.optJSONArray("cookies") ?: JSONArray()
-        val client = NodeClient(url, row.optBoolean("allowPrivateHttp"), (0 until cookies.length()).map(cookies::getString)) { next ->
+        val client = NodeClient(url, row.optBoolean("allowPrivateHttp"), (0 until cookies.length()).map(cookies::getString), row.optString("fingerprint").takeIf { it.isNotEmpty() }, row.optString("token").takeIf { it.isNotEmpty() }) { next ->
             store.update(id, url, revision) { it.put("cookies", JSONArray(next)) }
         }
         try {
             if (password != null) {
                 require(password.isNotEmpty() && password.toByteArray().size <= 1024) { "INVALID_PASSWORD" }
-                request(client, "/auth/login", JSONObject().put("password", password).put("remember", true).put("name", "Shiwen Android"))
+                val login = request(client, "/auth/login", JSONObject().put("password", password).put("remember", true).put("name", "Shiwen Android"))
+                if (row.optString("fingerprint").isNotEmpty()) {
+                    store.update(id, url, revision) { it.put("token", login.getString("token")) }
+                    client.revoke(); performRefresh(id, null, expectedBaseUrl, expectedConfigRevision); return
+                }
             }
             val status = request(client, "/auth/status")
             val authenticated = status.optBoolean("authenticated")
-            store.update(id, url, revision) { it.put("authenticated", authenticated).put("lastCheckedAt", Instant.now().toString()) }
+            store.update(id, url, revision) { it.put("authenticated", authenticated).put("connectionState", if (authenticated) "online" else "login-required").put("lastCheckedAt", Instant.now().toString()) }
             check(authenticated) { "NODE_LOGIN_REQUIRED" }
             // Existing authenticated workbench route; older servers respond unsupported.
             val response = request(client, "/api/shiwen", JSONObject().put("method", "mobileAgentProfile").put("args", JSONObject()))
@@ -112,17 +116,17 @@ internal class NodeConnection(private val store: NodeSettingsStore) {
 
     /** Versioned offline-library RPC. It exposes only frozen protocol actions, never arbitrary HTTP paths. */
     internal fun mobileSync(id: String, action: String, requestBody: JSONObject,
-        expectedConfigRevision: String? = null): JSONObject {
+        expectedConfigRevision: String? = null, retryRead: Boolean = true): JSONObject {
         require(action in MOBILE_SYNC_ACTIONS) { "MOBILE_SYNC_ACTION_DENIED" }
         require(requestBody.toString().toByteArray(Charsets.UTF_8).size <= MOBILE_SYNC_REQUEST_LIMIT) { "MOBILE_SYNC_REQUEST_TOO_LARGE" }
         val write = action in MOBILE_SYNC_WRITE_ACTIONS
-        val row = store.get(id)
+        val row = NodeReachability.resolve(store, id)
         check(row.optBoolean("authenticated")) { "NODE_LOGIN_REQUIRED" }
         val url = row.getString("baseUrl")
         val revision = row.getString("configRevision")
         check(expectedConfigRevision == null || expectedConfigRevision == revision) { "NODE_CHANGED" }
         val cookies = row.optJSONArray("cookies") ?: JSONArray()
-        val client = NodeClient(url, row.optBoolean("allowPrivateHttp"), (0 until cookies.length()).map(cookies::getString)) { next ->
+        val client = NodeClient(url, row.optBoolean("allowPrivateHttp"), (0 until cookies.length()).map(cookies::getString), row.optString("fingerprint").takeIf { it.isNotEmpty() }, row.optString("token").takeIf { it.isNotEmpty() }) { next ->
             store.update(id, url, revision) { it.put("cookies", JSONArray(next)) }
         }
         return try {
@@ -132,6 +136,12 @@ internal class NodeConnection(private val store: NodeSettingsStore) {
                     MOBILE_SYNC_RESPONSE_LIMIT, safeErrors = true)
             } catch (failure: Exception) {
                 if (write && !isDefiniteSyncRejection(failure)) error("MOBILE_SYNC_WRITE_UNKNOWN")
+                if (!write && retryRead && failure is java.io.IOException && row.optString("fingerprint").isNotEmpty()) {
+                    client.revoke()
+                    val connected = NodeReachability.resolve(store, id, true)
+                    if (connected.getString("configRevision") == revision && connected.optString("connectionState") == "online")
+                        return mobileSync(id, action, requestBody, revision, false)
+                }
                 throw failure
             }
             val result = envelope.optJSONObject("result") ?: error(if (write) "MOBILE_SYNC_WRITE_UNKNOWN" else "MOBILE_SYNC_RESULT_UNKNOWN")
@@ -139,7 +149,7 @@ internal class NodeConnection(private val store: NodeSettingsStore) {
                 if (write) "MOBILE_SYNC_WRITE_UNKNOWN" else "MOBILE_SYNC_RESULT_UNKNOWN"
             }
             val latest = runCatching { store.get(id) }.getOrNull()
-            val changed = latest == null || latest.optString("baseUrl") != url || latest.optString("configRevision") != revision
+            val changed = latest == null || (row.optString("fingerprint").isEmpty() && latest.optString("baseUrl") != url) || latest.optString("configRevision") != revision
             check(!changed || write) { "NODE_CHANGED" }
             JSONObject().put("action", action).put("data", result.getJSONObject("data")).put("nodeChanged", changed)
                 .put("configRevision", revision).put("nodeId", id)
@@ -155,13 +165,13 @@ internal class NodeConnection(private val store: NodeSettingsStore) {
     private fun sessionRpc(id: String, action: String, args: JSONObject, write: Boolean,
         expectedConfigRevision: String?): BoundNodeAgentResult {
         require(id.isNotBlank()) { "NODE_ID_REQUIRED" }
-        val row = store.get(id)
+        val row = NodeReachability.resolve(store, id)
         check(row.optBoolean("authenticated")) { "NODE_LOGIN_REQUIRED" }
         val url = row.getString("baseUrl")
         val revision = row.getString("configRevision")
         check(expectedConfigRevision == null || expectedConfigRevision == revision) { "NODE_CHANGED" }
         val cookies = row.optJSONArray("cookies") ?: JSONArray()
-        val client = NodeClient(url, row.optBoolean("allowPrivateHttp"), (0 until cookies.length()).map(cookies::getString)) { next ->
+        val client = NodeClient(url, row.optBoolean("allowPrivateHttp"), (0 until cookies.length()).map(cookies::getString), row.optString("fingerprint").takeIf { it.isNotEmpty() }, row.optString("token").takeIf { it.isNotEmpty() }) { next ->
             store.update(id, url, revision) { it.put("cookies", JSONArray(next)) }
         }
         return try {
@@ -174,7 +184,7 @@ internal class NodeConnection(private val store: NodeSettingsStore) {
             }
             check(envelope.has("result")) { if (write) "NODE_SESSION_WRITE_UNKNOWN" else "NODE_SESSION_RESULT_UNKNOWN" }
             val latest = runCatching { store.get(id) }.getOrNull()
-            val changed = latest == null || latest.optString("baseUrl") != url || latest.optString("configRevision") != revision
+            val changed = latest == null || (row.optString("fingerprint").isEmpty() && latest.optString("baseUrl") != url) || latest.optString("configRevision") != revision
             check(!changed || write) { "NODE_CHANGED" }
             BoundNodeAgentResult(envelope.get("result"), id, url, revision, changed)
         } finally { client.revoke() }
@@ -219,13 +229,13 @@ internal class NodeConnection(private val store: NodeSettingsStore) {
     private fun managementRpc(id: String, method: String, args: JSONObject, write: Boolean,
         expectedConfigRevision: String? = null): BoundNodeAgentResult {
         require(id.isNotBlank()) { "NODE_ID_REQUIRED" }
-        val row = store.get(id)
+        val row = NodeReachability.resolve(store, id)
         check(row.optBoolean("authenticated")) { "NODE_LOGIN_REQUIRED" }
         val url = row.getString("baseUrl")
         val revision = row.getString("configRevision")
         check(expectedConfigRevision == null || expectedConfigRevision == revision) { "NODE_CHANGED" }
         val cookies = row.optJSONArray("cookies") ?: JSONArray()
-        val client = NodeClient(url, row.optBoolean("allowPrivateHttp"), (0 until cookies.length()).map(cookies::getString)) { next ->
+        val client = NodeClient(url, row.optBoolean("allowPrivateHttp"), (0 until cookies.length()).map(cookies::getString), row.optString("fingerprint").takeIf { it.isNotEmpty() }, row.optString("token").takeIf { it.isNotEmpty() }) { next ->
             store.update(id, url, revision) { it.put("cookies", JSONArray(next)) }
         }
         return try {
@@ -241,7 +251,7 @@ internal class NodeConnection(private val store: NodeSettingsStore) {
             }
             val nodeChanged = runCatching {
                 val latest = store.get(id)
-                latest.optString("baseUrl") != url || latest.optString("configRevision") != revision
+                (row.optString("fingerprint").isEmpty() && latest.optString("baseUrl") != url) || latest.optString("configRevision") != revision
             }.getOrDefault(true)
             check(!nodeChanged || write) { "NODE_CHANGED" }
             BoundNodeAgentResult(envelope.get("result"), id, url, revision, nodeChanged)
@@ -254,16 +264,16 @@ internal class NodeConnection(private val store: NodeSettingsStore) {
         check(method in setOf("agentState", "agentDocumentSave", "memorySave", "memoryDecide", "memoryDelete")) {
             "NODE_AGENT_METHOD_DENIED"
         }
-        val row = store.get(id)
+        val row = NodeReachability.resolve(store, id)
         check(row.optBoolean("authenticated")) { "NODE_LOGIN_REQUIRED" }
         val url = row.getString("baseUrl")
         val revision = row.getString("configRevision")
-        check(boundTo == null || boundTo.nodeId == id && boundTo.baseUrl == url && boundTo.configRevision == revision) {
+        check(boundTo == null || boundTo.nodeId == id && (row.optString("fingerprint").isNotEmpty() || boundTo.baseUrl == url) && boundTo.configRevision == revision) {
             "NODE_CHANGED"
         }
         val savedCookies = row.optJSONArray("cookies") ?: JSONArray()
         val client = NodeClient(url, row.optBoolean("allowPrivateHttp"),
-            (0 until savedCookies.length()).map(savedCookies::getString)) { next ->
+            (0 until savedCookies.length()).map(savedCookies::getString), row.optString("fingerprint").takeIf { it.isNotEmpty() }, row.optString("token").takeIf { it.isNotEmpty() }) { next ->
             store.update(id, url, revision) { it.put("cookies", JSONArray(next)) }
         }
         return try {
@@ -276,7 +286,7 @@ internal class NodeConnection(private val store: NodeSettingsStore) {
             check(envelope.has("result")) { if (method == "agentState") "NODE_RPC_RESULT_UNKNOWN" else "NODE_WRITE_RESULT_UNKNOWN" }
             val nodeChanged = runCatching {
                 val latest = store.get(id)
-                latest.optString("baseUrl") != url || latest.optString("configRevision") != revision
+                (row.optString("fingerprint").isEmpty() && latest.optString("baseUrl") != url) || latest.optString("configRevision") != revision
             }.getOrDefault(true)
             check(!nodeChanged || method != "agentState") { "NODE_CHANGED" }
             BoundNodeAgentResult(envelope.get("result"), id, url, revision, nodeChanged)

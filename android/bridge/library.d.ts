@@ -11,6 +11,14 @@ export interface Methods {
   libraryCreate: {args:{name:string}; result:LibraryContext};
   librarySelect: {args:{libraryId:string}; result:LibraryContext};
   libraryConnect: {args:{nodeId:string}; result:{libraryId:string;state:string;integrity?:string;operationId:string}};
+  originalVersionInfo: {args:{id:string};result:{recordId:string;versionId:string;contentHash:string;revision:number}};
+  annotationList: {args:{originalId:string;deleted?:boolean};result:{items:MobileRecord[]}};
+  annotationRead: {args:{id:string};result:MobileRecord};
+  annotationCreate: {args:{originalId:string;originalVersionId:string;originalContentHash?:string;title:string;body:string;requestId:string;attachmentDescriptors?:unknown[];stagedAttachmentIds?:string[]};result:MobileRecord};
+  annotationUpdate: {args:{id:string;revision:number;title?:string;body?:string;requestId:string;attachmentDescriptors?:unknown[];stagedAttachmentIds?:string[]};result:MobileRecord};
+  annotationDelete: {args:{id:string;revision:number;requestId:string};result:MobileRecord};
+  annotationRestore: {args:{id:string;revision:number;requestId:string};result:MobileRecord};
+  reviewPreview: {args:{period:'1'|'7'|'14'|'30'|'month';month?:string};result:{personalOriginalCharacters:number;observedEdits:{added:number;removed:number;net:number};start:string;end:string}};
   recordList: {args:{libraryId:string; query?:string; kind?:MobileRecordKind; excludeKind?:MobileRecordKind; cursor?:string|null; limit?:number; deleted?:boolean}; result:RecordPage};
   recordRead: {args:{libraryId:string; id:string}; result:MobileRecord};
   recordCreate: {args:{libraryId:string; requestId:string; localGeneration:number; record:MobileRecordInput; stagedAttachmentIds?:string[]}; result:RecordMutationResult};

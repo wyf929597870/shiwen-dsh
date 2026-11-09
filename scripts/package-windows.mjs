@@ -85,7 +85,7 @@ for(const name of ['library','agent-tools','theme','workbench','personal-context
 await cp(join(root,'integration'),join(shiwen,'integration'),{recursive:true});
 await cp(join(root,'skills'),join(shiwen,'skills'),{recursive:true});
 await writeFile(join(shiwen,'shiwen-server.cmd'),'@echo off\r\n"%~dp0..\\runtime\\primary-runtime\\dependencies\\node\\bin\\node.exe" "%~dp0scripts\\server.mjs" %*\r\n');
-await collect(['diff','js-yaml','markdown-it','@modelcontextprotocol/server','zod'],join(root,'package.json'),join(shiwen,'node_modules'));
+await collect(['diff','js-yaml','markdown-it','@modelcontextprotocol/server','zod','selfsigned','bonjour-service','qrcode'],join(root,'package.json'),join(shiwen,'node_modules'));
 // hicolor themes discover standard size directories; the design source is 1254px.
 const icons=join(stage,'icons');await mkdir(icons,{recursive:true});
 const sharp=createRequire(join(desktop,'package.json'))('sharp');

@@ -77,7 +77,7 @@ class LibraryRepository internal constructor(
     val executor: ExecutorService = Executors.newSingleThreadExecutor()
     val db: LibraryDatabase = Room.databaseBuilder(app, LibraryDatabase::class.java,
         registryRow.dbFile).addMigrations(LIBRARY_MIGRATION_1_2, LIBRARY_MIGRATION_2_3, LIBRARY_MIGRATION_3_4,
-            LIBRARY_MIGRATION_4_5).openHelperFactory(LargeRowOpenHelperFactory()).build()
+            LIBRARY_MIGRATION_4_5, LIBRARY_MIGRATION_5_6, LIBRARY_MIGRATION_6_7).openHelperFactory(LargeRowOpenHelperFactory()).build()
     val dao get() = db.dao()
     fun context() = LibraryContext(libraryId, registryRow.pageGeneration, registryRow.role, registryRow.integrity, deviceId)
     fun registryItem(): LibraryRegistryRow = registryRow
@@ -87,7 +87,44 @@ class LibraryRepository internal constructor(
         require(query.length <= 200 && limit in 1..100 && offset >= 0)
         require(kind == null || kind in KINDS) { "INVALID_RECORD_KIND" }
         require(excludeKind == null || excludeKind in KINDS) { "INVALID_RECORD_KIND" }
+        consolidateStandaloneJournals()
         return dao.records(query, kind, deleted, limit, offset, excludeKind)
+    }
+
+    private fun consolidateStandaloneJournals() {
+        // Coordinated libraries receive the server's merge events. Independently
+        // merging those same old entries here would append their text twice.
+        if (registryRow.role != "standalone") return
+        db.runInTransaction {
+            for (day in dao.duplicateJournalDays()) {
+                val records = dao.journalsForDay(day)
+                val targetId = records.first().id
+                for (duplicate in records.drop(1)) {
+                    val target = read(targetId)
+                    var markdown = duplicate.markdown
+                    var sourcesText = duplicate.sourcesJson
+                    val descriptors = JSONArray(target.attachmentDescriptorsJson)
+                    for (image in dao.attachments(duplicate.id)) {
+                        val id = UUID.randomUUID().toString()
+                        markdown = markdown.replace("attachment:${image.id}", "attachment:$id")
+                        sourcesText = sourcesText.replace("attachment:${image.id}", "attachment:$id")
+                        dao.putAttachment(image.copy(id = id, recordId = targetId))
+                        descriptors.put(JSONObject().put("id", id).put("name", image.name).put("hash", image.hash).put("byteLength", image.byteLength))
+                    }
+                    val sources = JSONArray(target.sourcesJson).put(JSONObject().put("text", "\n\n").put("origin", duplicate.origin))
+                    val incoming = JSONArray(sourcesText)
+                    for (i in 0 until incoming.length()) sources.put(incoming.getJSONObject(i))
+                    update(targetId, target.revision, UUID.randomUUID().toString(), JSONObject()
+                        .put("markdown", target.markdown + "\n\n" + markdown).put("sources", sources)
+                        .put("attachmentDescriptors", descriptors), activityAction = "resolve")
+                    update(duplicate.id, duplicate.revision, UUID.randomUUID().toString(), JSONObject().put("deleted", true), activityAction = "resolve")
+                    for (link in dao.allLinks().filter { it.materialId == duplicate.id }) {
+                        dao.putLink(link.copy(materialId = targetId))
+                        db.openHelper.writableDatabase.execSQL("DELETE FROM links WHERE articleId=? AND materialId=?", arrayOf(link.articleId, duplicate.id))
+                    }
+                }
+            }
+        }
     }
 
     fun read(id: String): LibraryRecord = checkNotNull(dao.record(id)) { "RECORD_NOT_FOUND" }
@@ -106,7 +143,8 @@ class LibraryRepository internal constructor(
     /** requestId+fingerprint make a lost bridge acknowledgement safely replayable. */
     fun create(requestId: String, input: JSONObject, generation: Long, allowLegacyReceipt: Boolean = false,
         activityAction: String = "write", attachment: LibraryAttachment? = null,
-        stagedAttachments: List<StagedLibraryAttachment> = emptyList()): LibraryRecord {
+        stagedAttachments: List<StagedLibraryAttachment> = emptyList(), annotationOperation: Boolean = false): LibraryRecord {
+        require(annotationOperation == (input.optString("kind") == "ai_annotation")) { "INVALID_ANNOTATION_OPERATION" }
         UUID.fromString(requestId)
         require(generation >= 0)
         require(activityAction in setOf("write", "import", "copy", "restore", "resolve")) { "INVALID_ACTIVITY_ACTION" }
@@ -126,6 +164,34 @@ class LibraryRepository internal constructor(
                 return@Callable read(receipt.recordId)
             }
             val now = Instant.now().toString()
+            if (normalized.optString("kind") == "journal") {
+                val day = nullable(normalized, "contentDay") ?: java.time.LocalDate.now().toString()
+                java.time.LocalDate.parse(day)
+                normalized.put("contentDay", day).put("dateBasis", "日记内容日期")
+                val daily = dao.journalForDay(day)
+                if (daily != null) {
+                    val addition = normalized.getString("markdown")
+                    require(addition.isNotBlank()) { "EMPTY_JOURNAL" }
+                    val sources = JSONArray(daily.sourcesJson)
+                    sources.put(JSONObject().put("text", "\n\n").put("origin", normalized.optString("origin", "personal")))
+                    val incoming = normalized.optJSONArray("sources") ?: JSONArray().put(JSONObject()
+                        .put("text", addition).put("origin", normalized.optString("origin", "personal")))
+                    for (i in 0 until incoming.length()) sources.put(incoming.getJSONObject(i))
+                    val descriptors = JSONArray(daily.attachmentDescriptorsJson)
+                    val addedDescriptors = normalized.optJSONArray("attachmentDescriptors") ?: JSONArray()
+                    for (i in 0 until addedDescriptors.length()) descriptors.put(addedDescriptors.getJSONObject(i))
+                    attachment?.let { dao.putAttachment(it.copy(recordId = daily.id)) }
+                    val saved = update(daily.id, daily.revision, requestId, JSONObject()
+                        .put("markdown", daily.markdown + "\n\n" + addition).put("sources", sources)
+                        .put("attachmentDescriptors", descriptors), activityAction = activityAction, stagedAttachments = stagedAttachments)
+                    attachment?.let { dao.putAttachment(it.copy(recordId = daily.id)) }
+                    // The create receipt remains bound to the submitted entry, not
+                    // the full diary assembled inside this transaction.
+                    dao.putReceipt(LibraryReceipt(requestId, fingerprint, daily.id, "applied", now))
+                    dao.clearDraft("composer", requestId, generation)
+                    return@Callable saved
+                }
+            }
             val recordId = normalized.optString("id").takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString()
             val markdown = normalized.optString("markdown")
             val title = normalized.optString("title").ifBlank { markdown.lineSequence().firstOrNull()?.take(120).orEmpty() }
@@ -141,7 +207,8 @@ class LibraryRepository internal constructor(
                 (normalized.optJSONArray("attachmentDescriptors") ?: JSONArray()).toString(),
                 normalized.optString("createdAt", now), normalized.optString("updatedAt", now), normalized.optBoolean("deleted"),
                 normalized.optString("createdByDevice").takeIf { it.isNotBlank() } ?: deviceId,
-                versionId, changeId, null, null, generation, 1, if (registryRow.role == "coordinated") "pending" else "local-only")
+                versionId, changeId, null, null, generation, 1, if (registryRow.role == "coordinated") "pending" else "local-only",
+                normalized.optJSONObject("annotationOf")?.toString())
             val afterHash = contentHash(markdown, sources)
             val activity = LibraryActivity(UUID.randomUUID().toString(), recordId, changeId, deviceId, now,
                 ZoneId.systemDefault().id, Canonical.hash(mapOf("markdown" to "", "segments" to emptyList<Any>())), afterHash,
@@ -173,6 +240,56 @@ class LibraryRepository internal constructor(
         })
     }
 
+    fun originalVersionInfo(id: String): JSONObject {
+        val row = read(id)
+        check(!row.deleted && row.kind != "ai_annotation") { "INVALID_ANNOTATION_PARENT" }
+        val hash = MessageDigest.getInstance("SHA-256").digest(row.markdown.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+        return JSONObject().put("recordId", row.id).put("versionId", row.versionId).put("contentHash", hash).put("revision", row.revision)
+    }
+    fun annotationCreate(originalId: String, originalVersionId: String, contentHash: String?, title: String, body: String, requestId: String,
+        descriptors: JSONArray = JSONArray(), staged: List<StagedLibraryAttachment> = emptyList()): LibraryRecord {
+        // Reconstruct the original request before checking its receipt, even if the
+        // parent was subsequently deleted or its proven journal ID was canonicalized.
+        // create() still checks the complete request fingerprint before returning it.
+        val prior = dao.receipt(requestId)
+        val hash = if (prior != null) {
+            val priorRecord = read(prior.recordId)
+            check(priorRecord.kind == "ai_annotation") { "REQUEST_REUSED" }
+            contentHash ?: checkNotNull(priorRecord.annotationOfJson?.let(::JSONObject)?.optString("contentHash")) { "ANNOTATION_RELATION_MISSING" }
+        } else {
+            val parentRow = read(originalId)
+            check(!parentRow.deleted && parentRow.kind != "ai_annotation") { "INVALID_ANNOTATION_PARENT" }
+            val version = checkNotNull(dao.versions(originalId).firstOrNull { it.id == originalVersionId }) { "ORIGINAL_VERSION_MISSING" }
+            val actual = MessageDigest.getInstance("SHA-256").digest(version.markdown.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+            check(contentHash == null || actual == contentHash) { "ORIGINAL_VERSION_CHANGED" }
+            actual
+        }
+        val info = JSONObject().put("contentHash", hash)
+        val parent = JSONObject().put("recordId", originalId).put("versionId", originalVersionId).put("contentHash", info.getString("contentHash"))
+        return create(requestId, JSONObject().put("kind", "ai_annotation").put("origin", "ai").put("processing", "unknown")
+            .put("title", title).put("markdown", body).put("annotationOf", parent).put("attachmentDescriptors", descriptors), 0, stagedAttachments = staged, annotationOperation = true)
+    }
+    fun annotationList(originalId: String, deleted: Boolean = false): List<LibraryRecord> {
+        val parent = dao.record(originalId) ?: return emptyList()
+        if (parent.deleted || parent.kind == "ai_annotation") return emptyList()
+        return dao.allRecords().filter { it.kind == "ai_annotation" && it.deleted == deleted && it.annotationOfJson?.let { json -> JSONObject(json).optString("recordId") == originalId } == true }
+            .sortedByDescending { it.updatedAt }
+    }
+    fun annotationRead(id: String): LibraryRecord = read(id).also {
+        val parent = it.annotationOfJson?.let { json -> dao.record(JSONObject(json).optString("recordId")) }
+        check(it.kind == "ai_annotation" && parent != null && !parent.deleted && parent.kind != "ai_annotation") { "ANNOTATION_NOT_FOUND" }
+    }
+    fun annotationSetDeleted(id: String, revision: Long, requestId: String, deleted: Boolean): LibraryRecord {
+        if (dao.receipt(requestId) == null) check(annotationRead(id).deleted != deleted) { "ANNOTATION_STATE_CHANGED" }
+        return annotationUpdate(id, revision, requestId, JSONObject().put("deleted", deleted))
+    }
+    fun annotationUpdate(id: String, revision: Long, requestId: String, patch: JSONObject, staged: List<StagedLibraryAttachment> = emptyList()): LibraryRecord {
+        if (dao.receipt(requestId) == null) annotationRead(id)
+        val keys = patch.keys().asSequence().toList()
+        require(keys.all { it in setOf("title", "markdown", "deleted", "attachmentDescriptors") }) { "INVALID_ANNOTATION_FIELD" }
+        return update(id, revision, requestId, patch, stagedAttachments = staged, annotationOperation = true)
+    }
+
     fun saveDraft(requestId: String, title: String, markdown: String, kind: String, generation: Long, slot: String = "composer") {
         UUID.fromString(requestId)
         require(title.length <= 200 && markdown.length <= 1_000_000 && kind in KINDS && generation >= 0)
@@ -188,10 +305,13 @@ class LibraryRepository internal constructor(
 
     fun update(id: String, expectedRevision: Long, requestId: String, patch: JSONObject,
         rebaseBase: LibraryRemoteHead? = null, activityAction: String = "write", resolveConflictId: String? = null,
-        stagedAttachments: List<StagedLibraryAttachment> = emptyList()): LibraryRecord {
+        stagedAttachments: List<StagedLibraryAttachment> = emptyList(), annotationOperation: Boolean = false, allowOriginCorrection: Boolean = false): LibraryRecord {
         UUID.fromString(requestId)
         require(activityAction in setOf("write", "import", "copy", "restore", "resolve")) { "INVALID_ACTIVITY_ACTION" }
         val current = read(id)
+        require(annotationOperation == (current.kind == "ai_annotation") || resolveConflictId != null) { "INVALID_ANNOTATION_OPERATION" }
+        require(!patch.has("annotationOf") && (!patch.has("kind") || (patch.optString("kind") != "ai_annotation" && current.kind != "ai_annotation") || patch.optString("kind") == current.kind)) { "IMMUTABLE_RECORD_KIND" }
+        require(allowOriginCorrection || !patch.has("origin") || patch.optString("origin") == current.origin) { "ORIGIN_CORRECTION_REQUIRED" }
         val fingerprint = if (rebaseBase == null && activityAction == "write" && resolveConflictId == null)
             Canonical.hash(mapOf("id" to id, "expectedRevision" to expectedRevision, "patch" to plain(patch)))
         else Canonical.hash(mapOf("id" to id, "expectedRevision" to expectedRevision, "patch" to plain(patch),
@@ -208,8 +328,10 @@ class LibraryRepository internal constructor(
         val fields = localRecordJson(current)
         val keys = patch.keys()
         while (keys.hasNext()) { val key = keys.next(); require(key in EDITABLE_FIELDS || key in READ_ONLY_FIELDS) { "INVALID_RECORD_FIELD" }; if (key in EDITABLE_FIELDS) fields.put(key, patch.get(key)) }
-        if (patch.has("markdown") && !patch.has("sources") && fields.optString("markdown") != current.markdown)
-            fields.put("sources", reconcileSources(current.sourcesJson, current.markdown, fields.optString("markdown")))
+        if (patch.has("markdown") && !patch.has("sources") && fields.optString("markdown") != current.markdown) {
+            fields.put("sources", if (current.kind == "ai_annotation") JSONArray().put(JSONObject().put("text", fields.optString("markdown")).put("origin", "ai"))
+                else reconcileSources(current.sourcesJson, current.markdown, fields.optString("markdown")))
+        }
         val explicitOriginCorrection = patch.has("origin") && !patch.has("sources")
         if (explicitOriginCorrection) {
             val sources = fields.optJSONArray("sources") ?: JSONArray().put(JSONObject().put("text", fields.optString("markdown")))
@@ -219,6 +341,12 @@ class LibraryRepository internal constructor(
             fields.put("sources", sources)
         }
         validateRecord(fields)
+        if (fields.optString("kind") == "journal" && !fields.optBoolean("deleted")) {
+            val day = nullable(fields, "contentDay") ?: current.contentDay ?: java.time.LocalDate.now().toString()
+            java.time.LocalDate.parse(day)
+            check(dao.journalForDay(day)?.id.let { it == null || it == id }) { "JOURNAL_DAY_EXISTS" }
+            fields.put("contentDay", day)
+        }
         validateStagedAttachments(fields, stagedAttachments)
         if (patch.has("attachmentDescriptors")) {
             val stagedIds = stagedAttachments.map { it.id }.toSet()
@@ -296,6 +424,129 @@ class LibraryRepository internal constructor(
     fun remove(id: String, expectedRevision: Long, requestId: String): LibraryRecord = update(id, expectedRevision, requestId,
         JSONObject().put("deleted", true))
 
+    /** Adopt the coordinator's single diary while retaining unsent local work. */
+    internal fun acceptJournalAppend(sent: LibraryOutbox, receipt: JSONObject, remote: JSONObject, version: JSONObject) {
+        val targetId = receipt.getString("recordId")
+        val serverRevision = receipt.getLong("revision")
+        check(remote.getString("id") == targetId && remote.getString("kind") == "journal" &&
+            version.getString("id") == receipt.getString("versionId") && version.getString("recordId") == targetId &&
+            (!receipt.has("inputVersionId") || receipt.getString("inputVersionId") == sent.versionId)) { "JOURNAL_RECEIPT_INVALID" }
+        db.runInTransaction {
+            val local = dao.record(sent.recordId) ?: dao.record(targetId) ?: error("RECORD_NOT_FOUND")
+            val sql = db.openHelper.writableDatabase
+            val pending = dao.allOutbox().filter { it.recordId == sent.recordId && it.operationId != sent.operationId &&
+                it.state !in setOf("applied", "snapshot-covered") }
+            val originalBody = JSONObject(sent.payloadJson).getJSONObject("payload").getString("markdown")
+            val mergedChanged = remote.getString("markdown") != originalBody
+            for (child in pending) {
+                // Never change a request that may already have reached the server.
+                if (child.attempts != 0) continue
+                val op = JSONObject(child.payloadJson)
+                val body = op.getJSONObject("payload")
+                val base = child.baseVersionId?.let { id -> dao.versions(sent.recordId).firstOrNull { it.id == id }?.markdown }
+                val appendOnly = body.optString("kind") == "journal" && child.action == "update" && base != null &&
+                    body.getString("markdown").startsWith(base + "\n\n")
+                op.put("recordId", targetId); body.put("id", targetId)
+                val activities = op.optJSONArray("activities") ?: JSONArray()
+                for (i in 0 until activities.length()) activities.getJSONObject(i).put("recordId", targetId)
+                val blockedEdit = mergedChanged && !appendOnly
+                dao.updateOutbox(child.copy(recordId = targetId, payloadJson = op.toString(), fingerprint = Canonical.hash(plain(op)),
+                    state = if (blockedEdit) "conflict" else child.state, lastError = if (blockedEdit) "JOURNAL_EDIT_CONFLICT" else child.lastError))
+                if (blockedEdit) dao.putConflict(LibraryConflict(UUID.randomUUID().toString(), targetId, child.operationId,
+                    JSONObject(sent.payloadJson).getJSONObject("payload").toString(), localRecordJson(local).toString(),
+                    JSONObject(remote.toString()).put("versionId", receipt.getString("versionId")).put("changeId", receipt.getString("changeId")).toString(),
+                    serverRevision, "open", Instant.now().toString()))
+            }
+            if (sent.recordId != targetId) {
+                // A coordinator receipt proves the journal alias. Preserve the exact source
+                // version and hash; only its owning record changes. Uncertain operations keep
+                // their original bytes until a definitive receipt is obtained.
+                for (child in dao.allRecords().filter { it.kind == "ai_annotation" && it.annotationOfJson != null }) {
+                    val anchor = JSONObject(child.annotationOfJson!!)
+                    if (anchor.optString("recordId") != sent.recordId) continue
+                    val source = dao.versions(sent.recordId).firstOrNull { it.id == anchor.optString("versionId") }
+                        ?: error("ANNOTATION_SOURCE_VERSION_MISSING")
+                    val digest = MessageDigest.getInstance("SHA-256").digest(source.markdown.toByteArray(Charsets.UTF_8))
+                        .joinToString("") { "%02x".format(it) }
+                    check(digest == anchor.optString("contentHash")) { "ANNOTATION_SOURCE_HASH_MISMATCH" }
+                    anchor.put("recordId", targetId)
+                    dao.updateRecord(child.copy(annotationOfJson = anchor.toString()))
+                    for (childVersion in dao.versions(child.id)) {
+                        val doc = childVersion.docJson?.let(::JSONObject) ?: continue
+                        val versionAnchor = doc.optJSONObject("annotationOf") ?: continue
+                        if (versionAnchor.optString("recordId") == sent.recordId && versionAnchor.optString("versionId") == anchor.getString("versionId") &&
+                            versionAnchor.optString("contentHash") == anchor.getString("contentHash")) {
+                            versionAnchor.put("recordId", targetId)
+                            sql.execSQL("UPDATE versions SET docJson=? WHERE id=?", arrayOf(doc.toString(), childVersion.id))
+                        }
+                    }
+                    for (operation in dao.allOutbox().filter { it.recordId == child.id &&
+                        it.attempts == 0 && it.state in setOf("pending", "blocked-dependency") }) {
+                        val payload = JSONObject(operation.payloadJson)
+                        val operationAnchor = payload.getJSONObject("payload").optJSONObject("annotationOf") ?: continue
+                        if (operationAnchor.optString("recordId") != sent.recordId || operationAnchor.optString("versionId") != anchor.getString("versionId") ||
+                            operationAnchor.optString("contentHash") != anchor.getString("contentHash")) continue
+                        operationAnchor.put("recordId", targetId)
+                        dao.updateOutbox(operation.copy(payloadJson = payload.toString(), fingerprint = Canonical.hash(plain(payload)),
+                            state = "pending", attempts = 0, lastError = null))
+                    }
+                }
+                // These rows keep their original IDs; only diary ownership changes.
+                for (table in listOf("versions", "activities", "attachments", "receipts", "conflicts", "branches", "outbox"))
+                    sql.execSQL("UPDATE $table SET recordId=? WHERE recordId=?", arrayOf(targetId, sent.recordId))
+                for (stored in dao.versions(targetId)) {
+                    val doc = stored.docJson?.let(::JSONObject) ?: continue
+                    if (doc.optString("id") == sent.recordId) { doc.put("id", targetId)
+                        sql.execSQL("UPDATE versions SET docJson=? WHERE id=?", arrayOf(doc.toString(), stored.id)) }
+                }
+                sql.execSQL("INSERT OR IGNORE INTO links(articleId,materialId) SELECT articleId,? FROM links WHERE materialId=?", arrayOf(targetId, sent.recordId))
+                sql.execSQL("DELETE FROM links WHERE materialId=?", arrayOf(sent.recordId))
+                dao.provenance(sent.recordId)?.let { if (dao.provenance(targetId) == null) dao.putProvenance(it.copy(recordId = targetId)) }
+                for (table in listOf("heads", "remote_heads", "provenance")) sql.execSQL("DELETE FROM $table WHERE recordId=?", arrayOf(sent.recordId))
+                sql.execSQL("DELETE FROM records WHERE id=?", arrayOf(sent.recordId))
+            }
+            val observed = dao.remoteHead(targetId)
+            val effectiveRemote = if (observed != null && observed.revision > serverRevision) JSONObject(observed.recordJson) else remote
+            val effectiveRevision = maxOf(serverRevision, observed?.revision ?: 0L)
+            val remoteRow = local.copy(id = targetId, title = effectiveRemote.optString("title"), markdown = effectiveRemote.getString("markdown"),
+                origin = effectiveRemote.getString("origin"), contentDay = nullable(effectiveRemote, "contentDay"), dateBasis = effectiveRemote.getString("dateBasis"),
+                processing = effectiveRemote.getString("processing"), url = nullable(effectiveRemote, "url"), annotation = nullable(effectiveRemote, "annotation"),
+                stage = nullable(effectiveRemote, "stage"), sourceIdsJson = effectiveRemote.getJSONArray("sourceIds").toString(),
+                createdByDevice = nullable(effectiveRemote, "createdByDevice"), baseVersionId = null,
+                sourcesJson = effectiveRemote.getJSONArray("sources").toString(), attachmentDescriptorsJson = effectiveRemote.getJSONArray("attachmentDescriptors").toString(),
+                createdAt = effectiveRemote.getString("createdAt"), updatedAt = effectiveRemote.getString("updatedAt"), deleted = false,
+                versionId = if (effectiveRevision > serverRevision) observed!!.versionId!! else receipt.getString("versionId"),
+                changeId = if (effectiveRevision > serverRevision) observed!!.changeId!! else receipt.getString("changeId"),
+                revision = local.revision + 1, serverRevision = effectiveRevision, syncState = "synced")
+            val adopted = if (pending.isEmpty()) remoteRow else local.copy(id = targetId, serverRevision = effectiveRevision, syncState = "pending")
+            if (dao.record(targetId) == null) dao.insertRecord(adopted) else dao.updateRecord(adopted)
+            if (receipt.has("inputVersionId")) {
+                val inputVersion = dao.versions(targetId).firstOrNull { it.id == sent.versionId } ?: error("JOURNAL_INPUT_VERSION_MISSING")
+                check(inputVersion.markdown == originalBody) { "JOURNAL_INPUT_VERSION_MISMATCH" }
+                sql.execSQL("UPDATE versions SET revision=?,serverRevision=?,journalInputJson=? WHERE id=?", arrayOf<Any>(receipt.getLong("inputVersionRevision"), receipt.getLong("inputVersionRevision"), JSONObject(sent.payloadJson).getJSONObject("payload").toString(), sent.versionId))
+            }
+            val localVersion = dao.versions(targetId).firstOrNull { it.id == version.getString("id") }
+            if (localVersion != null && localVersion.markdown != version.getString("markdown")) {
+                dao.insertVersion(localVersion.copy(id = UUID.randomUUID().toString(), reason = "同步前本地日记", changeId = null))
+                sql.execSQL("DELETE FROM versions WHERE id=?", arrayOf(localVersion.id))
+            }
+            dao.insertRemoteVersion(LibraryVersion(version.getString("id"), targetId, version.getLong("revision"), version.getString("markdown"),
+                version.getString("title"), version.getString("createdAt"), version.getString("reason"), receipt.getString("changeId"), serverRevision,
+                remote.toString(), version.getJSONArray("sources").toString(), version.getJSONArray("parentVersionIds").toString(), false, false,
+                if (receipt.has("inputVersionId")) JSONObject(sent.payloadJson).getJSONObject("payload").toString() else null))
+            dao.putHead(LibraryHead(targetId, adopted.revision, adopted.versionId, adopted.changeId, adopted.deleted))
+            if (observed == null || serverRevision >= observed.revision) dao.putRemoteHead(LibraryRemoteHead(targetId, serverRevision,
+                receipt.getString("versionId"), receipt.getString("changeId"), false, remote.toString(), Instant.now().toString()))
+            val descriptors = remote.getJSONArray("attachmentDescriptors")
+            val owned = dao.attachments(targetId).map { it.id }.toSet()
+            for (i in 0 until descriptors.length()) { val descriptor = descriptors.getJSONObject(i)
+                if (descriptor.getString("id") !in owned) dao.putAttachment(LibraryAttachment(descriptor.getString("id"), targetId,
+                    descriptor.getString("name"), remote.getString("updatedAt"), descriptor.getString("hash"), descriptor.getLong("byteLength"), null, false, true))
+            }
+            dao.updateOutbox(sent.copy(recordId = targetId, state = "applied", lastError = null))
+        }
+    }
+
     /** Resolve a conflict by accepting the exact remote head after a revision check. */
     fun resolveConflictRemote(conflictId: String, expectedRevision: Long, requestId: String): LibraryRecord {
         UUID.fromString(requestId)
@@ -314,6 +565,14 @@ class LibraryRepository internal constructor(
         val remote = validateRecord(conflictRecord ?: knownHead?.takeIf { it.revision == expectedRevision }
             ?.let { JSONObject(it.recordJson) } ?: error("SYNC_REMOTE_RECORD_MISSING"))
         check(remote.optString("id") == current.id) { "SYNC_REMOTE_RECORD_INVALID" }
+        if (current.kind == "ai_annotation" || remote.optString("kind") == "ai_annotation") {
+            val localAnchor = current.annotationOfJson?.let(::JSONObject)
+            val remoteAnchor = remote.optJSONObject("annotationOf")
+            check(current.kind == "ai_annotation" && remote.optString("kind") == "ai_annotation" &&
+                localAnchor != null && remoteAnchor != null && Canonical.hash(plain(localAnchor)) == Canonical.hash(plain(remoteAnchor))) {
+                "ANNOTATION_RELATION_CHANGED"
+            }
+        } else check(!remote.has("annotationOf") || remote.isNull("annotationOf")) { "ANNOTATION_RELATION_CHANGED" }
         val remoteVersionId = remote.optString("versionId").takeIf { it.isNotBlank() }
             ?: knownHead?.takeIf { it.revision == expectedRevision }?.versionId ?: error("SYNC_REMOTE_VERSION_MISSING")
         val remoteChangeId = remote.optString("changeId").takeIf { it.isNotBlank() }
@@ -584,7 +843,7 @@ class LibraryRepository internal constructor(
                 .put("reason", it.reason).put("changeId", it.changeId ?: JSONObject.NULL).put("serverRevision", it.serverRevision ?: JSONObject.NULL)
                 .put("doc", it.docJson?.let(::JSONObject) ?: JSONObject.NULL).put("sources", JSONArray(it.sourcesJson))
                 .put("parentVersionIds", JSONArray(it.parentVersionIdsJson)).put("sourcesDerived", it.sourcesDerived)
-                .put("parentsDerived", it.parentsDerived) }))
+                .put("parentsDerived", it.parentsDerived).apply { it.journalInputJson?.let { input -> put("journalInput", JSONObject(input)) } } }))
             .put("activities", JSONArray(dao.allActivities().map(::activity)))
             .put("links", JSONArray(dao.allLinks().map { JSONObject().put("articleId", it.articleId).put("materialId", it.materialId) }))
             .put("attachments", JSONArray(dao.allAttachments().map { JSONObject().put("id", it.id).put("recordId", it.recordId)
@@ -793,7 +1052,7 @@ class LibraryRepository internal constructor(
             db.runInTransaction {
                 for (i in 0 until records.length()) dao.insertRecord(recordFromArchive(records.getJSONObject(i)))
                 for (i in 0 until heads.length()) { val x = heads.getJSONObject(i); dao.putHead(LibraryHead(x.getString("recordId"), x.optLong("revision"), nullable(x, "versionId"), nullable(x, "changeId"), x.optBoolean("deleted"))) }
-                for (i in 0 until versions.length()) { val x = versions.getJSONObject(i); dao.insertVersion(LibraryVersion(x.getString("id"), x.getString("recordId"), x.optLong("revision"), x.optString("markdown"), x.optString("title"), x.optString("createdAt"), x.optString("reason"), nullable(x, "changeId"), null, x.optJSONObject("doc")?.toString(), x.optJSONArray("sources")?.toString() ?: "[]", x.optJSONArray("parentVersionIds")?.toString() ?: "[]", x.optBoolean("sourcesDerived"), x.optBoolean("parentsDerived"))) }
+                for (i in 0 until versions.length()) { val x = versions.getJSONObject(i); dao.insertVersion(LibraryVersion(x.getString("id"), x.getString("recordId"), x.optLong("revision"), x.optString("markdown"), x.optString("title"), x.optString("createdAt"), x.optString("reason"), nullable(x, "changeId"), null, x.optJSONObject("doc")?.toString(), x.optJSONArray("sources")?.toString() ?: "[]", x.optJSONArray("parentVersionIds")?.toString() ?: "[]", x.optBoolean("sourcesDerived"), x.optBoolean("parentsDerived"), x.optJSONObject("journalInput")?.toString())) }
                 for (i in 0 until activities.length()) { val x = activities.getJSONObject(i); dao.insertActivity(LibraryActivity(x.getString("activityId"), x.getString("recordId"), nullable(x, "changeId"), nullable(x, "originDeviceId"), x.getString("occurredAt"), x.optString("timeZone", "UTC"), x.optString("beforeHash"), x.optString("afterHash"), x.optJSONArray("afterSegments")?.toString() ?: "[]", x.optString("action"), x.optString("authorship"), x.optInt("added"), x.optInt("removed"), null)) }
                 for (i in 0 until links.length()) { val x = links.getJSONObject(i); dao.putLink(LibraryLink(x.getString("articleId"), x.getString("materialId"))) }
                 for (i in 0 until attachments.length()) { val x = attachments.getJSONObject(i); val hash = x.getString("hash").lowercase(); dao.putAttachment(LibraryAttachment(x.getString("id"), x.getString("recordId"), x.getString("name"), x.getString("createdAt"), hash, x.getLong("byteLength"), "attachments/$hash", true, false)) }
@@ -849,7 +1108,7 @@ class LibraryRepository internal constructor(
         x.optJSONArray("sourceIds")?.toString() ?: "[]", x.optJSONArray("sources")?.toString() ?: "[]",
         x.optJSONArray("attachmentDescriptors")?.toString() ?: "[]", x.getString("createdAt"), x.optString("updatedAt"),
         x.optBoolean("deleted"), nullable(x, "createdByDevice"), x.optString("versionId"), x.optString("changeId"),
-        nullable(x, "baseVersionId"), null, x.optLong("localGeneration", 1), x.optLong("revision", 1), "local-only")
+        nullable(x, "baseVersionId"), null, x.optLong("localGeneration", 1), x.optLong("revision", 1), "local-only", x.optJSONObject("annotationOf")?.toString())
     private fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
     private fun enqueueUpdate(old: LibraryRecord, next: LibraryRecord, changeId: String, versionId: String, now: String,
@@ -897,6 +1156,7 @@ class LibraryRepository internal constructor(
             }
         }).put("createdAt", r.createdAt).put("updatedAt", r.updatedAt)
         .put("deleted", r.deleted).put("createdByDevice", r.createdByDevice ?: JSONObject.NULL)
+        .apply { r.annotationOfJson?.let { put("annotationOf", JSONObject(it)) } }
     private fun localRecordJson(r: LibraryRecord) = wireRecord(r).put("provenance", dao.provenance(r.id)?.let { JSONObject(it.json) } ?: JSONObject.NULL)
         .put("doc", dao.versions(r.id).firstOrNull()?.docJson?.let { JSONObject(it) } ?: JSONObject.NULL)
     private fun activityJson(a: LibraryActivity) = JSONObject().put("activityId", a.activityId)
@@ -965,7 +1225,7 @@ class LibraryRepository internal constructor(
     private fun plain(json: JSONObject): Map<String, Any?> = json.keys().asSequence().associateWith { plain(json.get(it)) }
 
     companion object {
-        val KINDS = setOf("journal", "idea", "freewrite", "web", "ai", "reference", "article")
+        val KINDS = setOf("ai_annotation", "journal", "idea", "freewrite", "web", "ai", "reference", "article")
         private val EDITABLE_FIELDS = setOf("title", "markdown", "kind", "origin", "processing", "contentDay", "dateBasis", "url", "annotation", "stage", "sourceIds", "sources", "attachmentDescriptors", "deleted", "provenance")
         private val READ_ONLY_FIELDS = setOf("id", "createdAt", "updatedAt", "createdByDevice", "revision", "versionId", "changeId", "baseVersionId", "serverRevision", "localGeneration", "syncState", "state")
     }
@@ -1180,7 +1440,7 @@ class LibraryManager(context: Context, private val namespace: String = "shiwen-l
         if (!app.getDatabasePath(dbFile).exists()) return false
         val database = Room.databaseBuilder(app, LibraryDatabase::class.java, dbFile)
             .addMigrations(LIBRARY_MIGRATION_1_2, LIBRARY_MIGRATION_2_3, LIBRARY_MIGRATION_3_4,
-                LIBRARY_MIGRATION_4_5).openHelperFactory(LargeRowOpenHelperFactory()).build()
+                LIBRARY_MIGRATION_4_5, LIBRARY_MIGRATION_5_6, LIBRARY_MIGRATION_6_7).openHelperFactory(LargeRowOpenHelperFactory()).build()
         return try {
             val encoded = database.dao().meta("restore-complete-v1") ?: return false
             val marker = JSONObject(encoded)

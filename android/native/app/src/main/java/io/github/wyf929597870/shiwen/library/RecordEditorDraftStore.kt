@@ -49,7 +49,7 @@ internal class RecordEditorDraftStore(context: Context, namespace: String = "shi
         .openHelperFactory(LargeRowOpenHelperFactory()).build()
 
     fun archive(libraryId: String): JSONArray = JSONArray(db.dao().all(libraryId)
-        .filter { it.slot in setOf("composer", "materials", "articles") }.map { row ->
+        .filter { it.slot in setOf("composer", "materials", "articles") || it.slot.startsWith("annotation:") }.map { row ->
             JSONObject().put("slot", row.slot).put("requestId", row.requestId ?: JSONObject.NULL)
                 .put("localGeneration", row.localGeneration).put("content", JSONObject(row.contentJson))
                 .put("pendingMutation", row.pendingMutationJson?.let(::JSONObject) ?: JSONObject.NULL).put("updatedAt", row.updatedAt)
@@ -140,7 +140,7 @@ internal class RecordEditorDraftStore(context: Context, namespace: String = "shi
 
     private fun validateScope(libraryId: String, slot: String) {
         require(libraryId.length in 1..128 && libraryId != "null") { "INVALID_RECORD_DRAFT_LIBRARY" }
-        require(slot in setOf("composer", "materials", "articles")) { "INVALID_RECORD_DRAFT_SLOT" }
+        require(slot in setOf("composer", "materials", "articles") || slot.matches(Regex("annotation:[0-9a-fA-F-]{36}"))) { "INVALID_RECORD_DRAFT_SLOT" }
     }
 
     private fun validateRequest(requestId: String, generation: Long, content: JSONObject, pending: JSONObject?) {

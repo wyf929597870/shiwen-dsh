@@ -13,6 +13,7 @@ internal object LibraryImageCopy {
         check(source.libraryId != target.libraryId) { "COPY_TARGET_MUST_DIFFER" }
         UUID.fromString(requestId)
         val row = source.read(recordId)
+        require(row.kind != "ai_annotation") { "ANNOTATION_COPY_UNSUPPORTED" }
         check(!row.deleted) { "RECORD_NOT_FOUND" }
         val masked = maskCode(row.markdown)
         val matches = reference.findAll(masked).map { match ->

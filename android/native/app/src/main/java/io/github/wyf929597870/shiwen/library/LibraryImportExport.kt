@@ -109,6 +109,37 @@ internal class LibraryImportExport(private val files: LibraryFileTransfer) {
             ZipOutputStream(BufferedOutputStream(FileOutputStream(outputFile))).use { zip ->
                 zip.setLevel(6)
                 putEntry(zip, fileName, recordMarkdownHeader(record).plus(body.toString()).toByteArray(StandardCharsets.UTF_8))
+                val children = if (record.kind == "ai_annotation") emptyList() else repo.annotationList(record.id)
+                val index = JSONArray()
+                val exportedVersions = mutableSetOf<String>()
+                for (child in children) {
+                    val childExport = exportRecordWithImages(repo, child.id)
+                    try {
+                        val prefix = "annotations/${child.id}/"
+                        java.util.zip.ZipFile(childExport.file).use { childZip ->
+                            val entries = childZip.entries()
+                            while (entries.hasMoreElements()) {
+                                val entry = entries.nextElement()
+                                require(!entry.isDirectory && !entry.name.contains("..") && !entry.name.startsWith('/')) { "EXPORT_IMAGE_MAPPING_INVALID" }
+                                zip.putNextEntry(java.util.zip.ZipEntry(prefix + entry.name))
+                                childZip.getInputStream(entry).use { it.copyTo(zip) }
+                                zip.closeEntry()
+                            }
+                        }
+                        val anchor = JSONObject(child.annotationOfJson!!)
+                        val versionId = anchor.getString("versionId")
+                        UUID.fromString(versionId)
+                        val originalVersion = repo.dao.versions(record.id).firstOrNull { it.id == versionId } ?: error("ANNOTATION_SOURCE_VERSION_MISSING")
+                        val bytes = originalVersion.markdown.toByteArray(StandardCharsets.UTF_8)
+                        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+                        check(digest == anchor.getString("contentHash")) { "ANNOTATION_SOURCE_HASH_MISMATCH" }
+                        val versionPath = "versions/$versionId.md"
+                        if (exportedVersions.add(versionId)) putEntry(zip, versionPath, bytes)
+                        index.put(JSONObject().put("id", child.id).put("title", child.title)
+                            .put("annotationOf", anchor).put("originalVersion", versionPath).put("directory", prefix))
+                    } finally { childExport.file.delete() }
+                }
+                if (children.isNotEmpty()) putEntry(zip, "annotations/index.json", index.toString(2).toByteArray(StandardCharsets.UTF_8))
                 var total = 0L
                 for ((_, pair) in images) {
                     val (source, path) = pair
@@ -473,6 +504,7 @@ internal class LibraryImportExport(private val files: LibraryFileTransfer) {
     fun copyRecordText(source: LibraryRepository, target: LibraryRepository, recordId: String, requestId: String): LibraryRecord {
         check(source.libraryId != target.libraryId) { "COPY_TARGET_MUST_DIFFER" }
         val row = source.read(recordId)
+        require(row.kind != "ai_annotation") { "ANNOTATION_COPY_UNSUPPORTED" }
         check(!row.deleted) { "RECORD_NOT_FOUND" }
         val descriptors = JSONArray(row.attachmentDescriptorsJson)
         val namesById = buildMap {

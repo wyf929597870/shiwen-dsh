@@ -59,7 +59,7 @@ try{
   catch(error){let alive=false;try{process.kill(service.pid,0);alive=true;}catch{};console.error(`Synthetic sync HTTP failed: action=${action}, hostAlive=${alive}`);throw error;}
   const result=await response.json();assert.equal(response.status,200,JSON.stringify(result));return result.result.data;
  };
- const deviceId=randomUUID(),protocolVersion='1.0.0-draft.2';
+ const deviceId=randomUUID(),protocolVersion='1.0.0-draft.3';
  const identity=await sync('identity',{protocolVersion,deviceId});
  const binding={libraryId:identity.libraryId,epoch:identity.epoch,deviceId};
  const recordId=randomUUID(),at='2024-03-01T12:00:00.000Z',markdown='# 历史素材\n\n手机应收到完整原文和来源。';

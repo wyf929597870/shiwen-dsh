@@ -248,6 +248,9 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
         val identity = rpc(nodeId, configRevision, "identity", JSONObject().put("protocolVersion", PROTOCOL_VERSION).put("deviceId", repo.deviceId))
         check(identity.optString("libraryId") == repo.libraryId && identity.optString("epoch") == epoch) { "SYNC_IDENTITY_CHANGED" }
         val stagedAttachments = identity.optJSONObject("capabilities")?.optBoolean("stagedRecordAttachments") == true
+        if (identity.optJSONObject("capabilities")?.optBoolean("dailyJournal") != true &&
+            repo.dao.pendingOutbox(100_000).any { JSONObject(it.payloadJson).getJSONObject("payload").optString("kind") == "journal" })
+            error("请先更新电脑端拾文，以支持同一天日记合并")
         pushOutbox(repo, nodeId, configRevision, epoch, operationId, stagedAttachments)
         var cursor = row.cursor ?: "0"
         var count = 0
@@ -302,7 +305,9 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
         val pending = repo.dao.pendingOutbox(100_000)
         val byVersion = pending.associateBy { it.versionId }
         fun dependencyDepth(row: LibraryOutbox, seen: Set<String> = emptySet()): Int {
-            val parentId = row.baseVersionId ?: return 0
+            val parentId = row.baseVersionId ?: runCatching {
+                JSONObject(row.payloadJson).optJSONObject("payload")?.optJSONObject("annotationOf")?.optString("versionId")
+            }.getOrNull()?.takeIf { it.isNotBlank() } ?: return 0
             val parent = byVersion[parentId] ?: return 0
             check(parent.operationId !in seen && parent.operationId != row.operationId) { "SYNC_OUTBOX_DEPENDENCY_CYCLE" }
             return 1 + dependencyDepth(parent, seen + row.operationId)
@@ -453,7 +458,15 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
     }
 
     private fun rebaseUnsentChild(repo: LibraryRepository, original: LibraryOutbox): LibraryOutbox {
-        if (original.attempts != 0 || original.baseVersionId == null) return original
+        if (original.baseVersionId == null) {
+            if (original.state == "blocked-dependency") {
+                val retry = original.copy(state = "pending", lastError = null)
+                repo.dao.updateOutbox(retry)
+                return retry
+            }
+            return original
+        }
+        if (original.attempts != 0) return original
         val head = repo.dao.remoteHead(original.recordId)
         val parent = repo.dao.outboxByVersionId(original.baseVersionId)
         if (head?.versionId != original.baseVersionId || parent != null && parent.state !in setOf("applied", "snapshot-covered")) {
@@ -483,9 +496,29 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
             else -> "unknown"
         }
         if (status == "applied") {
+            if (receipt.optBoolean("journalMerged")) {
+                val record = receipt.optJSONObject("currentRecord")
+                    ?: receipt.optJSONObject("currentRecordRef")?.let { downloadPayloadObject(repo, nodeId, revision, epoch, it) }
+                    ?: error("JOURNAL_RECEIPT_RECORD_MISSING")
+                val version = receipt.optJSONObject("currentVersion")
+                    ?: receipt.optJSONObject("currentVersionRef")?.let { downloadPayloadObject(repo, nodeId, revision, epoch, it) }
+                    ?: error("JOURNAL_RECEIPT_VERSION_MISSING")
+                repo.acceptJournalAppend(row, receipt, record, version)
+                return
+            }
             val revision = receipt.optLong("revision", -1L)
             check(revision > 0) { "SYNC_RECEIPT_REVISION_MISSING" }
-            val body = JSONObject(row.payloadJson).getJSONObject("payload")
+            val sentBody = JSONObject(row.payloadJson).getJSONObject("payload")
+            val body = receipt.optJSONObject("currentRecord") ?: sentBody
+            if (sentBody.optString("kind") == "ai_annotation" && body !== sentBody) {
+                val local = repo.dao.record(row.recordId)
+                val canonical = body.optJSONObject("annotationOf") ?: error("ANNOTATION_RELATION_MISSING")
+                val existing = local?.annotationOfJson?.let(::JSONObject) ?: error("ANNOTATION_RELATION_MISSING")
+                check(canonical.optString("recordId") == existing.optString("recordId") &&
+                    canonical.optString("versionId") == existing.optString("versionId") && canonical.optString("contentHash") == existing.optString("contentHash")) {
+                    "ANNOTATION_RELATION_CHANGED"
+                }
+            }
             val versionId = receipt.optString("versionId").takeIf { it.isNotBlank() } ?: row.versionId
             val changeId = receipt.optString("changeId").takeIf { it.isNotBlank() } ?: row.changeId
             repo.db.runInTransaction {
@@ -629,11 +662,20 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
                         dao.remoteHead(id)?.recordJson ?: "{}", Instant.now().toString()))
                 }
             }
-            "versions" -> dao.insertRemoteVersion(LibraryVersion(item.getString("id"), item.getString("recordId"),
-                item.optLong("revision"), item.optString("markdown"), item.optString("title"), item.optString("createdAt"),
-                item.optString("reason"), item.optString("changeId").takeIf { it.isNotBlank() }, item.optLong("serverRevision").takeIf { item.has("serverRevision") },
-                item.optJSONObject("doc")?.toString(), item.optJSONArray("sources")?.toString() ?: "[]",
-                item.optJSONArray("parentVersionIds")?.toString() ?: "[]"))
+            "versions" -> {
+                val incoming = LibraryVersion(item.getString("id"), item.getString("recordId"),
+                    item.optLong("revision"), item.optString("markdown"), item.optString("title"), item.optString("createdAt"),
+                    item.optString("reason"), item.optString("changeId").takeIf { it.isNotBlank() }, item.optLong("serverRevision").takeIf { item.has("serverRevision") },
+                    item.optJSONObject("doc")?.toString(), item.optJSONArray("sources")?.toString() ?: "[]",
+                    item.optJSONArray("parentVersionIds")?.toString() ?: "[]", journalInputJson = item.optJSONObject("journalInput")?.toString())
+                if (dao.insertRemoteVersion(incoming) == -1L && incoming.journalInputJson != null) {
+                    val existing = dao.versions(incoming.recordId).firstOrNull { it.id == incoming.id } ?: error("SYNC_VERSION_ID_COLLISION")
+                    check(existing.markdown == incoming.markdown && canonicalJsonArrayEquals(existing.sourcesJson, incoming.sourcesJson)) { "SYNC_VERSION_CONTENT_MISMATCH" }
+                    if (existing.journalInputJson == null) repo.db.openHelper.writableDatabase.execSQL(
+                        "UPDATE versions SET journalInputJson=? WHERE id=?", arrayOf(incoming.journalInputJson, incoming.id))
+                    else check(Canonical.hash(plain(JSONObject(existing.journalInputJson))) == Canonical.hash(plain(JSONObject(incoming.journalInputJson)))) { "SYNC_VERSION_INPUT_MISMATCH" }
+                }
+            }
             "activities" -> dao.insertRemoteActivity(LibraryActivity(item.getString("activityId"), item.getString("recordId"),
                 nullable(item, "changeId"), nullable(item, "originDeviceId"), item.getString("occurredAt"),
                 item.optString("timeZone", "UTC"), item.optString("beforeHash"), item.optString("afterHash"),
@@ -667,6 +709,7 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
         } else {
             error("SYNC_EVENT_VERSION_ID_MISSING")
         }
+        event.optJSONArray("activities")?.let { activities -> for (i in 0 until activities.length()) applySnapshotItem(repo, "activities", activities.getJSONObject(i)) }
         if (observed != null && (observed.revision > revision || observed.revision == revision && observed.changeId == eventChangeId)) return
         if (observed != null && observed.revision == revision && observed.changeId != eventChangeId) {
             repo.dao.putConflict(LibraryConflict(UUID.randomUUID().toString(), row.id, eventChangeId ?: "branch",
@@ -697,7 +740,6 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
                 applyBranch(repo, branches.getJSONObject(i))
             }
         }
-        event.optJSONArray("activities")?.let { activities -> for (i in 0 until activities.length()) applySnapshotItem(repo, "activities", activities.getJSONObject(i)) }
         event.optJSONArray("links")?.let { links -> repo.dao.clearLinks(row.id); for (i in 0 until links.length()) applySnapshotItem(repo, "links", links.getJSONObject(i)) }
     }
 
@@ -726,10 +768,10 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
         item.optJSONArray("sources")?.toString() ?: "[]", item.optJSONArray("attachmentDescriptors")?.toString() ?: "[]",
         item.optString("createdAt"), item.optString("updatedAt"), item.optBoolean("deleted"), nullable(item, "createdByDevice"),
         item.optString("versionId"), item.optString("changeId"),
-        nullable(item, "baseVersionId"), item.optLong("revision").takeIf { item.has("revision") }, 1, 1, "synced")
+        nullable(item, "baseVersionId"), item.optLong("revision").takeIf { item.has("revision") }, 1, 1, "synced", item.optJSONObject("annotationOf")?.toString())
     }
 
-    private fun downloadPayloadObject(repo: LibraryRepository, nodeId: String, revision: String, epoch: String, ref: JSONObject): JSONObject =
+    internal fun downloadPayloadObject(repo: LibraryRepository, nodeId: String, revision: String, epoch: String, ref: JSONObject): JSONObject =
         downloadPayloadValue(repo, nodeId, revision, epoch, ref) as? JSONObject ?: error("SYNC_PAYLOAD_TYPE_INVALID")
 
     private fun downloadPayloadArray(repo: LibraryRepository, nodeId: String, revision: String, epoch: String, ref: JSONObject): JSONArray =
@@ -890,13 +932,14 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
         .put("sourceIds", JSONArray(r.sourceIdsJson)).put("sources", JSONArray(r.sourcesJson))
         .put("attachmentDescriptors", JSONArray(r.attachmentDescriptorsJson)).put("createdAt", r.createdAt)
         .put("updatedAt", r.updatedAt).put("createdByDevice", r.createdByDevice ?: JSONObject.NULL).put("deleted", r.deleted)
+        .apply { r.annotationOfJson?.let { put("annotationOf", JSONObject(it)) } }
     private fun sameContent(a: LibraryRecord, b: LibraryRecord): Boolean = a.id == b.id && a.title == b.title &&
-        a.markdown == b.markdown && a.kind == b.kind && a.origin == b.origin && a.processing == b.processing &&
+        a.markdown == b.markdown && a.annotationOfJson == b.annotationOfJson && a.kind == b.kind && a.origin == b.origin && a.processing == b.processing &&
         a.contentDay == b.contentDay && a.dateBasis == b.dateBasis && a.deleted == b.deleted &&
         canonicalJsonArrayEquals(a.sourceIdsJson, b.sourceIdsJson) && canonicalJsonArrayEquals(a.sourcesJson, b.sourcesJson)
     private fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
     companion object {
-        private const val PROTOCOL_VERSION = "1.0.0-draft.2"
+        private const val PROTOCOL_VERSION = "1.0.0-draft.3"
         private const val MAX_INLINE_OPERATION_BYTES = 512 * 1024
         private const val MAX_CANONICAL_OPERATION_BYTES = 64 * 1024 * 1024
         private val ENTITY_ORDER = listOf("records", "heads", "versions", "activities", "links", "attachments", "provenance", "branches")

@@ -13,23 +13,23 @@ const decodeBase64=value=>{if(typeof value!=='string'||value.length>Math.ceil(li
 export class MobileSyncAdapter {
   constructor({ctx,library,chunkStore}={}){
     if(!ctx||!library)throw new TypeError('MobileSyncAdapter requires host context and library');
-    this.ctx=ctx;this.library=library;this.chunkStore=chunkStore;
+    this.ctx=ctx;this.library=library;this.chunkStore=chunkStore;this.compatibleDevices=new Set();
   }
   ownerId(){return String(this.ctx.connection?.browserPeer?.id??'shiwen-owner');}
   syncStore(){return this.library.mobileSync({ownerId:this.ownerId()});}
-  identity(args){return this.syncStore().identity(args);}
+  identity(args){const key=`${this.ownerId()}:${args?.deviceId}`;this.compatibleDevices.delete(key);const result=this.syncStore().identity(args);this.compatibleDevices.add(key);return result;}
   chunks(){
     if(this.chunkStore)return this.chunkStore;
     return this.chunkStore=new ChunkStore(join(this.library.paths.library,'mobile-sync-transfers'),{partBytes:limits.maxPartBytes});
   }
   context(request){
-    const {libraryId,epoch,deviceId}=request??{};const identity=this.syncStore().identity({protocolVersion:'1.0.0-draft.2',deviceId});
+    const {libraryId,epoch,deviceId}=request??{};if(!this.compatibleDevices.has(`${this.ownerId()}:${deviceId}`))fail('PROTOCOL_UNSUPPORTED');const identity=this.syncStore().identity({protocolVersion:'1.0.0-draft.3',deviceId});
     if(libraryId!==identity.libraryId)fail('LIBRARY_MISMATCH');if(epoch!==identity.epoch)fail('EPOCH_CHANGED',{epoch:identity.epoch});
     return {authenticated:true,ownerId:String(this.ctx.connection?.browserPeer?.id??'shiwen-owner'),libraryId:identity.libraryId};
   }
   setupContext(request){
     const targetLibraryId=text(request.targetLibraryId??request.expectedLibraryId,'targetLibraryId',100),deviceId=request.deviceId??'00000000-0000-4000-8000-000000000000';
-    const identity=this.syncStore().identity({protocolVersion:'1.0.0-draft.2',deviceId});if(identity.libraryId!==targetLibraryId)fail('SETUP_TARGET_CHANGED');
+    const identity=this.syncStore().identity({protocolVersion:'1.0.0-draft.3',deviceId});if(identity.libraryId!==targetLibraryId)fail('SETUP_TARGET_CHANGED');
     return {authenticated:true,ownerId:this.ownerId(),libraryId:targetLibraryId};
   }
   beginUpload(kind,request){
@@ -63,7 +63,7 @@ export class MobileSyncAdapter {
     if(actions.has(action)){
       const sync=this.syncStore();
       if(action!=='identity')this.context(request);
-      if(action==='push'){
+      if(action==='push'||action==='receipts'){
         this.context(request);const operations=[];
         for(const item of request.operations??[]){
           if(item.inlineBody){operations.push(item);continue;}
@@ -73,7 +73,7 @@ export class MobileSyncAdapter {
           if(canonicalJSON(operation)!==file.bytes.toString('utf8')||operation.operationId!==item.operationId||fingerprint(operation)!==item.requestFingerprint)fail('MANIFEST_MISMATCH');
           operations.push({inlineBody:operation});
         }
-        const result=sync.push({...request,operations}),ctx=this.context(request);
+        const result=action==='push'?sync.push({...request,operations}):sync.receipts(request),ctx=this.context(request);
         for(const receipt of result.receipts??[]){
           if(receipt.currentRecord&&Buffer.byteLength(canonicalJSON(receipt.currentRecord))>limits.maxInlineBytes){receipt.currentRecordRef=this.publishPayload(ctx,receipt.currentRecord,{sourceAction:'pushConflictRecord',operationId:receipt.operationId});receipt.currentRecord=null;}
           if(receipt.currentVersion&&Buffer.byteLength(canonicalJSON(receipt.currentVersion))>limits.maxInlineBytes){receipt.currentVersionRef=this.publishPayload(ctx,receipt.currentVersion,{sourceAction:'pushConflictVersion',operationId:receipt.operationId});receipt.currentVersion=null;}
@@ -81,8 +81,8 @@ export class MobileSyncAdapter {
         return result;
       }
       if(action==='bootstrapPage'){
-        const page=sync.bootstrapPage(request),ctx=this.context({libraryId:sync.identity({protocolVersion:'1.0.0-draft.2',deviceId:request.deviceId}).libraryId,
-          epoch:sync.identity({protocolVersion:'1.0.0-draft.2',deviceId:request.deviceId}).epoch,deviceId:request.deviceId});
+        const page=sync.bootstrapPage(request),ctx=this.context({libraryId:sync.identity({protocolVersion:'1.0.0-draft.3',deviceId:request.deviceId}).libraryId,
+          epoch:sync.identity({protocolVersion:'1.0.0-draft.3',deviceId:request.deviceId}).epoch,deviceId:request.deviceId});
         page.items=page.items.map(item=>{
           const bytes=Buffer.from(canonicalJSON(item));if(bytes.length<=limits.maxInlineBytes)return item;
           const published=this.chunks().publish(ctx,{kind:'payload',bytes,digest:sha256(bytes),metadata:{snapshotId:page.snapshotId,entityType:page.entityType,manifestDigest:page.manifestDigest}});
@@ -103,7 +103,7 @@ export class MobileSyncAdapter {
         for(const key of ['record','version'])if(Buffer.byteLength(canonicalJSON(head[key]))>limits.maxInlineBytes){head[`${key}Ref`]=this.publishPayload(ctx,head[key],{sourceAction:`recordHead:${key}`,recordId:request.recordId});head[key]=null;}
         return head;
       }
-      const result=sync[action](request);
+      const result=action==='identity'?this.identity(request):sync[action](request);
       if(action==='identity')result.capabilities={...result.capabilities,stagedRecordAttachments:true};
       return result;
     }

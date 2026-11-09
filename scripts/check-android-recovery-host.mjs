@@ -40,14 +40,14 @@ try{
  const sync=async(action,request)=>{const response=await post('/api/shiwen',{method:'mobileSync',args:{action,request}},ownerCookie);
   const payload=await response.json();assert.equal(response.status,200,JSON.stringify(payload));return payload.result.data;};
  const deviceId=randomUUID();
- const before=await sync('identity',{protocolVersion:'1.0.0-draft.2',deviceId});
+ const before=await sync('identity',{protocolVersion:'1.0.0-draft.3',deviceId});
  run(['reverse',`tcp:${port}`,`tcp:${port}`]);reverseInstalled=true;
  const result=run(['shell','am','instrument','--user',user,'-w','-e','class','io.github.wyf929597870.shiwen.library.LibraryRecoveryHostTest',
   '-e','syntheticRecoveryHost',base,'-e','syntheticPassword',password,
   'io.github.wyf929597870.shiwen.probe.test/androidx.test.runner.AndroidJUnitRunner'],{allowFailure:true});
  const output=(result.stdout+'\n'+result.stderr).replaceAll(password,'[redacted]');
  if(result.status!==0||!/OK \(1 test\)/.test(output)||/FAILURES!!!|INSTRUMENTATION_FAILED/.test(output))throw Error('Android recovery test failed.\n'+output.trim().split(/\r?\n/).slice(-20).join('\n').slice(-8_000));
- const after=await sync('identity',{protocolVersion:'1.0.0-draft.2',deviceId});
+ const after=await sync('identity',{protocolVersion:'1.0.0-draft.3',deviceId});
  assert.notEqual(after.libraryId,before.libraryId);
  const snapshot=await sync('bootstrapBegin',{libraryId:after.libraryId,epoch:after.epoch,deviceId});
  assert.equal(snapshot.manifest.counts.records,2);assert.equal(snapshot.manifest.counts.versions,6);

@@ -33,6 +33,8 @@ try{
  const home=join(options.root,'dsh');
  const {appPatch}=await setupProfile({root,home,pluginRoot:join(runtime,'plugins'),relocate:true,writeAppPatch:false});
  process.env.SHIWEN_AUTH_DIRECTORY=directory;
+ process.env.SHIWEN_SECURE_PORT=String(options.port>0&&options.port<65535?options.port+1:0);
+ process.env.SHIWEN_LAN_DISCOVERY=options.discoverLan===false?'0':(options.discoverLan||!['127.0.0.1','::1'].includes(options.host)?'1':'0');
  process.env.DSH_HOME=home;process.env.SHIWEN_DATA_DIR=join(options.root,'library');process.env.SHIWEN_SERVER='1';
  for(const key of ['ELECTRON_RUN_AS_NODE','SHIWEN_DESKTOP','SHIWEN_APP_PATCH'])delete process.env[key];
  const {runProfile}=await import('@deepseek-ai/dsh/profile-boot');
@@ -63,14 +65,14 @@ try{
    const auth=ctx.get('shiwenPasswordAuth');
    if(req.url==='/url'&&!auth){res.writeHead(503).end('{}');return;}
    res.setHeader('Content-Type','application/json');
-   res.end(JSON.stringify({pid:process.pid,url,library:ctx.shiwenLibrary.paths.library,profile:'desktop',...(req.url==='/url'?{loginUrl:auth.localLoginUrl(url)}:{})}));
+   res.end(JSON.stringify({pid:process.pid,url,secure:auth?.networkInfo(),library:join(options.root,'library'),profile:'desktop',...(req.url==='/url'?{loginUrl:auth.localLoginUrl(url)}:{})}));
   }else res.writeHead(404).end();
  });
  await new Promise((yes,no)=>{control.once('error',no);control.listen(0,'127.0.0.1',yes);});
  const temp=stateFile+'.'+process.pid+'.tmp';
  await writeFile(temp,JSON.stringify({port:control.address().port,secret})+'\n',{mode:0o600});await rename(temp,stateFile);
  await writeFile(join(directory,'last-start.json'),JSON.stringify({host:options.host,port:options.port,...(options.cert?{cert:options.cert,key:options.key}:{})})+'\n',{mode:0o600});
- notify({type:'ready',url,library:ctx.shiwenLibrary.paths.library});
+ notify({type:'ready',url,library:join(options.root,'library')});
  if(process.connected)process.disconnect();
 }catch(error){
  notify({type:'error',message:error.message});console.error(error);
