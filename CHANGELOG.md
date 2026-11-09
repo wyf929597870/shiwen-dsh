@@ -3,29 +3,51 @@
 0.1.4 是本仓库首次公开的 Linux 预览版；0.1.0–0.1.3 为本地开发与打包记录。
 0.1.4 is this repository's first public Linux preview; 0.1.0–0.1.3 are local development builds.
 
-## 未发布 / Unreleased — Linux 0.1.13 · Android 0.1.6
+## v0.1.13 - 2026-11-09
 
 ### 中文
 
-- 原文与 AI 标注独立保存、编辑、同步和导出，标注关联不可变原文版本；MCP 与配套 Skill 区分作者来源和保存渠道，作者归属通过专用接口纠正。
-- 回顾主卡片、每日趋势与明细统一按内容日期统计当前个人原文字数，包含 MCP 保存的个人原文；编辑增减单独显示，独立 AI 标注不计入个人原文。
-- 同一天新增日记追加到同一份记录，改进跨端同步、版本与附件保留、恢复和重试。
-- 服务节点增加身份校验、备用地址、局域网发现及连通性监测；手机顶部显示当前节点状态，改进多网卡连接和离线恢复。
-- Web/桌面创作支持阅读素材后加入文章、引用插入及更宽的编辑区域；AI 标注支持收起按钮、标题切换及 Esc 关闭。
-- 桌面设置增加关闭到托盘或退出应用。真正退出时保留“保留服务并退出 / 停止服务并退出 / 取消”，设置持久化且不需要重新连接。
-- 同步协议升级到 `1.0.0-draft.3`，服务端和 Android 需配套更新；旧协议不会静默写入新结构。本次不自动整理或改写历史资料。
-- Linux 和 Android 已本地构建；桌面成品交互、隔离浏览器及 JVM 测试通过，Android 仪器测试已编译。本轮 Android 真机覆盖安装尚未验收，尚未创建对应 GitHub Release。
+- Linux amd64 预览版，包含客户端、独立服务与 Node 运行环境。
+- **配套升级：** 同步协议为 `1.0.0-draft.3`，请与 Android 0.1.6 一起升级。安装前保存编辑内容，并在退出时选择“停止服务并退出”；只关闭窗口或保留旧服务不足以加载新版。
+- 原文和 AI 标注独立保存、编辑、同步及导出，标注关联不可变原文版本。MCP 与配套 Skill 区分作者来源和保存渠道，提供专用的来源纠正接口。
+- 回顾主卡片、每日趋势与明细按内容日期统计当前个人原文字数，包含 MCP 归档的个人原文；真实编辑增减单独展示，独立 AI 标注不计入。
+- 同一天新增日记追加到同一份记录，改进跨端合并、版本、附件、恢复及重试。
+- 改进服务身份校验、备用地址、局域网发现和多网卡连接。创作时可阅读素材后加入文章或插入引用。
+- AI 标注支持收起按钮、再次点击标题及 Esc 关闭。桌面可选择关闭到托盘或退出应用，真正退出时保留“保留服务并退出 / 停止服务并退出 / 取消”提示。
+- 已通过隔离浏览器回归、Linux 成品包两次启动、回顾与标注交互、托盘和退出流程验证。历史资料不会自动拆分或改写。
 
 ### English
 
-- Store, edit, synchronize and export originals and AI annotations independently, with immutable original-version anchors. MCP and its Skill distinguish authorship from the saving client; a dedicated operation corrects attribution.
-- Review cards, daily trends and details count current personal originals by content date, including personal text archived through MCP. Show observed edits separately and exclude independent AI annotations.
-- Append new diary entries to one record per day, with improved cross-device synchronization, version and attachment preservation, recovery and retries.
-- Add service identity checks, alternative addresses, LAN discovery and reachability monitoring, including mobile header status and improved multi-adapter connections.
-- Let Web/desktop writers read material before selecting or quoting it. Add annotation collapse buttons, title toggling and Escape support.
-- Restore the desktop close-to-tray versus quit preference. Explicit quit retains keep-service, stop-service and cancel choices; preferences persist without reconnecting.
-- Synchronization now uses `1.0.0-draft.3`; upgrade the service and Android together. Legacy protocols do not silently write the new format. Historical content is not automatically reorganized.
-- Linux and Android packages were built locally. Packaged desktop, isolated browser and JVM checks passed; Android instrumentation compiled. This round has not completed Android device upgrade acceptance or published a GitHub Release.
+- Linux amd64 preview containing the client, standalone service and Node runtime.
+- **Upgrade together:** synchronization uses `1.0.0-draft.3` and requires Android 0.1.6. Save edits, choose stop-service-and-quit, then install and reopen; leaving the old service running will keep old code loaded.
+- Keep originals and AI annotations separate across editing, synchronization and export, with immutable version anchors. MCP and its Skill distinguish authorship from the saving client and provide a dedicated attribution-correction operation.
+- Review cards, trends and details count current personal originals by content date, including MCP archives. Show observed edits separately and exclude independent AI annotations.
+- Append new diary entries to one daily record and improve cross-device merges, versions, attachments, recovery and retries.
+- Improve service identity checks, alternative addresses, LAN discovery and multi-adapter connections. Read material before selecting or quoting it while writing.
+- Collapse annotations with buttons, title toggling or Escape. Choose close-to-tray or quit; explicit quit retains keep-service, stop-service and cancel choices.
+- Isolated browser regressions and packaged Linux startup, review, annotation and close-lifecycle checks passed. Historical documents are not automatically split or rewritten.
+
+## android-v0.1.6 - 2026-11-09
+
+### 中文
+
+- Android 预览版，正式应用 ID `io.github.wyf929597870.shiwen`，`versionCode=9`，使用既有发布签名。
+- **配套升级：** 请与 Linux / 服务端 0.1.13 一起使用，同步协议为 `1.0.0-draft.3`。旧协议不会静默写入新结构；无需卸载应用或清空资料。
+- 原文与 AI 标注分别保存，支持独立编辑、版本关联、图片、同步、备份和恢复；来源纠正与普通编辑分开处理。
+- 回顾主统计、每日图表与明细统一显示按内容日期计算的个人原文字数，包含外部传入的本人原文；真实编辑增减单独展示。
+- 增加服务身份校验、备用地址、局域网发现及定时连通性监测，当前资料库顶部显示节点状态。改进多网卡连接与离线恢复。
+- 改进每天单份日记、同步合并、历史版本与附件保留、恢复和重试。历史混合文档不会自动拆分。
+- 已通过 Android JVM 测试、页面回归、Kotlin / 仪器测试编译和正式签名校验；**本轮尚未完成 Android 真机覆盖安装及实际跨设备验收**，因此作为预览版发布。
+
+### English
+
+- Android preview, release-signed with the existing key; application ID `io.github.wyf929597870.shiwen`, versionCode 9.
+- **Upgrade together:** use Linux / server 0.1.13 with sync protocol `1.0.0-draft.3`. Legacy protocols do not silently write the new structure. Do not uninstall or clear application data to upgrade.
+- Keep originals and AI annotations separate, including editing, version anchors, images, synchronization, backups and recovery. Attribution correction is separate from ordinary editing.
+- Review cards, daily charts and details count personal originals by content date, including personal text received through external tools. Observed edits are shown separately.
+- Add service identity checks, alternative addresses, LAN discovery, periodic reachability checks and current-library header status. Improve multi-adapter connectivity and offline recovery.
+- Improve one-diary-per-day merging, version and attachment preservation, recovery and retries. Historical mixed documents are not automatically split.
+- Android JVM tests, UI regressions, Kotlin/instrumentation compilation and signing verification passed. **This round has not completed Android device upgrade or real cross-device acceptance**, so the package is published as a preview.
 
 ## android-v0.1.2 - 2026-11-08
 

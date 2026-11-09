@@ -10,9 +10,9 @@
 
 [为什么做](#为什么做拾文) · [能做什么](#能做什么) · [开始使用](#开始使用) · [数据与隐私](#数据与隐私) · [参与开发](#参与开发)
 
-可下载 **[Android 0.1.2](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.2)**、**[Linux 0.1.9](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.9)**、**[Windows 0.1.9 预览版](https://github.com/wyf929597870/shiwen-dsh/releases/tag/windows-v0.1.9)**，以及 [DSH 插件 0.2.0-dev.4](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.4)。项目采用 [MIT](LICENSE) 许可证。Android 0.1.2 修复正文图片重新渲染后持续显示加载中的问题；Windows 旧版已验证虚拟机安装与服务启停，新版完整图形界面仍待验收。macOS 未提供本项目安装包。
+可下载 **[Android 0.1.6 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.6)**、**[Linux 0.1.13 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.13)**、**[Windows 0.1.9 预览版](https://github.com/wyf929597870/shiwen-dsh/releases/tag/windows-v0.1.9)**，以及 [DSH 插件 0.2.0-dev.4](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.4)。项目采用 [MIT](LICENSE) 许可证。Android 0.1.6 需配套升级服务端，本轮真机覆盖安装尚未验收；Windows 旧版已验证虚拟机安装与服务启停，新版完整图形界面仍待验收。macOS 未提供本项目安装包。
 
-**当前源码：** Linux 0.1.13 / Android 0.1.6。新增原文与 AI 标注分离、个人原文字数回顾、每日单份日记、节点发现与备用地址，并恢复桌面关闭到托盘设置。上述新版本目前仅本地构建，公开下载仍见上方已发布版本。同步协议有更新，请配套升级服务端与 Android；详见 [更新记录](CHANGELOG.md)、[原文与 AI 标注](docs/original-annotations.md) 和 [服务节点连接](docs/node-connectivity.md)。
+**当前源码：** Linux 0.1.13 / Android 0.1.6。新增原文与 AI 标注分离、个人原文字数回顾、每日单份日记、节点发现与备用地址，并恢复桌面关闭到托盘设置。安装包作为预览版发布，下载见上方链接。同步协议有更新，请配套升级服务端与 Android；详见 [更新记录](CHANGELOG.md)、[原文与 AI 标注](docs/original-annotations.md) 和 [服务节点连接](docs/node-connectivity.md)。
 
 ## 为什么做拾文
 
