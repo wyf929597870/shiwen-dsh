@@ -33,18 +33,18 @@ internal object LibraryArchivePasswordDialog {
                 .setMessage(text(language,
                     "完整备份包含资料、历史版本、来源和附件。若附件尚未下载，导出会失败并提示先同步。可以加密，也可以导出未加密 ZIP。",
                     "A full backup includes records, versions, provenance, and attachments. Export fails if an attachment is not downloaded. Choose encryption or an unencrypted ZIP."))
-                .setItems(arrayOf(text(language,"加密备份…","Encrypted backup…"), text(language,"未加密 ZIP","Unencrypted ZIP"))) { _, which ->
-                    if (which == 0) {
-                        if (!done.get()) {
-                            transitioning = true
-                            stopWatching()
-                            dialog?.dismiss()
-                            requestNewPassword(activity,language) { password ->
-                                finish(password?.let { ExportChoice(true, it) })
-                            }
+                .setPositiveButton(text(language,"加密备份…","Encrypted backup…")) { _, _ ->
+                    if (!done.get()) {
+                        transitioning = true
+                        stopWatching()
+                        dialog?.dismiss()
+                        requestNewPassword(activity,language) { password ->
+                            finish(password?.let { ExportChoice(true, it) })
                         }
-                    } else finish(ExportChoice(false))
+                    }
                 }
+                .setNeutralButton(text(language,"未加密 ZIP","Unencrypted ZIP")) { _, _ -> finish(ExportChoice(false)) }
+                .setNegativeButton(text(language,"取消","Cancel")) { _, _ -> finish(null) }
                 .create()
             dialog?.setOnCancelListener { finish(null) }
             dialog?.setOnDismissListener { if (!done.get() && !transitioning) finish(null) }

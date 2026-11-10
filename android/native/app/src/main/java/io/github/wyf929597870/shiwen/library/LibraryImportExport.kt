@@ -180,66 +180,102 @@ internal class LibraryImportExport(private val files: LibraryFileTransfer) {
         val written = mutableSetOf<String>()
         var blobBytes = 0L
         validateAttachmentReferences(snapshot, strict = true)
-        val snapshotBytes = snapshot.toString().toByteArray(StandardCharsets.UTF_8)
-        check(snapshotBytes.size <= MAX_SNAPSHOT_BYTES) { "ARCHIVE_SNAPSHOT_TOO_LARGE" }
-        val manifest = JSONObject().put("format", ARCHIVE_FORMAT).put("formatVersion", ARCHIVE_VERSION)
-            .put("createdAt", Instant.now().toString()).put("sourceLibraryId", snapshot.optString("libraryId"))
-            .put("snapshotSha256", sha256(snapshotBytes)).put("attachmentCount", descriptors.length() + (snapshot.optJSONArray("branchAttachments")?.length() ?: 0))
-            .put("attachments", attachmentManifest).put("draftAttachments", draftAttachmentManifest)
-        val outputFile = File.createTempFile("shiwen-backup-", ".zip", files.appContext.cacheDir)
+        val snapshotFile = File.createTempFile("shiwen-snapshot-", ".json", files.appContext.cacheDir)
         try {
-            ZipOutputStream(BufferedOutputStream(FileOutputStream(outputFile))).use { zip ->
-                zip.setLevel(6)
-                putEntry(zip, "snapshot.json", snapshotBytes)
-                for (i in 0 until descriptors.length()) {
-                    val row = descriptors.getJSONObject(i)
-                    val id = row.getString("id")
-                    val hash = row.getString("hash").lowercase()
-                    require(hash.matches(HASH_PATTERN)) { "ARCHIVE_ATTACHMENT_DESCRIPTOR_INVALID" }
-                    val payload = try { repo.attachmentArchiveFile(id) } catch (_: Exception) { error("ARCHIVE_ATTACHMENT_UNAVAILABLE") }
-                    check(payload.byteLength == row.getLong("byteLength") && payload.sha256 == hash) { "ARCHIVE_ATTACHMENT_HASH_MISMATCH" }
-                    blobBytes += payload.byteLength
-                    check(blobBytes <= MAX_ARCHIVE_BLOB_BYTES) { "ARCHIVE_TOO_LARGE" }
-                    if (written.add(hash)) putFileEntry(zip, "attachments/$hash", payload, MAX_BACKUP_BYTES)
-                    attachmentManifest.put(JSONObject().put("id", id).put("entry", "attachments/$hash")
-                        .put("sha256", hash).put("byteLength", payload.byteLength))
-                }
-                for (i in 0 until branchDescriptors.length()) {
-                    val row = branchDescriptors.getJSONObject(i)
-                    val branchId = row.getString("branchId")
-                    val id = row.getString("attachmentId")
-                    val hash = row.getString("hash").lowercase()
-                    require(hash.matches(HASH_PATTERN)) { "ARCHIVE_ATTACHMENT_DESCRIPTOR_INVALID" }
-                    val payload = try { repo.branchAttachmentArchiveFile(branchId, id) } catch (_: Exception) { error("ARCHIVE_ATTACHMENT_UNAVAILABLE") }
-                    check(payload.byteLength == row.getLong("byteLength") && payload.sha256 == hash) { "ARCHIVE_ATTACHMENT_HASH_MISMATCH" }
-                    blobBytes += payload.byteLength
-                    check(blobBytes <= MAX_ARCHIVE_BLOB_BYTES) { "ARCHIVE_TOO_LARGE" }
-                    if (written.add(hash)) putFileEntry(zip, "attachments/$hash", payload, MAX_BACKUP_BYTES)
-                    attachmentManifest.put(JSONObject().put("id", id).put("branchId", branchId).put("entry", "attachments/$hash")
-                        .put("sha256", hash).put("byteLength", payload.byteLength))
-                }
-                val draftStore = LibraryAttachmentDraftStore(files.appContext, snapshot.getString("libraryId"))
-                for (i in 0 until draftDescriptors.length()) {
-                    val descriptor = draftDescriptors.getJSONObject(i)
-                    val id = descriptor.getString("id")
-                    check(runCatching { UUID.fromString(id) }.isSuccess && UUID.fromString(id).toString() == id) { "ARCHIVE_DRAFT_ATTACHMENT_INVALID" }
-                    val payload = try { draftStore.archiveFile(id) } catch (_: Exception) { error("ARCHIVE_DRAFT_ATTACHMENT_UNAVAILABLE") }
-                    check(payload.byteLength == descriptor.getLong("byteLength") && payload.sha256 == descriptor.getString("hash") &&
-                        LibraryAttachmentDraftStore.imageMime(payload.file) == descriptor.getString("mimeType")) {
-                        "ARCHIVE_DRAFT_ATTACHMENT_HASH_MISMATCH"
-                    }
-                    blobBytes += payload.byteLength
-                    check(blobBytes <= MAX_ARCHIVE_BLOB_BYTES) { "ARCHIVE_TOO_LARGE" }
-                    putFileEntry(zip, "draft-attachments/$id", payload, LibraryAttachmentDraftStore.MAX_IMAGE_BYTES.toLong())
-                    draftAttachmentManifest.put(JSONObject(descriptor.toString()).put("entry", "draft-attachments/$id")
-                        .put("sha256", payload.sha256).put("byteLength", payload.byteLength))
-                }
-                manifest.put("draftAttachments", draftAttachmentManifest)
-                putEntry(zip, "manifest.json", manifest.toString().toByteArray(StandardCharsets.UTF_8))
+            android.util.JsonWriter(snapshotFile.writer(StandardCharsets.UTF_8).buffered()).use { writer ->
+                writeArchiveJson(writer, snapshot)
             }
-            check(outputFile.length() in 1..MAX_BACKUP_BYTES) { "ARCHIVE_TOO_LARGE" }
-            return outputFile
-        } catch (error: Exception) { outputFile.delete(); throw error }
+            check(snapshotFile.length() <= MAX_SNAPSHOT_BYTES) { "ARCHIVE_SNAPSHOT_TOO_LARGE" }
+            val snapshotPayload = archiveFileInfo(snapshotFile, MAX_SNAPSHOT_BYTES.toLong())
+            val manifest = JSONObject().put("format", ARCHIVE_FORMAT).put("formatVersion", ARCHIVE_VERSION)
+                .put("createdAt", Instant.now().toString()).put("sourceLibraryId", snapshot.optString("libraryId"))
+                .put("snapshotSha256", snapshotPayload.sha256).put("attachmentCount", descriptors.length() + (snapshot.optJSONArray("branchAttachments")?.length() ?: 0))
+                .put("attachments", attachmentManifest).put("draftAttachments", draftAttachmentManifest)
+            val outputFile = File.createTempFile("shiwen-backup-", ".zip", files.appContext.cacheDir)
+            try {
+                ZipOutputStream(BufferedOutputStream(FileOutputStream(outputFile))).use { zip ->
+                    zip.setLevel(6)
+                    var expandedBytes = 0L
+                    var entryCount = 0
+                    fun writeFile(name: String, payload: LibraryArchiveFile) {
+                        expandedBytes += payload.byteLength
+                        check(expandedBytes <= MAX_BACKUP_BYTES) { "ARCHIVE_TOO_LARGE" }
+                        check(++entryCount < MAX_ARCHIVE_ENTRIES) { "ARCHIVE_TOO_MANY_ENTRIES" }
+                        putFileEntry(zip, name, payload, MAX_BACKUP_BYTES)
+                    }
+                    writeFile("snapshot.json", snapshotPayload)
+                    for (i in 0 until descriptors.length()) {
+                        val row = descriptors.getJSONObject(i)
+                        val id = row.getString("id")
+                        val hash = row.getString("hash").lowercase()
+                        require(hash.matches(HASH_PATTERN)) { "ARCHIVE_ATTACHMENT_DESCRIPTOR_INVALID" }
+                        val payload = try { repo.attachmentArchiveFile(id) } catch (_: Exception) { error("ARCHIVE_ATTACHMENT_UNAVAILABLE") }
+                        check(payload.byteLength == row.getLong("byteLength") && payload.sha256 == hash) { "ARCHIVE_ATTACHMENT_HASH_MISMATCH" }
+                        blobBytes += payload.byteLength
+                        check(blobBytes <= MAX_ARCHIVE_BLOB_BYTES) { "ARCHIVE_TOO_LARGE" }
+                        if (written.add(hash)) writeFile("attachments/$hash", payload)
+                        attachmentManifest.put(JSONObject().put("id", id).put("entry", "attachments/$hash")
+                            .put("sha256", hash).put("byteLength", payload.byteLength))
+                    }
+                    for (i in 0 until branchDescriptors.length()) {
+                        val row = branchDescriptors.getJSONObject(i)
+                        val branchId = row.getString("branchId")
+                        val id = row.getString("attachmentId")
+                        val hash = row.getString("hash").lowercase()
+                        require(hash.matches(HASH_PATTERN)) { "ARCHIVE_ATTACHMENT_DESCRIPTOR_INVALID" }
+                        val payload = try { repo.branchAttachmentArchiveFile(branchId, id) } catch (_: Exception) { error("ARCHIVE_ATTACHMENT_UNAVAILABLE") }
+                        check(payload.byteLength == row.getLong("byteLength") && payload.sha256 == hash) { "ARCHIVE_ATTACHMENT_HASH_MISMATCH" }
+                        blobBytes += payload.byteLength
+                        check(blobBytes <= MAX_ARCHIVE_BLOB_BYTES) { "ARCHIVE_TOO_LARGE" }
+                        if (written.add(hash)) writeFile("attachments/$hash", payload)
+                        attachmentManifest.put(JSONObject().put("id", id).put("branchId", branchId).put("entry", "attachments/$hash")
+                            .put("sha256", hash).put("byteLength", payload.byteLength))
+                    }
+                    val draftStore = LibraryAttachmentDraftStore(files.appContext, snapshot.getString("libraryId"))
+                    for (i in 0 until draftDescriptors.length()) {
+                        val descriptor = draftDescriptors.getJSONObject(i)
+                        val id = descriptor.getString("id")
+                        check(runCatching { UUID.fromString(id) }.isSuccess && UUID.fromString(id).toString() == id) { "ARCHIVE_DRAFT_ATTACHMENT_INVALID" }
+                        val payload = try { draftStore.archiveFile(id) } catch (_: Exception) { error("ARCHIVE_DRAFT_ATTACHMENT_UNAVAILABLE") }
+                        check(payload.byteLength == descriptor.getLong("byteLength") && payload.sha256 == descriptor.getString("hash") &&
+                            LibraryAttachmentDraftStore.imageMime(payload.file) == descriptor.getString("mimeType")) {
+                            "ARCHIVE_DRAFT_ATTACHMENT_HASH_MISMATCH"
+                        }
+                        blobBytes += payload.byteLength
+                        check(blobBytes <= MAX_ARCHIVE_BLOB_BYTES) { "ARCHIVE_TOO_LARGE" }
+                        writeFile("draft-attachments/$id", payload)
+                        draftAttachmentManifest.put(JSONObject(descriptor.toString()).put("entry", "draft-attachments/$id")
+                            .put("sha256", payload.sha256).put("byteLength", payload.byteLength))
+                    }
+                    manifest.put("draftAttachments", draftAttachmentManifest)
+                    val manifestBytes = manifest.toString().toByteArray(StandardCharsets.UTF_8)
+                    check(manifestBytes.size <= MAX_MANIFEST_BYTES && expandedBytes + manifestBytes.size <= MAX_BACKUP_BYTES) { "ARCHIVE_TOO_LARGE" }
+                    putEntry(zip, "manifest.json", manifestBytes)
+                }
+                check(outputFile.length() in 1..MAX_BACKUP_BYTES) { "ARCHIVE_TOO_LARGE" }
+                return outputFile
+            } catch (error: Exception) { outputFile.delete(); throw error }
+        } finally { snapshotFile.delete() }
+    }
+
+    private fun writeArchiveJson(writer: android.util.JsonWriter, value: Any?) {
+        when (value) {
+            null, JSONObject.NULL -> writer.nullValue()
+            is JSONObject -> {
+                writer.beginObject()
+                for (key in value.keys()) { writer.name(key); writeArchiveJson(writer, value.get(key)) }
+                writer.endObject()
+            }
+            is JSONArray -> {
+                writer.beginArray()
+                for (index in 0 until value.length()) writeArchiveJson(writer, value.get(index))
+                writer.endArray()
+            }
+            is Boolean -> writer.value(value)
+            is Number -> writer.value(value)
+            is String -> writer.value(value)
+            else -> error("ARCHIVE_JSON_VALUE_INVALID")
+        }
     }
 
     fun createEncryptedBackup(repo: LibraryRepository, password: CharArray, includeConversations: Boolean = true): File {
@@ -278,9 +314,9 @@ internal class LibraryImportExport(private val files: LibraryFileTransfer) {
         check(manifest.optString("format") == ARCHIVE_FORMAT && archiveVersion in SUPPORTED_ARCHIVE_VERSIONS) {
             "ARCHIVE_VERSION_UNSUPPORTED"
         }
-        val snapshotBytes = entries["snapshot.json"]?.bytes ?: error("ARCHIVE_SNAPSHOT_MISSING")
-        check(sha256(snapshotBytes) == manifest.getString("snapshotSha256")) { "ARCHIVE_DIGEST_MISMATCH" }
-        val snapshot = JSONObject(snapshotBytes.toString(StandardCharsets.UTF_8))
+        val snapshotEntry = entries["snapshot.json"] ?: error("ARCHIVE_SNAPSHOT_MISSING")
+        check(snapshotEntry.sha256 == manifest.getString("snapshotSha256")) { "ARCHIVE_DIGEST_MISMATCH" }
+        val snapshot = readArchiveJson(checkNotNull(snapshotEntry.file))
         check(snapshot.optInt("formatVersion") in SUPPORTED_SNAPSHOT_VERSIONS) { "ARCHIVE_VERSION_UNSUPPORTED" }
         val clientArchive = snapshot.optJSONObject("clientArchive")
         clientArchive?.let(LibraryClientArchive::validate)
@@ -404,7 +440,20 @@ internal class LibraryImportExport(private val files: LibraryFileTransfer) {
         }
         add(name.toByteArray(StandardCharsets.UTF_8))
         add(byteArrayOf(if (asNewLibrary) 1 else 0))
-        add(archive.snapshot.toString().toByteArray(StandardCharsets.UTF_8))
+        // Preserve old request fingerprints without allocating a whole JSON string/byte array.
+        val normalized = File.createTempFile("shiwen-restore-fingerprint-", ".json", files.appContext.cacheDir)
+        try {
+            normalized.writer(StandardCharsets.UTF_8).buffered().use { writeArchiveFingerprintJson(it, archive.snapshot) }
+            digest.update(ByteBuffer.allocate(8).putLong(normalized.length()).array())
+            normalized.inputStream().buffered().use { input ->
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    digest.update(buffer, 0, count)
+                }
+            }
+        } finally { normalized.delete() }
         fun addFiles(files: Map<String, LibraryArchiveFile>) = files.toSortedMap().forEach { (key, file) ->
             add(key.toByteArray(StandardCharsets.UTF_8))
             add(ByteBuffer.allocate(8).putLong(file.byteLength).array())
@@ -660,7 +709,7 @@ internal class LibraryImportExport(private val files: LibraryFileTransfer) {
                     "ARCHIVE_INVALID_ENTRY"
                 }
                 check(!entries.containsKey(name)) { "ARCHIVE_DUPLICATE_ENTRY" }
-                val metadata = name == "manifest.json" || name == "snapshot.json"
+                val metadata = name == "manifest.json"
                 val metadataSink = if (metadata) ByteArrayOutputStream() else null
                 val payloadFile = if (metadata) null else File(payloads, "entry-${entries.size}.payload")
                 val output = metadataSink ?: FileOutputStream(payloadFile!!)
@@ -672,7 +721,7 @@ internal class LibraryImportExport(private val files: LibraryFileTransfer) {
                         val count = zip.read(buffer)
                         if (count < 0) break
                         entryBytes += count; total += count
-                        check(entryBytes <= (if (metadata) MAX_SNAPSHOT_BYTES.toLong() else MAX_ARCHIVE_ENTRY_BYTES) && total <= MAX_BACKUP_BYTES) {
+                        check(entryBytes <= (if (metadata) MAX_MANIFEST_BYTES else MAX_ARCHIVE_ENTRY_BYTES) && total <= MAX_BACKUP_BYTES) {
                             "ARCHIVE_TOO_LARGE"
                         }
                         digest.update(buffer, 0, count)
@@ -740,9 +789,10 @@ internal class LibraryImportExport(private val files: LibraryFileTransfer) {
         private val SUPPORTED_ARCHIVE_VERSIONS = setOf(1, 2, 3)
         private val SUPPORTED_SNAPSHOT_VERSIONS = setOf(1, 2)
         private const val MAX_MARKDOWN_CHARS = 1_000_000
-        private const val MAX_SNAPSHOT_BYTES = 32 * 1024 * 1024
+        private const val MAX_MANIFEST_BYTES = 32L * 1024 * 1024
         private const val MAX_ARCHIVE_BLOB_BYTES = 1024L * 1024 * 1024
         internal const val MAX_BACKUP_BYTES = 1024L * 1024 * 1024
+        private const val MAX_SNAPSHOT_BYTES = MAX_BACKUP_BYTES
         private const val MAX_ARCHIVE_ENTRIES = 20_000
         private const val MAX_ARCHIVE_ENTRY_BYTES = MAX_BACKUP_BYTES
         private val HASH_PATTERN = Regex("[a-f0-9]{64}")
@@ -750,7 +800,7 @@ internal class LibraryImportExport(private val files: LibraryFileTransfer) {
         private val ARCHIVE_DRAFT_ATTACHMENT_PATH = Regex("draft-attachments/[0-9a-f-]{36}")
         private val FRONTMATTER_LINE = Regex("([A-Za-z][A-Za-z0-9_-]{0,63}):\\s*(.*)")
         private val ISO_DAY = Regex("\\d{4}-\\d{2}-\\d{2}")
-        private val KINDS = setOf("journal", "freewrite", "idea", "web", "ai", "reference", "article")
+        private val KINDS = setOf("journal", "freewrite", "reading_note", "idea", "web", "ai", "reference", "article")
         private val ORIGINS = setOf("personal", "external", "ai", "translation", "unknown")
         private val PROCESSING = setOf("original", "formatting", "ai-organized", "translation", "unknown")
         private val STAGES = setOf("idea", "draft", "revision", "final")

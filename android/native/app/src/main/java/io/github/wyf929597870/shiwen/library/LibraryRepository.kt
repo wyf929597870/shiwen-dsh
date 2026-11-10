@@ -1347,7 +1347,9 @@ class LibraryManager(context: Context, private val namespace: String = "shiwen-l
             }
 
             val activeReservation = checkNotNull(reservation) { "RESTORE_RESERVATION_MISSING" }
-            val targetSnapshot = if (activeReservation.asNewLibrary) JSONObject(snapshot.toString()).apply {
+            // Only root identity changes. Rows are read-only throughout restoration.
+            val targetSnapshot = if (activeReservation.asNewLibrary) JSONObject().apply {
+                snapshot.keys().forEach { put(it, snapshot.get(it)) }
                 put("libraryId", activeReservation.targetLibraryId)
                 put("importedFromLibraryId", activeReservation.sourceLibraryId)
             } else snapshot

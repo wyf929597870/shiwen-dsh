@@ -87,7 +87,8 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
     fun status(libraryId: String): JSONObject {
         val repo = manager.openLibrary(libraryId)
         val row = repo.registryItem()
-        val pending = repo.dao.pendingOutbox(100_000).size
+        val pendingOperations = repo.dao.pendingOutbox(100_000)
+        val pending = pendingOperations.size
         val rejectedOperations = repo.dao.allOutbox().filter { it.state == "rejected" }
         val conflicts = repo.dao.conflicts(100_000, 0).size
         val progress = repo.dao.meta("syncProgress")?.let(::JSONObject)
@@ -105,7 +106,10 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
                     .put("code", item.lastError ?: "UNKNOWN")
             })).put("conflictCount", conflicts).put("appliedCursor", row.appliedCursor ?: JSONObject.NULL)
             .put("completeCursor", row.completeCursor ?: JSONObject.NULL).put("lastSyncedAt", row.lastSyncedAt ?: JSONObject.NULL)
-            .put("lastError", progress?.optString("error")?.takeIf { it.isNotBlank() } ?: JSONObject.NULL)
+            .put("lastError", progress?.optString("error")?.takeIf { it.isNotBlank() && it != "null" } ?: pendingOperations
+                .firstOrNull { it.state == "blocked-dependency" }?.let {
+                    if (it.baseVersionId.isNullOrBlank()) "SYNC_PARENT_VERSION_MISSING" else "SYNC_PARENT_NOT_CONFIRMED"
+                } ?: JSONObject.NULL)
     }
 
     fun shutdown() {
@@ -292,6 +296,9 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
         check(cursorNumber(ack.get("appliedCursor")) == cursorNumber(appliedCursor) &&
             cursorNumber(ack.get("completeCursor")) == cursorNumber(appliedCursor)) { "SYNC_ACK_MISMATCH" }
         manager.update(current.copy(completeCursor = appliedCursor, lastSyncedAt = Instant.now().toString()))
+        repo.dao.pendingOutbox(100_000).firstOrNull { it.state == "blocked-dependency" }?.let {
+            error(if (it.baseVersionId.isNullOrBlank()) "SYNC_PARENT_VERSION_MISSING" else "SYNC_PARENT_NOT_CONFIRMED")
+        }
         putProgress(repo, operationId, "completed", "finalize", count, null, null)
     }
 
@@ -457,7 +464,44 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
             .put("encodingVersion", "shiwen-json-v1")
     }
 
-    private fun rebaseUnsentChild(repo: LibraryRepository, original: LibraryOutbox): LibraryOutbox {
+    /** Repair only the never-sent empty parent produced by the old incremental reader.
+     * The acknowledged revision and activity's before-content hash must both match.
+     * Sent requests, genuine divergence and nonempty parent identities stay untouched.
+     */
+    internal fun repairMissingBaseVersion(repo: LibraryRepository, original: LibraryOutbox): LibraryOutbox {
+        if (original.baseVersionId != "" || original.attempts != 0 ||
+            original.state !in setOf("pending", "blocked-dependency")) return original
+        val head = repo.dao.remoteHead(original.recordId) ?: return original
+        if (head.versionId.isNullOrBlank() || head.revision != original.baseRevision) return original
+        val operation = JSONObject(original.payloadJson)
+        if (Canonical.hash(plain(operation)) != original.fingerprint ||
+            operation.optString("operationId") != original.operationId ||
+            operation.optString("baseVersionId") != "" || operation.optLong("baseRevision") != head.revision) return original
+        val parents = operation.optJSONArray("parentVersionIds") ?: return original
+        if (parents.length() != 1 || parents.optString(0) != "") return original
+        val remote = JSONObject(head.recordJson)
+        val beforeHash = operation.optJSONArray("activities")?.optJSONObject(0)?.optString("beforeHash")
+        if (beforeHash != Canonical.hash(mapOf("markdown" to remote.optString("markdown"),
+                "segments" to plain(remote.optJSONArray("sources") ?: JSONArray())))) return original
+        val version = repo.dao.versions(original.recordId).firstOrNull { it.id == original.versionId } ?: return original
+        if (!canonicalJsonArrayEquals(version.parentVersionIdsJson, parents.toString())) return original
+        val fixedParents = JSONArray().put(head.versionId)
+        operation.put("baseVersionId", head.versionId).put("parentVersionIds", fixedParents)
+        val repaired = original.copy(baseVersionId = head.versionId, payloadJson = operation.toString(),
+            fingerprint = Canonical.hash(plain(operation)), state = "pending", lastError = null)
+        repo.db.runInTransaction {
+            check(repo.dao.outbox(original.operationId) == original) { "SYNC_OUTBOX_CHANGED" }
+            repo.dao.updateOutbox(repaired)
+            repo.db.openHelper.writableDatabase.execSQL("UPDATE versions SET parentVersionIdsJson=? WHERE id=?",
+                arrayOf(fixedParents.toString(), version.id))
+            repo.dao.record(original.recordId)?.takeIf { it.versionId == original.versionId && it.baseVersionId == "" }
+                ?.let { repo.dao.updateRecord(it.copy(baseVersionId = head.versionId)) }
+        }
+        return repaired
+    }
+
+    private fun rebaseUnsentChild(repo: LibraryRepository, stored: LibraryOutbox): LibraryOutbox {
+        val original = repairMissingBaseVersion(repo, stored)
         if (original.baseVersionId == null) {
             if (original.state == "blocked-dependency") {
                 val retry = original.copy(state = "pending", lastError = null)
@@ -689,14 +733,16 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
         }
     }
 
-    private fun applyChange(repo: LibraryRepository, event: JSONObject) {
+    internal fun applyChange(repo: LibraryRepository, event: JSONObject) {
         val record = event.optJSONObject("record") ?: error("SYNC_EVENT_RECORD_MISSING")
         val revision = event.optLong("revision", -1L)
         check(revision > 0) { "SYNC_EVENT_REVISION_INVALID" }
         val versionId = event.optString("versionId").takeIf { it.isNotBlank() }
-        val row = fromRecord(record).copy(serverRevision = revision, syncState = "synced")
-        val observed = repo.dao.remoteHead(row.id)
         val eventChangeId = event.optString("changeId").takeIf { it.isNotBlank() }
+        // Record DTOs contain content only; version identity belongs to the event envelope.
+        val row = fromRecord(record).copy(serverRevision = revision, syncState = "synced",
+            versionId = versionId.orEmpty(), changeId = eventChangeId.orEmpty())
+        val observed = repo.dao.remoteHead(row.id)
         if (versionId != null) {
             val version = event.optJSONObject("version")
             if (version == null) {
