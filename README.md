@@ -10,9 +10,9 @@
 
 [为什么做](#为什么做拾文) · [能做什么](#能做什么) · [开始使用](#开始使用) · [数据与隐私](#数据与隐私) · [参与开发](#参与开发)
 
-可下载 **[Android 0.1.8 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.8)**、**[Linux 0.1.14 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.14)**、**[Windows 0.1.9 预览版](https://github.com/wyf929597870/shiwen-dsh/releases/tag/windows-v0.1.9)**，以及 [DSH 插件 0.2.0-dev.5](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.5)。项目采用 [MIT](LICENSE) 许可证。Android 0.1.8 需配套升级服务端，本轮真机覆盖安装尚未验收；Windows 旧版已验证虚拟机安装与服务启停，新版完整图形界面仍待验收。macOS 未提供本项目安装包。
+可下载 **[Android 0.1.8 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.8)**、**[Linux 0.1.15 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.15)**、**[Windows 0.1.9 预览版](https://github.com/wyf929597870/shiwen-dsh/releases/tag/windows-v0.1.9)**，以及 [DSH 插件 0.2.0-dev.5](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.5)。项目采用 [MIT](LICENSE) 许可证。Android 0.1.8 需配套升级服务端，本轮真机覆盖安装尚未验收；Windows 旧版已验证虚拟机安装与服务启停，新版完整图形界面仍待验收。macOS 未提供本项目安装包。
 
-**当前源码：** Linux 0.1.14 / Android 0.1.8 / DSH 插件 0.2.0-dev.5。新增独立读书笔记、原文摘录和回顾日目标趋势，兼容旧打勾记录；感想与摘录分开统计，日记与自由书写按各自文件统计。MCP、Agent 工具及配套 Skill 同步更新，Android 包含大备份与同步修复。请配套升级服务端与 Android，并停止旧服务后重新启动；详见 [更新记录](CHANGELOG.md)。
+**当前源码：** Linux 0.1.15 / Android 0.1.8 / DSH 插件 0.2.0-dev.5。新增独立读书笔记、原文摘录和回顾日目标趋势，兼容旧打勾记录；感想与摘录分开统计，日记与自由书写按各自文件统计。MCP、Agent 工具及配套 Skill 同步更新，Android 包含大备份与同步修复。请配套升级服务端与 Android，并停止旧服务后重新启动；详见 [更新记录](CHANGELOG.md)。
 
 ## 为什么做拾文
 
@@ -101,10 +101,10 @@ Linux 安装包同时包含客户端、独立服务与 Node 运行环境，无�
 ```bash
 npm run package:linux
 # 退出客户端并停止旧服务后安装
-sudo apt install ./release/linux/shiwen-dsh_0.1.14_amd64.deb
+sudo apt install ./release/linux/shiwen-dsh_0.1.15_amd64.deb
 ```
 
-源码启动的服务可在同一数据根目录下执行 `npm run server:stop` 停止；安装包也提供无需系统 Node 的管理命令，见 [独立服务说明](docs/server.md)。升级后重新启动本机服务。无需自行构建时，可直接下载下方的 v0.1.14 安装包。
+源码启动的服务可在同一数据根目录下执行 `npm run server:stop` 停止；安装包也提供无需系统 Node 的管理命令，见 [独立服务说明](docs/server.md)。升级后重新启动本机服务。无需自行构建时，可直接下载下方的 v0.1.15 安装包。
 
 ### 只运行独立服务，让浏览器访问
 
@@ -123,12 +123,12 @@ npm run server:url
 
 ### 已发布的 Linux 桌面版
 
-下载 **[Linux x64 安装包（.deb）](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.14/shiwen-dsh_0.1.14_amd64.deb)**。这是预览版，适合愿意反馈问题的用户；Windows 安装包见下方。校验文件与已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.14)。
+下载 **[Linux x64 安装包（.deb）](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.15/shiwen-dsh_0.1.15_amd64.deb)**。这是预览版，适合愿意反馈问题的用户；Windows 安装包见下方。校验文件与已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.15)。
 
 完整退出拾文并停止仍在运行的独立服务，再在下载目录安装或升级：
 
 ```bash
-sudo apt install ./shiwen-dsh_0.1.14_amd64.deb
+sudo apt install ./shiwen-dsh_0.1.15_amd64.deb
 ```
 
 从应用菜单打开「拾文」，或运行 `shiwen-dsh`。安装包包含 Electron、Node、DSH 和拾文插件，无需另外安装 Node 或保留源码目录。当前桌面验证环境为 Ubuntu 26.04 x64，其他发行版仍需验证。

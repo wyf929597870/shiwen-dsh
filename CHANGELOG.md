@@ -3,6 +3,18 @@
 0.1.4 是本仓库首次公开的 Linux 预览版；0.1.0–0.1.3 为本地开发与打包记录。
 0.1.4 is this repository's first public Linux preview; 0.1.0–0.1.3 are local development builds.
 
+## v0.1.15 - 2026-11-10
+
+### 中文
+
+- Linux 安装包版本升至 0.1.15，让已安装本地 0.1.14 的用户可以通过 apt 正常升级；包含读书笔记、回顾日目标、MCP/Skill 更新与选书框中文裁切修复。
+- Android 继续为 0.1.8，DSH 插件继续为 0.2.0-dev.5。升级前保存编辑并停止旧服务，安装后重新启动。
+
+### English
+
+- Bump the Linux package to 0.1.15 so apt upgrades installations already running a local 0.1.14 build. Include reading notes, daily-goal review, MCP/Skill updates and the Chinese book-picker clipping fix.
+- Android remains 0.1.8; the DSH plugin remains 0.2.0-dev.5. Save edits and stop the old service before installation, then restart.
+
 ## v0.1.14 / android-v0.1.8 / v0.2.0-dev.5 - 2026-11-10
 
 ### 中文
