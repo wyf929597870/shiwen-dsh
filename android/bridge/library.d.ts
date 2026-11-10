@@ -18,7 +18,7 @@ export interface Methods {
   annotationUpdate: {args:{id:string;revision:number;title?:string;body?:string;requestId:string;attachmentDescriptors?:unknown[];stagedAttachmentIds?:string[]};result:MobileRecord};
   annotationDelete: {args:{id:string;revision:number;requestId:string};result:MobileRecord};
   annotationRestore: {args:{id:string;revision:number;requestId:string};result:MobileRecord};
-  reviewPreview: {args:{period:'1'|'7'|'14'|'30'|'month';month?:string};result:{personalOriginalCharacters:number;observedEdits:{added:number;removed:number;net:number};start:string;end:string}};
+  reviewPreview: {args:{period:'1'|'7'|'14'|'30'|'month';month?:string};result:{personalOriginalCharacters:number;observedEdits:{added:number;removed:number;net:number};start:string;end:string;records:Array<{id:string;title:string;kind:MobileRecordKind;contentDay:string;characters:number;goalMarkdown?:string}>;daily:Array<{day:string;personalOriginalCharacters:number;personalOriginalRecords:number}>}};
   recordList: {args:{libraryId:string; query?:string; kind?:MobileRecordKind; excludeKind?:MobileRecordKind; cursor?:string|null; limit?:number; deleted?:boolean}; result:RecordPage};
   recordRead: {args:{libraryId:string; id:string}; result:MobileRecord};
   recordCreate: {args:{libraryId:string; requestId:string; localGeneration:number; record:MobileRecordInput; stagedAttachmentIds?:string[]}; result:RecordMutationResult};
@@ -120,7 +120,7 @@ export interface ExternalAccessStatus {running:boolean;endpoint:string|null;clie
 export function bootstrap(): Promise<LibraryContext>;
 export function call<M extends keyof Methods>(method:M,args?:Methods[M]['args']): Promise<Methods[M]['result']>;
 
-export type MobileRecordKind='journal'|'freewrite'|'idea'|'web'|'ai'|'reference'|'article';
+export type MobileRecordKind='journal'|'freewrite'|'reading_note'|'idea'|'web'|'ai'|'reference'|'article';
 export type RecordOrigin='personal'|'external'|'ai'|'translation'|'unknown';
 export type ArticleStage='idea'|'draft'|'revision'|'final';
 export interface RecordSource {text:string;origin:RecordOrigin;sourceRef?:string}

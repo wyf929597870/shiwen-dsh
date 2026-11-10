@@ -22,7 +22,7 @@ export const segment = object({text: z.string().max(limits.maxBodyCodeUnits), or
 const segments = z.array(segment).max(100_000);
 const annotationOf = object({recordId:id,versionId:uuid,contentHash:digest});
 export const record = object({
-  id, kind: z.enum(['journal', 'freewrite', 'idea', 'web', 'ai', 'reference', 'article', 'ai_annotation']),
+  id, kind: z.enum(['journal', 'freewrite', 'reading_note', 'idea', 'web', 'ai', 'reference', 'article', 'ai_annotation']),
   annotationOf: annotationOf.optional(), title: z.string().max(200), markdown: z.string().max(limits.maxBodyCodeUnits), origin,
   processing: z.enum(['original', 'formatting', 'ai-organized', 'translation', 'unknown']),
   contentDay: z.iso.date().nullable(), dateBasis: z.string().max(200),

@@ -1,107 +1,43 @@
-# 拾文页面设计校对
+# Reading notes style alignment QA — 2026-11-10
 
-日期：2026-11-06。范围：现有素材/创作页面的列表、阅读区、页面标题与边距；不是整个产品的原稿还原验收。
+Result: passed for the inspected desktop and Android web views.
 
-## 对照依据
+## Current target
 
-- 原图：`../workbench/qa/reference/materials.png`（1517×1037）与 `writing.png`（1448×1086）。
-- 原图素材内容区裁切：x=128..1123，y=54..1012，995×958；实现按 1275×958 视口去除 280px 原生导航后同为 995×958。截图像素与 CSS 视口一致（1x）。
-- 同屏对照：`.qa/design-alignment/reference-comparison.jpg`；修改前后及 1x 列表细节：`.qa/design-alignment/before-after.jpg`。均已打开并检查，不以构建成功代替视觉检查。
-- 状态：深色、素材页、打开“如何更好地利用通勤时间”。使用合成记录，来源、日期、正文细节和记录数与原稿不同，不据此宣称数据功能还原。
-- 用户后续要求优先：列表仅标题和日期，搜索在列表顶端，正文优先，列表可收起，首页继续使用 DSH 原生对话。因此不恢复原图的多字段列表与列表主导比例。
+The user requested consistency with the existing application. The existing Materials/Review pages and Android record editor now take precedence for typography, theme and spacing. The third selected design remains the layout reference only. The preceding mock-focused assessment is preserved in `docs/design/reading-notes/mock-fidelity-qa.md`; its oversized typography recommendation is superseded here.
 
-## 首轮发现与修复
+## Evidence
 
-| 等级 | 问题 | 修复及证据 |
-| --- | --- | --- |
-| P1 | 1366px 窗口列表仅 151px，外侧单边留白约 55px，短标题频繁折行 | 外边距约 29px，列表 288px，正文区 741px；见 before/after |
-| P2 | 13px 标题和 11px 日期显得局促，页面使用额外英文眉题，层次与原稿不同 | 标题 15px/600、日期 12px、正文 16px；恢复标题+说明层次、横向分隔和薄荷绿选中态 |
-| P2 | 旧窄容器规则遗留，影响左右区的边框与间距 | 移除旧堆叠容器规则；桌面采用 240–340px 的列表，手机维持单栏切换 |
-| P2 | 编辑态正文仍为 13px，与阅读态不一致 | 编辑正文统一 16px/1.9；手机表单保留 16px |
+Screenshots are in `docs/design/reading-notes/style-alignment/`:
 
-## 五项视觉检查
+- Desktop reference: `desktop-materials.jpg`, `desktop-review.jpg`; before: `desktop-before.jpg`.
+- Desktop corrected: `desktop-after-light.png`, `desktop-after-dark.png`, 1440 × 1000.
+- Android reference: `mobile-editor.jpg`; before: `mobile-before.jpg`.
+- Android corrected: `mobile-after-light.png`, `mobile-after-dark.png`, 390 × 844.
+- Reference and corrected screenshots were viewed together. Desktop uses the real DSH host, theme and production plugin components with an isolated temporary library. Android uses the actual application shell with the development bridge.
 
-- 字体：沿用现有 Noto Sans CJK SC / 系统字体链，列表主标题与日期区分权重；长标题最多两行，完整内容由正文页展示。
-- 间距：页面外边距 20–32px，列表与正文边界留出 20/28px；独立滚动，无页面横向溢出。1366px 下正文占两列区域约 72%。
-- 颜色：沿用石墨灰与薄荷绿主题，选中态取主题强调色 15% 混合；浅色状态也单独截图检查。
-- 图像：复用现有拾文 Logo；本轮无新增图片/图标，不更换原生导航资产。
-- 文案：素材说明采用原稿文案，创作说明延续原稿语义；中英文均有对应文本。未添加不存在的统计或假按钮。
+## Findings and correction
 
-## 复核
+1. P2 — Independent desktop typography was visibly larger than existing pages: title 36px vs 28px, reflection 21px vs 16px. Corrected title to 28px and reflection to 16px/1.9; inherited the host font family. Reduced section headings and metadata accordingly.
+2. P2 — Desktop padding and colors diverged from the app. Reused 28px vertical and responsive horizontal page padding, host theme tokens, field surfaces and primary foreground. Removed the decorative section marker. Corrected the calendar/book icon theme handling.
+3. P2 — Android inherited desktop editor styling and added inner padding on top of shell padding. Removed the duplicate inset; reused the native editor's 13px monospace text, label size, field corners and primary button shape/colors. Reading input retains a comfortable 1.9 line-height.
+4. P2 — Light theme controls and icons lacked consistency/contrast. Corrected light and dark theme foregrounds and inspected both modes on both platforms.
 
-- 1366×900 深色：修改前后截图；正文、标题、日期、搜索与筛选清晰。
-- 1275×958 深色：与原稿内容区同尺寸比对；创作页搜索、选择与编辑可用。
-- 900×800 英文浅色：列表 240px、正文 558px，未横向溢出。
-- 390×844 手机列表与 360×740 手机正文：列表全宽，返回、导航与阅读仍可用。
-- 筛选日记返回 6 条；列表收起后正文扩展；展开恢复列表。两栏滚动范围维持独立。
-- 构建与 diff 检查通过。修改仅涉及文案与样式，未更改资料存储、接口或服务生命周期。
+## Verification and boundaries
 
-## 边界
+- Measured desktop result: title 28px, reflection 16px, page padding 28px 30.24px at 1440px, white light-theme fields and white primary-button text.
+- Measured Android result: reflection 13px, labels 13px, primary button 16px with 24px corner radius; no duplicated page padding. Document width equals viewport width (390px), with no horizontal overflow.
+- Plugin build, Android preview build and UI reference check passed. Desktop console error log was empty during the inspected flow.
+- Functional save/excerpt/statistics verification from the preceding implementation remains recorded in the archived report. This correction changes CSS only; no library records or classification data were modified.
+- This is browser verification of the desktop host and Android web UI, not a physical-phone or installed-Electron regression claim.
+- Temporary desktop viewport override was reset after capture.
 
-原稿的首页文章总览、素材统计条、富文本工具栏与独立检查侧栏没有在本轮新增。它们与当前以 Agent 为首页、Markdown 编辑的实际产品存在差异，需要单独确定范围；本报告不把这些页面标为已完整还原。
+## Delivery validation
 
-本轮没有新增待修复的 P0/P1/P2 列表布局问题。剩余 P3：标题极长时仍以两行省略，保留阅读区和鼠标悬停完整标题。
+- Linux 0.1.14 DEB and signed Android 0.1.8 APK rebuilt successfully in their fixed `release/<platform>/` directories. Prior package copies were replaced only after successful builds.
+- Release JVM test task and release lint/build completed; Java/Kotlin test outputs were up-to-date for this CSS-only correction. APK signature verification and both package SHA-256 checks passed.
+- Confirmed Android corrected styles inside the delivered APK and removed duplicate build outputs/staging.
 
-第一轮结果：passed
+## Follow-up: clipped book selector text
 
-
-## 第二轮：首页、回顾、发布检查与设置
-
-日期：2026-11-06。范围为拾文拥有的页面；DSH 的模型、插件、自动化管理仍保留原生功能布局，使用拾文主题。
-
-### 对照与约束
-
-- 原始视觉依据：`../workbench/qa/reference/home.png`、`review.png`（均 1517×1037）、`writing.png`（1448×1086）。设置、Agent 记忆与外部接入没有独立原稿，按这些页面的字体、边框、颜色和间距体系统一，不能宣称像素还原。
-- 用户后来确定首页以 Agent 为入口，因此保留原生 DSH 输入框、工作区、模型、权限及发送操作。原稿的直接保存框不重新实现，避免两个对话入口。今日积累与最近内容使用真实 snapshot 接口，演示库是合成数据。
-- 发布检查保留可折叠内嵌区域，遵循正文优先的决定；不强行恢复原稿中挤占正文宽度的第三栏。不添加未实现的富文本工具栏。
-- `home-comparison.jpg`：原稿内容区 (140,54)–(1100,1012)，960×958；实现去掉 280px 原生导航后 995×958。
-- `review-comparison.jpg`：原稿内容区 (142,54)–(1124,1012)，982×958；实现同上。两组同屏合成图均按 1x 像素放置，不拉伸。源宽与实现宽存在 13–35px 差异，已明确，避免伪精确对齐。
-- 桌面实现 CSS 视口 1275×958；另验证 1366×900、900×800。手机检查 390×844、360×740。浏览器截图像素与视口一致，无 @2x 缩放。
-- 所有证据位于 `.qa/design-alignment/`。最终完整截图 `home-final.jpg`、`review-final.jpg`；局部 1x 指标对比 `review-metrics-comparison.jpg`；其他页面 `check-mobile.jpg`、`memory-after.jpg`、`external-after.jpg`、`settings-after.jpg`、`settings-mobile.jpg`。
-
-- 发布检查局部对比：`check-comparison.jpg`，原稿检查侧栏 230×371，与手机展开区域 353×484 同屏、1x 展示；属于侧栏转内嵌的适配比较，宽度和逐项数不同，不作为桌面像素一致性证据。
-
-### 发现、修改、复核
-
-| 等级 | 首轮发现 | 修复与最终证据 |
-| --- | --- | --- |
-| P1 | 首页只有居中欢迎语和输入框，缺失原稿的信息层次 | 标题与原生输入区上移，加入今日积累、继续创作和最近记录；`home-before.jpg` → `home-final.jpg`。首页导航入口跳转可用 |
-| P1 | 回顾只有六个指标、单图和导入列表 | 四项主要指标、净增与收集双图、文章摘要、素材来源、文章进展、分类明细；`review-before.jpg` → `review-final.jpg` |
-| P2 | 回顾卡片过高，明细挤出首屏 | 缩短桌面图表、文章摘要与来源卡片，历史资料单独放明细下方；第二轮最终表格顶部为 y=775（1275×958），可见明细行。早期 `review-after.jpg` 仅供迭代记录 |
-| P2 | 旧版把数值类型的 undated 当作数组，永远显示 0 | 直接显示接口数值；历史导入字数单独呈现，不混入个人净增 |
-| P2 | 发布检查仅几行符号与文字，缺乏检查层次 | 每项具有名称、说明与状态；显示待核对数，明确规则通过不代表适合发布；支持展开/收起 |
-| P2 | 设置长说明被截断、链接颜色不统一，记忆编辑区字号偏小 | 完整换行、主题链接色、14px 编辑正文（手机 16px），统一卡片边距；桌面与手机截图复核 |
-| P2 | 手机明细宽表、滚动图表易挤占页面宽度 | 明细改为单条卡片；长周期图表仅在自身区域横向滚动，页面无横向溢出；`review-mobile-details.jpg`、`review-mobile-final.jpg` |
-
-### 五项视觉复核
-
-1. 字体：保留 Noto Sans CJK SC/系统字体链，页面标题 27–28px，卡片标题 16–18px，摘要标题 14px，说明 12–14px。英文长标签能换行，不挤掉数值。原稿是图像渲染字形，不宣称字体文件完全一致。
-2. 间距：统一外边距 20–32px、卡片 12–22px、分区 12–16px；回顾按原稿恢复双列，手机单列。首页因原生会话控件保留而与静态原稿比例不同，这属于已确认产品方向。
-3. 颜色：石墨底、薄荷强调、低对比边框；待核对用琥珀色。浅色主题主按钮文字改用对应前景 token，修正深色文字配深绿底的问题。
-4. 图像：复用现有拾文 Logo，未新增占位插画；原生导航图标保留。图表为真实数字的 HTML/CSS 数据展示，不使用图像模拟图表。
-5. 文案：回顾摘要改为“更新的文章”，避免把草稿称为已写成；个人净增与历史导入、规则检测与人工核对分别说明。新增文案含中文与英文。
-
-### 交互与验证边界
-
-- 首页“查看回顾”与原生对话入口验证；输入框保留 DSH 行为，没有配置真实模型，未发送 AI 请求。
-- 7 天与自然月、上个月空状态、明细分类切换、明细正文弹窗与关闭均验证；后续期间请求采用失效标记防止旧响应覆盖新期间。
-- 发布检查展开后逐项显示、手机阅读和底部导航验证。
-- 资料设置、Agent 记忆、外部接入已查看；未为外部客户端创建凭据，未修改人格、密码、权限或导入真实资料。
-- 英文浅色手机回顾、中文深色桌面与手机、900px 中等宽度无页面横向溢出。控制台 error 列表为空。
-- `npm test`：48 项通过；插件构建、源码检查、diff 检查和 Linux 打包通过。最初沙箱下 HTTP/子进程测试被权限限制，放行后验证通过。
-
-### 后续细节（P3）
-
-- DSH 原生输入框保留指令/文件提示和原生配置面板；本轮没有替换这些上游功能组件。
-- 首页摘要进入对应模块，不直接进入某条文章编辑；正文以 Markdown 编辑与可读预览为现有边界。
-- 净增柱图用逐日数值标注，不复刻原图的纵轴与背景网格；空白日期显示真实 0。
-
-本轮在上述已说明的产品约束下，无剩余 P0/P1/P2 页面布局问题。
-
-final result: passed
-
-## 宽屏新会话输入区复核
-
-- 1920×1080：输入框、工作区选择行与下方卡片均从 x=312 开始，宽度 1569px；移除首页输入框原有 1040px 上限。
-- 390×844：输入框与卡片均从 x=16 开始，宽度 351px，无页面横向溢出。
-- 调整仅作用于新会话首页；截图 `.qa/design-alignment/composer-wide-fixed.jpg` 是本机验证产物，不随源码发布。
+The user reported Chinese glyphs clipped in the desktop book selector. Computed CSS confirmed a 42px border-box height with 12px top/bottom padding, leaving only 16px of text space. The shared reading-note CSS now gives the book/date controls 44px height with 8px vertical padding (26px inner space). Browser inspection confirmed the updated dimensions and complete Chinese placeholder/selected title in light and dark desktop themes. Screenshots: `docs/design/reading-notes/select-fix/light.png`, `dark.png`, `selected.png`. The last shows a temporary unsaved book selection in an isolated test library, not a saved user record.

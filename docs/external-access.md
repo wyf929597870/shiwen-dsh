@@ -116,3 +116,15 @@ CLI 可使用 `shiwen-bridge upload-image ./photo.png` 上传，命令输出附�
 自动化使用隔离临时库验证真实 HTTP、CLI 和官方 MCP 客户端；不调用付费模型、不读取真实素材。Linux 安装包验证桌面配置、外部保存、撤销凭据和重启持久化。具体外部产品的设置界面可能不同，尚未逐一验收。
 
 官方 SDK 参考：[stdio 服务](https://ts.sdk.modelcontextprotocol.io/v2/serving/stdio)。
+
+## 读书笔记与日目标趋势
+
+原有保存、搜索、读取和修改工具均支持 `kind: "reading_note"`。`title` 为书名，`body` 仅为感想；章节、页码、原文摘录使用结构化 `readingNote`，与页面共用存储格式。一本书可分日期多次记录，同日也可有多条；重试沿用 requestId，编辑用记录 ID 和最新 revision。未知日期保持未知，历史混杂资料不自动归类。
+
+```json
+{"requestId":"reading-note-unique-id","kind":"reading_note","origin":"personal","title":"书名","body":"我自己的感想","day":"2026-11-10","readingNote":{"chapter":"第一章","page":"12","excerpts":[{"text":"书中原文","page":"12"}]}}
+```
+
+`shiwen_read` 返回结构化 `readingNote`。更新省略章节、页码、摘录即保留；传入 excerpts 数组表示完整替换，空数组清空。不能同时提交 readingNote 和原始 annotation。旧备注无法识别时不能静默覆盖。只摘录、没有感想的内容应作为参考资料保存。
+
+`shiwen_review` 保留原有 totals/daily 编辑统计，并增加 originals（现存个人原文字数）和 goals（definitions/daily/summary），与页面复用同一算法。查询某一天用 `{"period":"1","day":"2026-11-10"}`；近 7/14/30 天、自然月沿用原参数。日记与自由书写分开统计；读书笔记只计感想，已有笔记字数优先于当天打卡数字，不重复相加。旧打勾只统计完成天数，未知数值为 null，不推算分钟或字数；统计结果不返回日记正文。

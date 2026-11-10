@@ -1177,7 +1177,7 @@ class LibraryRepository internal constructor(
     }
     private fun addedChars(old: String, next: String): Int = WritingDelta.between(old, next).added
     private fun removedChars(old: String, next: String): Int = WritingDelta.between(old, next).removed
-    private fun LibraryRecord.agentView() = AgentLibraryRecord(id, title, markdown, kind, createdAt, origin, contentDay)
+    private fun LibraryRecord.agentView() = AgentLibraryRecord(id, title, markdown, kind, createdAt, origin, contentDay, revision, annotation)
     private fun contentHash(markdown: String, segments: JSONArray) = Canonical.hash(mapOf("markdown" to markdown, "segments" to plain(segments)))
     private fun reconcileSources(oldSegmentsJson: String, oldMarkdown: String, nextMarkdown: String): JSONArray {
         val segments = JSONArray(oldSegmentsJson)
@@ -1225,7 +1225,7 @@ class LibraryRepository internal constructor(
     private fun plain(json: JSONObject): Map<String, Any?> = json.keys().asSequence().associateWith { plain(json.get(it)) }
 
     companion object {
-        val KINDS = setOf("ai_annotation", "journal", "idea", "freewrite", "web", "ai", "reference", "article")
+        val KINDS = setOf("ai_annotation", "journal", "idea", "freewrite", "reading_note", "web", "ai", "reference", "article")
         private val EDITABLE_FIELDS = setOf("title", "markdown", "kind", "origin", "processing", "contentDay", "dateBasis", "url", "annotation", "stage", "sourceIds", "sources", "attachmentDescriptors", "deleted", "provenance")
         private val READ_ONLY_FIELDS = setOf("id", "createdAt", "updatedAt", "createdByDevice", "revision", "versionId", "changeId", "baseVersionId", "serverRevision", "localGeneration", "syncState", "state")
     }

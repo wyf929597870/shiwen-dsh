@@ -1,3 +1,5 @@
+import {readingNoteFields,readingNoteInfo} from './reading-note.mjs';
+import {toolReview} from './tool-review.mjs';
 import {randomUUID,randomBytes,createHash} from 'node:crypto';
 import {definitions,catalog,parseCall,permissions} from '../../../integration/contracts.mjs';
 import {markdownSource} from './markdown.mjs';
@@ -22,7 +24,7 @@ export function imageType(bytes){
  throw Error('不支持的图片格式');
 }
 export class AccessError extends Error{constructor(message,status=403){super(message);this.status=status;}}
-export const recordSummary=row=>({id:row.id,revision:row.revision,title:row.title,kind:row.kind,origin:row.origin,day:row.importInfo?row.importInfo.day:row.dateInfo?row.dateInfo.day:dateKey(row.created),url:row.url,annotation:row.annotation,stage:row.stage,sourceIds:row.sourceIds});
+export const recordSummary=row=>({id:row.id,revision:row.revision,title:row.title,kind:row.kind,origin:row.origin,day:row.importInfo?row.importInfo.day:row.dateInfo?row.dateInfo.day:dateKey(row.created),url:row.url,annotation:row.annotation,stage:row.stage,sourceIds:row.sourceIds,...readingNoteInfo(row)});
 const recordSummaryWithAnchor=row=>({...recordSummary(row),...(row.annotationOf?{annotationOf:row.annotationOf}:{})});
 export function externalStore(db,api){
  const active=id=>{const row=db.prepare('SELECT * FROM external_clients WHERE id=? AND revoked IS NULL').get(id);if(!row)throw new AccessError('凭据无效或已撤销',401);return {...row,scopes:JSON.parse(row.scopes)};};
@@ -77,7 +79,7 @@ export function externalStore(db,api){
     if(name==='shiwen_search')return api.searchRecords({...args,limit:20});
     if(name==='shiwen_original_version')return api.originalVersionInfo(args);
     if(name==='shiwen_annotation_list')return api.annotationList(args).map(recordSummaryWithAnchor);
-    if(name==='shiwen_review'){const r=api.review(args);return {start:r.start,end:r.end,totals:r.totals,daily:r.daily,undated:r.undated};}
+    if(name==='shiwen_review')return toolReview(api,args);
     const row=api.get(args.id);if(!row||row.deleted)throw new AccessError('记录不存在',404);
     if(name==='shiwen_annotation_read'&&row.kind!=='ai_annotation')throw new AccessError('批注不存在',404);
     if(name==='shiwen_read'&&row.kind==='ai_annotation')throw new AccessError('请使用批注读取工具',400);
@@ -121,7 +123,7 @@ export function externalStore(db,api){
     }else if(name==='shiwen_annotation_restore'){const row=api.annotationRestore({...fields,requestId:operationId});result={restored:true,...recordSummaryWithAnchor(row)};
     }else if(name==='shiwen_correct_origin'){const row=api.correctRecordOrigin({...fields,requestId:operationId});result={updated:true,...recordSummary(row)};
     }else if(definition.permission==='create'){
-     const content=name==='shiwen_collect'?{...fields,kind:'web',origin:'external'}:fields;
+     const content=name==='shiwen_collect'?{...fields,kind:'web',origin:'external'}:readingNoteFields(fields);
      const day=content.day??null;if(day!==null&&validDay(day)!==day)throw Error('请输入有效内容日期');
      const row=api.save({...content,reason:'外部客户端保存'},{inTransaction:true,archive:true,beforeSync:record=>{attach(record);if(content.kind!=='journal')db.prepare('INSERT INTO record_dates(record,day,basis) VALUES(?,?,?)').run(record.id,day,'外部客户端提供的内容日期');}});
      result={saved:true,...recordSummary(api.get(row.id))};

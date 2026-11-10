@@ -3,7 +3,7 @@ import {mkdir, copyFile, writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 const root = resolve(import.meta.dirname, '..');
 await mkdir(resolve(root, 'dist'), {recursive: true});
-await build({entryPoints: [resolve(root, 'web/main.jsx')], bundle: true, format: 'esm',
+await build({entryPoints: [resolve(root, 'web/main.jsx')], bundle: true, format: 'esm', nodePaths: [resolve(root, 'node_modules')],
   outfile: resolve(root, 'dist/app.js'), target: 'chrome100', minify: true, jsx: 'automatic'});
 await copyFile(resolve(root, '../assets/shiwen-mark.png'), resolve(root, 'dist/shiwen-mark.png'));
 await writeFile(resolve(root, 'dist/index.html'), `<!doctype html><html lang="zh-CN"><head>

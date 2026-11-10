@@ -29,6 +29,7 @@ test('web annotation editor preserves original, draft and uncertain-save identit
         store.saveDsh({kind:'reference',body:'外部资料',origin:'external',day,sessionId:'review',messageId:'three',role:'user',operationId:'review-three'});
         const anchor=store.originalVersionInfo({id:row.id});store.annotationCreate({originalId:row.id,originalVersionId:anchor.versionId,title:'历史 AI 标注',body:'AI 分析不计入原文',requestId:'review-note'});result=true;
       }
+      else if(method==='readingNoteFixture')result=store.saveDsh({kind:'reading_note',body:'独立读书感想',origin:'personal',day:dateKey(new Date()),sessionId:'review',messageId:'reading',role:'user',operationId:'review-reading'});
       else if(method==='annotationRead')result=view(store.annotationRead(args));
       else if(['review','reviewPreview','correctRecordOrigin','annotationList','originalVersionInfo','workbenchDraft','annotationCreate','annotationUpdate','annotationDelete','annotationRestore'].includes(method))result=store[method](args);
       else throw Error('Unexpected method '+method);

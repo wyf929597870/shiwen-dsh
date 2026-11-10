@@ -1,3 +1,4 @@
+import {BookIcon} from './reading/ReadingNotesPage.jsx';
 import React,{useSyncExternalStore} from 'react';
 
 const paths={
@@ -11,6 +12,6 @@ export function MobileNav({locale,layout}){
  const active=useSyncExternalStore(fn=>layout.panelInfo.subscribe(fn),()=>layout.panelInfo.getSnapshot().activePanelId);
  const zh=String(language).startsWith('zh');
  return <nav className="sw-mobile-nav" aria-label={zh?'主导航':'Main navigation'}>
-  {[[null,'chat','对话','Chat'],['shiwen-library','library','素材','Materials'],['shiwen-articles','articles','创作','Writing'],['shiwen-review','review','回顾','Review']].map(([id,icon,cn,en])=><button key={icon} type="button" aria-current={active===id?'page':undefined} onClick={()=>layout.selectPanel(id)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d={paths[icon]}/></svg><span>{zh?cn:en}</span></button>)}
+  {[[null,'chat','对话','Chat'],['shiwen-library','library','素材','Materials'],['shiwen-reading','reading','读书','Reading'],['shiwen-articles','articles','创作','Writing'],['shiwen-review','review','回顾','Review']].map(([id,icon,cn,en])=><button key={icon} type="button" aria-current={active===id?'page':undefined} onClick={()=>layout.selectPanel(id)}>{icon==='reading'?<BookIcon/>:<svg viewBox="0 0 24 24" aria-hidden="true"><path d={paths[icon]}/></svg>}<span>{zh?cn:en}</span></button>)}
  </nav>;
 }

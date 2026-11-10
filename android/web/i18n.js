@@ -7,7 +7,7 @@ const messages={
   'zh-CN':{},
   en:{
     '拾文':'Shiwen','对话':'Chat','素材':'Materials','创作':'Writing','回顾':'Review','设置':'Settings',
-    '日记':'Journal','自由书写':'Freewriting','想法':'Idea','网页':'Web','AI 讨论':'AI discussion','参考资料':'Reference','文章':'Article',
+    '日记':'Journal','自由书写':'Freewriting','读书笔记':'Reading notes','想法':'Idea','网页':'Web','AI 讨论':'AI discussion','参考资料':'Reference','文章':'Article',
     '自己书写':'Written by me','外部资料':'External source','AI 内容':'AI content','译文':'Translation','来源待确认':'Source unconfirmed',
     '搜索标题和正文':'Search titles and content','按类型筛选':'Filter by type','全部类型':'All types','回收站':'Trash',
     '新建记录':'New record','新建文章':'New article','编辑记录':'Edit record','编辑文章':'Edit article','保存':'Save','保存中…':'Saving…','删除':'Delete','恢复':'Restore','取消':'Cancel','编辑':'Edit',

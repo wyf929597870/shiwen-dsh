@@ -1,3 +1,4 @@
+import {validateReadingNote,decodeReadingNote,readingNoteFields} from './reading-note.mjs';
 import {externalDDL,externalStore,imageType} from './external-store.mjs';
 import {agentDDL,createAgentStore,memoryDefaults} from './agent-store.mjs';
 import {migrateConversations,conversationStore} from './conversations.mjs';
@@ -325,16 +326,17 @@ export function createStore(path,{recover=true}={}) {
   }
   // Shared mutation boundary. The trusted caller fixes the origin of newly added text.
   function updateRecord(input,{addedOrigin='personal',operationId,beforeSync,allowOriginCorrection=false}={}) {
-    const fields=['kind','title','body','day','url','annotation','stage','sourceIds',...(allowOriginCorrection?['origin']:[])];
+    const fields=['kind','title','body','day','url','annotation','readingNote','stage','sourceIds',...(allowOriginCorrection?['origin']:[])];
     if(!input||Object.keys(input).some(key=>!['id','revision',...fields].includes(key)))throw new Error('无效的修改字段');
     requireText(input.id,100);if(!Number.isInteger(input.revision)||input.revision<1)throw new Error('版本无效');
     if(!fields.some(key=>input[key]!==undefined))throw new Error('请提供要修改的字段');
     if(!['personal','ai'].includes(addedOrigin))throw new Error('无效的编辑来源');
-    const fingerprint=createHash('sha256').update(JSON.stringify([addedOrigin,...['id','revision',...fields].map(key=>[key,input[key]])])).digest('hex');
+    const fingerprint=createHash('sha256').update(JSON.stringify([addedOrigin,...['id','revision',...fields.filter(key=>key!=='readingNote'||input.readingNote!==undefined)].map(key=>[key,input[key]])])).digest('hex');
     return db.transaction(()=>{
       if(operationId){requireText(operationId,100);const prior=db.prepare('SELECT result FROM operations WHERE id=?').get(operationId);if(prior){const result=parse(prior.result);if(result.fingerprint!==fingerprint)throw new Error('重复操作的参数不一致');return result.record;}}
       const old=get(input.id);if(!old||old.deleted)throw new Error('记录不存在或已删除');if(old.kind==='ai_annotation')throw new Error('批注只能通过专用接口修改');
       if(input.revision!==old.revision)throw new Error('内容已被更新，请重新读取后再修改');
+      input=readingNoteFields(input,old);
       const kind=input.kind??old.kind;
       if(!kinds.includes(kind))throw new Error('无效的内容类型');
       if(kind!==old.kind&&(kind==='article'||old.kind==='article'))throw new Error('素材与文章不能直接互改类型，请新建文章并关联素材');
@@ -381,11 +383,11 @@ export function createStore(path,{recover=true}={}) {
     const effectiveDay=r=>imported.has(r.id)?imported.get(r.id).day:recordDates.has(r.id)?recordDates.get(r.id).day:dateKey(r.created,range.timeZone);
     const newRecords=records.filter(x=>!x.deleted&&inDay(effectiveDay(x))&&!imported.get(x.id)?.duplicate_of);
     const collectedRecords=records.filter(x=>!x.deleted&&['web','ai','reference'].includes(x.kind)&&inDay(effectiveDay(x))&&!imported.get(x.id)?.duplicate_of);
-    const historical=newRecords.filter(r=>imported.has(r.id)&&['journal','freewrite','idea','article'].includes(r.kind));
+    const historical=newRecords.filter(r=>imported.has(r.id)&&['journal','freewrite','reading_note','idea','article'].includes(r.kind));
     const collectedKinds=['web','ai','reference'];
     const active=new Set(rows.filter(x=>x.kind==='article'&&!x.deleted).map(x=>x.record));
     for(const r of records)if(r.kind==='article'&&(imported.has(r.id)?inDay(imported.get(r.id).day)||r.revision>1&&within(r.updated):within(r.updated))&&!r.deleted)active.add(r.id);
-    const totals={added:0,removed:0,net:0,personalRecords:newRecords.filter(x=>['journal','freewrite','idea'].includes(x.kind)&&x.origin==='personal').length,collected:collectedRecords.length,web:collectedRecords.filter(x=>x.kind==='web').length,ai:collectedRecords.filter(x=>x.kind==='ai').length,articles:active.size,finalized:records.filter(x=>active.has(x.id)&&x.stage==='final'&&!x.deleted).length};
+    const totals={added:0,removed:0,net:0,personalRecords:newRecords.filter(x=>['journal','freewrite','reading_note','idea'].includes(x.kind)&&x.origin==='personal').length,collected:collectedRecords.length,web:collectedRecords.filter(x=>x.kind==='web').length,ai:collectedRecords.filter(x=>x.kind==='ai').length,articles:active.size,finalized:records.filter(x=>active.has(x.id)&&x.stage==='final'&&!x.deleted).length};
     totals.reference=collectedRecords.filter(x=>x.kind==='reference').length;
     totals.historicalChars=historical.reduce((sum,r)=>sum+imported.get(r.id).chars,0);
     totals.historicalRecords=historical.length;
@@ -435,10 +437,30 @@ export function createStore(path,{recover=true}={}) {
   function annotationList({originalId,deleted=false}){if(typeof deleted!=='boolean')throw Error('删除状态无效');const parent=get(originalId);if(!parent||parent.deleted||parent.kind==='ai_annotation')return [];return db.prepare('SELECT record_id FROM annotation_relations WHERE original_id=? ORDER BY rowid DESC').all(originalId).map(x=>get(x.record_id)).filter(x=>x&&Boolean(x.deleted)===deleted);}
   function annotationUpdate(args,{beforeSync}={}){return annotationMutation('update',args,()=>{const old=annotationRead(args);if(args.imageIds!==undefined)api.validateWorkbenchImages({id:old.id,body:args.body??markdownSource(old.doc),imageIds:args.imageIds});if(args.revision!==old.revision)throw Error('内容已被更新');if(args.title===undefined&&args.body===undefined)throw Error('请提供要修改的字段');return save({id:old.id,revision:args.revision,title:args.title,doc:args.body===undefined?old.doc:updateMarkdownDoc(old.doc,args.body,'ai','ai')},{inTransaction:true,allowAnnotation:true,beforeSync:record=>{attachAnnotationImages(args,record.id);beforeSync?.(record);}});});}
   function annotationState(action,args){return annotationMutation(action,args,()=>{const old=get(args.id);if(!old||old.kind!=='ai_annotation'||old.revision!==args.revision||Boolean(old.deleted)!==(action==='restore'))throw Error('批注状态已变更');if(!get(old.annotationOf.recordId)||get(old.annotationOf.recordId).deleted)throw Error('原文不存在');db.prepare('UPDATE records SET deleted=?,revision=revision+1 WHERE id=?').run(action==='delete'?1:0,args.id);addCurrentVersion(args.id,action==='delete'?'删除批注':'恢复批注');appendSyncChange(args.id,action,{createActivity:false,preserveSources:true});return get(args.id);});}
+  function readingNoteSave(input){
+    const value=validateReadingNote(input);requireText(input.requestId,80);if(!input.requestId)throw Error('缺少请求编号');
+    const operationId='reading-note:'+input.requestId,fingerprint=createHash('sha256').update(JSON.stringify({id:input.id??null,revision:input.revision??null,...value})).digest('hex');
+    return db.transaction(()=>{
+      const prior=db.prepare('SELECT result FROM operations WHERE id=?').get(operationId);
+      if(prior){const receipt=parse(prior.result);if(receipt.fingerprint!==fingerprint)throw Error('请求编号已用于不同内容');return receipt.record;}
+      const old=input.id?get(input.id):null;
+      if(input.id&&(!old||old.deleted||old.kind!=='reading_note'||old.origin!=='personal'))throw Error('个人读书笔记不存在');
+      if(old&&!decodeReadingNote(old.annotation))throw Error('此笔记的备注格式需要先核对');
+      const doc=old?updateMarkdownDoc(old.doc,value.reflection,'personal',old.origin):plainDoc(value.reflection,'personal');
+      const saved=save({id:input.id,revision:input.revision,kind:'reading_note',title:value.book,doc,annotation:value.annotation},{inTransaction:true,beforeSync:record=>{
+        db.prepare('INSERT INTO record_dates(record,day,basis) VALUES(?,?,?) ON CONFLICT(record) DO UPDATE SET day=excluded.day,basis=excluded.basis').run(record.id,value.day,'读书笔记记录日期');
+      }});
+      const record={...get(saved.id),markdown:value.reflection};
+      db.prepare('INSERT INTO operations VALUES(?,?)').run(operationId,JSON.stringify({fingerprint,record}));return record;
+    })();
+  }
+  function readingNoteList(){
+    return {scope:createHash('sha256').update(path).digest('hex').slice(0,24),records:orderedRecords().filter(r=>r.kind==='reading_note'&&r.origin==='personal').map(r=>({id:r.id,revision:r.revision,title:r.title,contentDay:r.contentDay,created:r.created,annotation:r.annotation,markdown:markdownSource(parse(r.doc))}))};
+  }
   function reviewPreview(args={}){
     const range=dateRange(args.period??'7',args.month,args.now?new Date(args.now):new Date(),args.timeZone),within=day=>day&&day>=range.start&&day<=range.end;
     const records=orderedRecords().map(r=>({...r,contentDay:r.imported?r.import_day:r.dated?r.content_day:dateKey(r.created,range.timeZone)})).filter(r=>r.origin==='personal'&&within(r.contentDay));
-    const originals=records.map(r=>({id:r.id,title:r.title,kind:r.kind,contentDay:r.contentDay,characters:count(markdownSource(parse(r.doc)))}));
+    const originals=records.map(r=>({id:r.id,title:r.title,kind:r.kind,contentDay:r.contentDay,characters:count(markdownSource(parse(r.doc))),...(r.kind==='journal'?{goalMarkdown:markdownSource(parse(r.doc))}:{})}));
     const daily=range.days.map(day=>({day,personalOriginalCharacters:originals.filter(r=>r.contentDay===day).reduce((n,r)=>n+r.characters,0),personalOriginalRecords:originals.filter(r=>r.contentDay===day).length}));
     const observedEdits={added:0,removed:0,net:0},textByHash=new Map(),byRecord=new Map(db.prepare('SELECT id,kind,origin FROM records').all().map(r=>[r.id,r]));
     const personal=segments=>segments.filter(x=>x.origin==='personal').map(x=>x.text).join('');
@@ -457,21 +479,22 @@ export function createStore(path,{recover=true}={}) {
   }
 
   const api={
-    originalVersionInfo,correctRecordOrigin,annotationCreate,annotationList,annotationRead,annotationUpdate,annotationDelete:args=>annotationState('delete',args),annotationRestore:args=>annotationState('restore',args),reviewPreview,
+    readingNoteSave,readingNoteList,originalVersionInfo,correctRecordOrigin,annotationCreate,annotationList,annotationRead,annotationUpdate,annotationDelete:args=>annotationState('delete',args),annotationRestore:args=>annotationState('restore',args),reviewPreview,
     snapshot:()=>({records:orderedRecords().map(({import_day,imported,content_day,dated,...row})=>decode(row)),memories:db.prepare("SELECT * FROM memories WHERE status='active' ORDER BY updated DESC").all(),today:review({period:'1'}),draft:getSetting('captureDraft',''),draftOrigin:getSetting('captureDraftOrigin','personal'),editingDraft:getSetting('editingDraft')}),
     searchRecords:({query='',kind='',start='',end='',offset=0,limit=20}={})=>{requireText(query,100);requireText(kind,30);if(kind&&!kinds.includes(kind))throw new Error('无效类型');if(start&&validDay(start)!==start||end&&validDay(end)!==end||start&&end&&start>end)throw new Error('无效日期范围');if(!Number.isInteger(offset)||offset<0||!Number.isInteger(limit)||limit<1||limit>30)throw new Error('无效分页');const term=query.trim().toLowerCase();const rows=orderedRecords().filter(r=>{const day=r.contentDay;return (!kind||r.kind===kind)&&(!term||(r.title+' '+r.body+' '+r.annotation).toLowerCase().includes(term))&&(!start||day&&day>=start)&&(!end||day&&day<=end);});return {total:rows.length,items:rows.slice(offset,offset+limit).map(r=>({id:r.id,title:r.title,kind:r.kind,origin:r.origin,url:r.url,day:r.contentDay,excerpt:r.body.slice(Math.max(0,r.body.toLowerCase().indexOf(term)-100),Math.max(0,r.body.toLowerCase().indexOf(term)-100)+450)})),nextOffset:offset+limit<rows.length?offset+limit:null};},
     save, get, review, updateRecord, consolidateJournals, journalForDay:day=>{const row=journalForDay(day);return row?get(row.id):null;},
     importWiki:scan=>db.transaction(()=>{const before=new Map(db.prepare('SELECT id FROM records').all().map(r=>[r.id,JSON.stringify(syncRecord(r.id))]));const result=importWiki(db,scan);for(const row of db.prepare('SELECT id FROM records').all()){const after=JSON.stringify(syncRecord(row.id));if(before.get(row.id)!==after){if(before.has(row.id))bumpSyncRevision(row.id,'Wiki 导入附件或来源更新');appendSyncChange(row.id,before.has(row.id)?'update':'create',{createActivity:false});}}consolidateJournals();return result;})(),
     dshSources:({id})=>db.prepare('SELECT session_id,message_id,role,excerpt FROM dsh_record_sources WHERE record=? ORDER BY rowid').all(requireText(id,100)),
-    saveDsh:({kind,title='',body,origin='ai',url='',annotation='',day=null,sessionId,messageId,role,operationId,sourceExcerpt=body})=>{
+    saveDsh:({kind,title='',body,origin='ai',url='',annotation,readingNote,day=null,sessionId,messageId,role,operationId,sourceExcerpt=body})=>{
       requireText(sessionId,100);requireText(messageId,100);requireText(operationId,100);requireText(body,1000000);
-      if(!['journal','freewrite','idea','web','ai','article','reference'].includes(kind))throw new Error('无效的内容类型');
+      if(!kinds.includes(kind))throw new Error('无效的内容类型');
       if(!['personal','ai','external','unknown'].includes(origin)||!['user','assistant'].includes(role))throw new Error('无效来源');
       if(day!==null&&validDay(day)!==day)throw new Error('请输入有效日期');
       return db.transaction(()=>{
         const prior=db.prepare('SELECT result FROM operations WHERE id=?').get(operationId);
         if(prior)return parse(prior.result);
-        const result=save({kind,title,body,origin,url,annotation,day,opId:operationId},{inTransaction:true,archive:true,sync:false});
+        const fields=readingNoteFields({kind,title,body,origin,url,annotation,readingNote,day});
+        const result=save({...fields,opId:operationId},{inTransaction:true,archive:true,sync:false});
         db.prepare('INSERT OR IGNORE INTO dsh_record_sources VALUES(?,?,?,?,?)').run(result.id,sessionId,messageId,role,requireText(sourceExcerpt,1000000).slice(0,500));
         if(kind!=='journal')db.prepare('INSERT INTO record_dates VALUES(?,?,?)').run(result.id,day,day?'对话归档指定':'对话归档，内容日期待确认');
         const saved=get(result.id);

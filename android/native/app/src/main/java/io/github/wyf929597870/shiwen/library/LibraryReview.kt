@@ -31,7 +31,7 @@ internal class LibraryReview(private val repo: LibraryRepository, private val cl
         val byDate=available.filter { inPeriod(it.contentDay?:dayOf(it.createdAt)) }
         val collected=byDate.filter { it.kind in setOf("web","ai","reference") }
         collected.forEach { row->days[row.contentDay?:dayOf(row.createdAt)]?.let { it.put("collected",it.getInt("collected")+1) } }
-        val historical=byDate.filter { it.id in historicalIds&&it.kind in setOf("journal","freewrite","idea","article") }
+        val historical=byDate.filter { it.id in historicalIds&&it.kind in setOf("journal","freewrite","reading_note","idea","article") }
         historical.forEach { row->days[row.contentDay?:dayOf(row.createdAt)]?.let { it.put("historical",it.getLong("historical")+WritingDelta.count(row.markdown)) } }
 
         // Hashes bind both exact Markdown and source segments. No assumed chronological baseline.
@@ -65,7 +65,7 @@ internal class LibraryReview(private val repo: LibraryRepository, private val cl
             (it.id !in historicalIds&&inPeriod(dayOf(it.updatedAt))||it.id in historicalIds&&inPeriod(it.contentDay))
         }.forEach { activeArticles.add(it.id) }
         val totals=JSONObject().put("added",added).put("removed",removed).put("net",added-removed)
-            .put("personalRecords",byDate.count { it.kind in setOf("journal","idea","freewrite")&&it.origin=="personal" })
+            .put("personalRecords",byDate.count { it.kind in setOf("journal","idea","freewrite","reading_note")&&it.origin=="personal" })
             .put("collected",collected.size).put("web",collected.count { it.kind=="web" }).put("ai",collected.count { it.kind=="ai" })
             .put("reference",collected.count { it.kind=="reference" }).put("articles",activeArticles.size)
             .put("finalized",available.count { it.id in activeArticles&&it.stage=="final" })
@@ -82,7 +82,8 @@ internal class LibraryReview(private val repo: LibraryRepository, private val cl
             it.contentDay != null && it.contentDay >= start && it.contentDay <= end }
             .sortedWith(compareByDescending<LibraryRecord> { it.contentDay }.thenByDescending { it.createdAt }.thenByDescending { it.id })
         val records = originals.map { JSONObject().put("id", it.id).put("title", it.title).put("kind", it.kind)
-            .put("contentDay", it.contentDay).put("characters", WritingDelta.count(it.markdown)) }
+            .put("contentDay", it.contentDay).put("characters", WritingDelta.count(it.markdown))
+            .apply { if (it.kind == "journal") put("goalMarkdown", it.markdown) } }
         val stock = records.sumOf { it.getLong("characters") }
         val daily = JSONArray(); var date = LocalDate.parse(start)
         while (!date.isAfter(LocalDate.parse(end))) {

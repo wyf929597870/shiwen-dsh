@@ -45,6 +45,18 @@ test('CLI 文件输入和真实 MCP stdio 工具发现、写入、读取、撤�
  const {tools}=await client.listTools();assert.ok(tools.some(x=>x.name==='shiwen_annotation_create'));
  const result=await client.callTool({name:'shiwen_read',arguments:{id:saved.id}});assert.ok(!result.isError);const record=JSON.parse(result.content[0].text);assert.equal(record.body,'CLI 日记');
  const edited=await client.callTool({name:'shiwen_update',arguments:{requestId:'mcp-update',id:saved.id,revision:record.revision,kind:'idea',url:'https://example.org'}});assert.ok(!edited.isError);assert.equal(store.get(saved.id).kind,'idea');
+ const saveSchema=tools.find(x=>x.name==='shiwen_save').inputSchema;
+ assert.ok(saveSchema.properties.kind.enum.includes('reading_note'));assert.ok(saveSchema.properties.readingNote);
+ const noteArgs={requestId:'mcp-reading',kind:'reading_note',origin:'personal',title:'接口测试书',body:'我的感想',day:'2026-11-10',readingNote:{chapter:'一',excerpts:[{text:'书中原文',page:'10'}]}};
+ const invoke=async(name,args)=>{const result=await client.callTool({name,arguments:args});assert.ok(!result.isError,JSON.stringify(result));return JSON.parse(result.content[0].text);};
+ const note=await invoke('shiwen_save',noteArgs);assert.equal((await invoke('shiwen_save',noteArgs)).id,note.id);
+ assert.equal((await invoke('shiwen_search',{kind:'reading_note'})).total,1);
+ const noteRead=await invoke('shiwen_read',{id:note.id});assert.equal(noteRead.body,'我的感想');assert.equal(noteRead.readingNote.excerpts[0].text,'书中原文');
+ const changed=await invoke('shiwen_update',{requestId:'mcp-note-edit',id:note.id,revision:noteRead.revision,readingNote:{page:'11'}});
+ assert.equal(changed.readingNote.page,'11');assert.equal(changed.readingNote.excerpts.length,1);
+ const review=await invoke('shiwen_review',{period:'1',day:'2026-11-10'});assert.equal(review.goals.summary.notes.total,4);
+ const noteDeleted=await invoke('shiwen_delete',{requestId:'mcp-note-delete',id:note.id,revision:changed.revision});
+ await invoke('shiwen_restore',{requestId:'mcp-note-restore',id:note.id,revision:noteDeleted.revision});
  store.externalClientRevoke({id:issued.id});const refused=await client.callTool({name:'shiwen_read',arguments:{id:saved.id}});assert.equal(refused.isError,true);
  await client.close();
 });

@@ -12,7 +12,7 @@ import {createManagementAdapter} from '../../mobile/src/management-adapter.mjs';
 import {createRemoteSessionsAdapter} from '../../mobile/src/remote-sessions-adapter.mjs';
 import {createMobileSyncAdapter} from '../../mobile/src/sync-adapter.mjs';
 export const inject=['connection','shiwenLibrary','sessionQuery','shiwenExternal'];
-const ownerMethods=new Set(['mobileAgentProfile','agentState','agentDocumentSave','memorySave','memoryDelete','memoryDecide',
+const ownerMethods=new Set(['readingNoteList','readingNoteSave','mobileAgentProfile','agentState','agentDocumentSave','memorySave','memoryDelete','memoryDecide',
   'externalStatus','externalClientCreate','externalClientRevoke','mobileManagement','mobileSync','mobileSessions',
   'readImage','stageImage','discardStagedImages','workbenchDraft','originalVersionInfo','annotationList','annotationRead','annotationCreate','annotationUpdate','annotationDelete','annotationRestore','reviewPreview','correctRecordOrigin','exportDocumentBundle']);
 export function apply(ctx){
@@ -113,7 +113,7 @@ export function apply(ctx){
           result=args.requestId||args.imageIds?.length?library.saveWorkbenchMarkdown(input,args.imageIds??[],args.requestId,requestPayload):library.save(input);
         }
       }else{
-        if(!['snapshot','review','draft','editingDraft','versions','restoreVersion','remove','restoreRemoved','updateRecord','importDate','recordDate','searchRecords','agentState','agentDocumentSave','memorySave','memoryDelete','memoryDecide','originalVersionInfo','annotationList','annotationCreate','annotationUpdate','annotationDelete','annotationRestore','reviewPreview','correctRecordOrigin'].includes(method))throw new Error('未知操作');
+        if(!['readingNoteList','readingNoteSave','snapshot','review','draft','editingDraft','versions','restoreVersion','remove','restoreRemoved','updateRecord','importDate','recordDate','searchRecords','agentState','agentDocumentSave','memorySave','memoryDelete','memoryDecide','originalVersionInfo','annotationList','annotationCreate','annotationUpdate','annotationDelete','annotationRestore','reviewPreview','correctRecordOrigin'].includes(method))throw new Error('未知操作');
         result=library[method](args);
       }
       return Response.json({result},{headers:{'Cache-Control':'no-store'}});

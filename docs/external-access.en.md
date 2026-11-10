@@ -56,3 +56,9 @@ Record details show external activity with the registered client name and suppli
 Tests use temporary data and the official MCP client without a model account. Linux package checks cover the settings UI, external saves, revocation and restart persistence. Individual third-party product setup flows have not all been tested.
 
 SDK reference: [stdio serving](https://ts.sdk.modelcontextprotocol.io/v2/serving/stdio).
+
+## Reading notes and daily trends
+
+Use existing save/search/read/update tools with `kind: "reading_note"`. `title` is the book name; `body` is reflection only. Optional `readingNote` contains `chapter`, `page`, and `excerpts: [{text, page}]`. Same-book notes remain separate records by date/ID. Excerpts are stored separately and excluded from writing counts. Preserve unknown dates. On update, omitted metadata stays unchanged; `excerpts` replaces the complete list (`[]` clears it). Do not combine `readingNote` with raw `annotation`; unrecognized historical annotations are not silently converted.
+
+`shiwen_review` keeps legacy `totals/daily` and adds `originals` plus `goals: {definitions,daily,summary}`, using the same calculation as the panel. Use `period: "1", day: "2026-11-10"` for one date, or existing 7/14/30-day/month periods. Journals/freewriting are separate; saved reflection counts supersede checklist quantities. Checkmarks count completed days, never inferred minutes; missing quantities remain null. Statistics do not return journal bodies.

@@ -1,3 +1,4 @@
+import {ReadingNoteSources} from '../../plugins/workbench/src/reading/ReadingNotesPage.jsx';
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {call} from '../bridge/library.mjs';
 import {MarkdownView} from './MarkdownView.jsx';
@@ -13,8 +14,8 @@ import {AnnotationPanel} from './AnnotationPanel.jsx';
 const editableFields = ['title','markdown','kind','origin','processing','contentDay','dateBasis','url','annotation','stage','sourceIds','sources'];
 const recordInput = form => Object.fromEntries(editableFields.filter(key=>Object.hasOwn(form,key)).map(key=>[key,form[key]]));
 
-const kinds = ['journal','freewrite','idea','web','ai','reference'];
-const kindName = (value,t) => t(({journal:'日记',freewrite:'自由书写',idea:'想法',web:'网页',ai:'AI 讨论',reference:'参考资料',article:'文章'})[value] || value || '未分类');
+const kinds = ['journal','freewrite','reading_note','idea','web','ai','reference'];
+const kindName = (value,t) => t(({journal:'日记',freewrite:'自由书写',reading_note:'读书笔记',idea:'想法',web:'网页',ai:'AI 讨论',reference:'参考资料',article:'文章'})[value] || value || '未分类');
 const originName = (value,t) => t(({personal:'自己书写',external:'外部资料',ai:'AI 内容',translation:'译文',unknown:'来源待确认'})[value] || '来源待确认');
 const dateText = (value,t) => value ? String(value).slice(0,10) : t('日期待确认');
 const byteText=value=>{const bytes=Number(value||0);return bytes<1024?`${bytes} B`:bytes<1024**2?`${(bytes/1024).toFixed(1)} KB`:`${(bytes/1024**2).toFixed(1)} MB`;};
@@ -315,13 +316,13 @@ export function RecordPanel({libraryId, libraries=[], mode='materials', onPageSt
           <label>{t('内容日期')}<input type="date" value={form.contentDay||''} disabled={busy||uncertain} onChange={e=>setField('contentDay',e.target.value||null)}/></label>
           <label>{t('来源说明')}<input value={form.dateBasis||''} maxLength={200} disabled={busy||uncertain} onChange={e=>setField('dateBasis',e.target.value)}/></label>
           <label>{t('来源链接')}<input type="url" value={form.url||''} maxLength={2048} disabled={busy||uncertain} onChange={e=>setField('url',e.target.value)}/></label>
-          <label>{t('备注')}<textarea value={form.annotation||''} maxLength={10000} disabled={busy||uncertain} onChange={e=>setField('annotation',e.target.value)}/></label>
+          {form.kind!=='reading_note'&&<label>{t('备注')}<textarea value={form.annotation||''} maxLength={10000} disabled={busy||uncertain} onChange={e=>setField('annotation',e.target.value)}/></label>}
           </details>
         </> : selected ? <>
           <div className="record-detail-head"><div><span className="state-pill">{kindName(selected.kind,t)}</span><span className="state-pill">{originName(selected.origin,t)}</span></div><div>{pendingAction?.type==='delete'?<button className="chip danger" disabled={busy} onClick={remove}>{t('再次核对删除')}</button>:pendingAction?.type==='restore'?<button className="chip" disabled={busy} onClick={restore}>{t('再次核对恢复')}</button>:selected.deleted?<button className="chip" disabled={busy} onClick={restore}>{t('恢复')}</button>:<><button className="chip" disabled={busy||annotationState.dirty||annotationState.busy} onClick={()=>startEdit(selected)}>{t('编辑')}</button><details className="record-actions"><summary>{t('更多','More')}</summary><button className="chip" disabled={busy} onClick={exportSelected}>{t('导出 Markdown','Export Markdown')}</button><button className="chip" disabled={busy} onClick={exportSelectedWithImages}>{t('导出原文、标注与图片','Export original, annotations and images')}</button><button className="chip" disabled={busy} onClick={shareSelected}>{t('分享','Share')}</button><button className="chip" disabled={busy||annotationState.dirty} onClick={correctOrigin}>{t('更正来源','Correct origin')}</button><button className="chip danger" disabled={busy||annotationState.dirty||annotationState.busy} onClick={remove}>{t('删除')}</button></details></>}</div></div>
           <h2>{selected.title||t('未命名')}</h2><p className="secondary record-date">{t('内容日期')}：{dateText(selected.contentDay,t)} · {t('记录于')} {dateText(selected.createdAt,t)}{selected.updatedAt&&` · ${t('更新于')} ${dateText(selected.updatedAt,t)}`}</p>
           {selected.url&&<p className="record-source"><span>{t('来源链接')}</span>{safeHttp(selected.url)?<a href={safeHttp(selected.url)} target="_blank" rel="noreferrer">{selected.url}</a>:<span>{selected.url}</span>}</p>}
-          {selected.dateBasis&&<p className="record-source"><span>{t('日期说明')}</span>{selected.dateBasis}</p>}{selected.annotation&&<p className="record-source"><span>{t('备注')}</span>{selected.annotation}</p>}
+          {selected.dateBasis&&<p className="record-source"><span>{t('日期说明')}</span>{selected.dateBasis}</p>}{selected.kind==='reading_note'?<ReadingNoteSources annotation={selected.annotation} t={t}/>:selected.annotation&&<p className="record-source"><span>{t('备注')}</span>{selected.annotation}</p>}
           {selected.deleted&&<p className="conflict-callout">{t('此记录在回收站中，恢复后会回到当前资料库。')}</p>}
           <AnnotationPanel key={`${libraryId}:${selected.id}`} libraryId={libraryId} original={selected} attachments={attachments} t={t} onStateChange={setAnnotationState}/>
           {selected.sources?.length>0&&<details className="source-picker"><summary>{t('正文来源')} · {selected.sources.length}</summary>{selected.sources.map((segment,index)=><div className="source-segment" key={`${index}-${segment.sourceRef||''}`}><strong>{originName(segment.origin,t)}</strong>{segment.sourceRef&&<span>{segment.sourceRef}</span>}<p>{segment.text?.length>220?`${segment.text.slice(0,220)}…`:segment.text}</p></div>)}</details>}

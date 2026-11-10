@@ -1,5 +1,5 @@
 import { diffChars } from 'diff';
-export const kinds = ['journal', 'freewrite', 'idea', 'web', 'ai', 'article', 'reference'];
+export const kinds = ['journal', 'freewrite', 'reading_note', 'idea', 'web', 'ai', 'article', 'reference'];
 export const origins = ['personal', 'external', 'ai', 'translation', 'unknown'];
 export const plainDoc = (text = '', origin = 'personal') => ({type:'doc',content:text.split('\n').map(line=>({type:'paragraph',content:line?[{type:'text',text:line,...(origin!=='personal'?{marks:[{type:'provenance',attrs:{origin}}]}:{})}]:[]}))});
 export function readDoc(doc, fallback='personal') {
