@@ -10,9 +10,9 @@ Shiwen is a personal AI workspace built on [DeepSeek Harness (DSH)](https://gith
 
 [Why Shiwen](#why-shiwen) · [What it does](#what-it-does) · [Getting started](#getting-started) · [Data and privacy](#data-and-privacy) · [Contributing](#contributing)
 
-Downloads: **[Android 0.1.6 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.6)**, **[Linux 0.1.13 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.13)**, **[Windows 0.1.9 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/windows-v0.1.9)** and [DSH plugin 0.2.0-dev.4](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.4). Licensed under [MIT](LICENSE). Android 0.1.6 requires the updated service; device upgrade acceptance for this round remains outstanding. Windows installation and service lifecycle were checked for the previous version; full GUI validation of the new version remains outstanding. No project macOS installer is provided.
+Downloads: **[Android 0.1.8 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.8)**, **[Linux 0.1.14 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.14)**, **[Windows 0.1.9 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/windows-v0.1.9)** and [DSH plugin 0.2.0-dev.5](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.5). Licensed under [MIT](LICENSE). Android 0.1.8 requires the updated service; device upgrade acceptance for this round remains outstanding. Windows installation and service lifecycle were checked for the previous version; full GUI validation of the new version remains outstanding. No project macOS installer is provided.
 
-**Current source:** Linux 0.1.13 / Android 0.1.6 adds separate originals and AI annotations, original-character review, one diary per day, service discovery and alternative addresses, and a desktop close-to-tray preference. These packages are published as previews; use the download links above. Upgrade the service and Android together for the updated sync protocol. See the [changelog](CHANGELOG.md), [originals and annotations](docs/original-annotations.md), and [node connectivity](docs/node-connectivity.md).
+**Current source:** Linux 0.1.14 / Android 0.1.8 / DSH plugin 0.2.0-dev.5 adds dedicated reading notes, excerpts and daily-goal trends with legacy checkmark support. Review counts reflections separately from excerpts and journals separately from freewriting. MCP, Agent tools and the bundled Skill are updated; Android includes large-backup and synchronization fixes. Upgrade the service and Android together, stop the old service and restart after installation. See the [changelog](CHANGELOG.md).
 
 ## Why Shiwen
 
@@ -64,7 +64,7 @@ Under **Shiwen menu → Connection and desktop settings**, choose whether closin
 
 ### Web plugin preview
 
-With **DSH 0.2.2-alpha.3 / Node.js >=24.9**, download the **[prebuilt plugin (.tgz)](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.2.0-dev.4/dsh-shiwen-0.2.0-dev.4.tgz)** without cloning this repository. See the [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.4) for installation, checksums and limitations.
+With **DSH 0.2.2-alpha.3 / Node.js >=24.9**, download the **[prebuilt plugin (.tgz)](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.2.0-dev.5/dsh-shiwen-0.2.0-dev.5.tgz)** without cloning this repository. See the [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.5) for installation, checksums and limitations.
 
 Run from this repository, without Electron or an upstream checkout:
 
@@ -100,10 +100,10 @@ Under **Settings → Shiwen data → Manage password and devices**, change the p
 ```bash
 npm run package:linux
 # Quit the client and stop the old service before installing
-sudo apt install ./release/shiwen-dsh_0.1.13_amd64.deb
+sudo apt install ./release/linux/shiwen-dsh_0.1.14_amd64.deb
 ```
 
-For a service launched from source, use `npm run server:stop` with the same data root. The package also includes management commands that need no system Node; see the [standalone service guide](docs/server.md). Restart the local service after upgrading. To use a prebuilt package, download the v0.1.9 installer below.
+For a service launched from source, use `npm run server:stop` with the same data root. The package also includes management commands that need no system Node; see the [standalone service guide](docs/server.md). Restart the local service after upgrading. To use a prebuilt package, download the v0.1.14 installer below.
 
 ### Run only the service and connect from a browser
 
@@ -122,12 +122,12 @@ The service can run without a desktop window. LAN devices must be able to reach 
 
 ### Published Linux desktop
 
-Download the **[Linux x64 installer (.deb)](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.9/shiwen-dsh_0.1.9_amd64.deb)**. This preview is intended for users willing to report issues; A Windows installer is available below. See the [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.9) for checksums and known limitations.
+Download the **[Linux x64 installer (.deb)](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.14/shiwen-dsh_0.1.14_amd64.deb)**. This preview is intended for users willing to report issues; A Windows installer is available below. See the [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.14) for checksums and known limitations.
 
 Fully quit Shiwen and stop any running standalone service, then install or upgrade from your download directory:
 
 ```bash
-sudo apt install ./shiwen-dsh_0.1.9_amd64.deb
+sudo apt install ./shiwen-dsh_0.1.14_amd64.deb
 ```
 
 Open 拾文 from the application menu or run `shiwen-dsh`. The package includes Electron, Node, DSH and Shiwen plugins; no separate Node installation or source checkout is required. Desktop validation currently covers Ubuntu 26.04 x64. Other distributions still need testing.
@@ -197,7 +197,7 @@ External data transfer depends on the models and tools you use. Cloud models rec
 | Desktop still to implement | Automatic updates, configurable minimize-to-tray behavior, article export and version-history UI |
 | Android released | Full local library, phone agent, multi-node sync, backups and DSH management pages. Upgrade, material saving and LAN sync passed on the current phone; other systems and background scenarios remain to be verified. See [delivery status](docs/android/delivery-board.md). |
 
-A standalone bundle can now be built and installed through DSH's CLI, while the Linux desktop shares the same business modules. The bundle is distributed through [GitHub Releases](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.4) and is not published to npm; the `dsh-plugin` topic does not imply official inclusion. See [plugin architecture and publication status](docs/plugin-status.md).
+A standalone bundle can now be built and installed through DSH's CLI, while the Linux desktop shares the same business modules. The bundle is distributed through [GitHub Releases](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.5) and is not published to npm; the `dsh-plugin` topic does not imply official inclusion. See [plugin architecture and publication status](docs/plugin-status.md).
 
 ## Contributing
 

@@ -2,11 +2,11 @@
 
 为原生 DSH Web 提供素材、日记、文章、回顾和 Agent 工具。预构建包不依赖拾文 Electron 外壳，不需要编译安装脚本。
 
-Requires **DSH 0.2.2-alpha.3** and **Node.js >=24.9**. Version 0.2.0-dev.4 is a preview build, not a stable release. Windows/macOS desktop hosts have not yet been validated.
+Requires **DSH 0.2.2-alpha.3** and **Node.js >=24.9**. Version 0.2.0-dev.5 is a preview build, not a stable release. Windows/macOS desktop hosts have not yet been validated.
 
-**本次更新：** 与桌面 v0.1.9 共用工作台，支持图文记录、图片同步和备份兼容；主题与皮皮仍可选。插件包版本为 0.2.0-dev.4。
+**本次更新：** 与桌面 v0.1.14 共用工作台，新增独立读书笔记、多段原文摘录与回顾日目标趋势，兼容旧打勾记录；MCP、Agent 工具和配套 Skill 同步更新；主题与皮皮仍可选。插件包版本为 0.2.0-dev.5。
 
-**This update:** shares the desktop v0.1.9 workspace, including inline images, image synchronization and backup compatibility. Theme and Pipi remain optional. Bundle version is 0.2.0-dev.4.
+**This update:** shares the desktop v0.1.14 workspace, adding dedicated reading notes, multiple excerpts and daily-goal trends with legacy checkmark support, plus matching MCP, Agent tools and Skill updates. Theme and Pipi remain optional. Bundle version is 0.2.0-dev.5.
 
 本版加入 Android 同步、人设与远端会话/管理接口。原生 DSH 宿主仍负责认证；Android 密码登录请使用拾文独立服务或桌面安装包，插件包本身不安装密码认证层。
 
@@ -15,7 +15,7 @@ This version adds Android sync, profile and remote-session/management endpoints.
 在已有 Web profile 中安装本 tgz（尚未初始化时先执行 `dsh web --help`）：
 
 ```sh
-dsh plugin --profile web add ./dsh-shiwen-0.2.0-dev.4.tgz --ignore-scripts
+dsh plugin --profile web add ./dsh-shiwen-0.2.0-dev.5.tgz --ignore-scripts
 dsh web --no-open
 ```
 

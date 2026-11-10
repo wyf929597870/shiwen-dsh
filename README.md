@@ -10,9 +10,9 @@
 
 [为什么做](#为什么做拾文) · [能做什么](#能做什么) · [开始使用](#开始使用) · [数据与隐私](#数据与隐私) · [参与开发](#参与开发)
 
-可下载 **[Android 0.1.6 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.6)**、**[Linux 0.1.13 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.13)**、**[Windows 0.1.9 预览版](https://github.com/wyf929597870/shiwen-dsh/releases/tag/windows-v0.1.9)**，以及 [DSH 插件 0.2.0-dev.4](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.4)。项目采用 [MIT](LICENSE) 许可证。Android 0.1.6 需配套升级服务端，本轮真机覆盖安装尚未验收；Windows 旧版已验证虚拟机安装与服务启停，新版完整图形界面仍待验收。macOS 未提供本项目安装包。
+可下载 **[Android 0.1.8 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.8)**、**[Linux 0.1.14 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.14)**、**[Windows 0.1.9 预览版](https://github.com/wyf929597870/shiwen-dsh/releases/tag/windows-v0.1.9)**，以及 [DSH 插件 0.2.0-dev.5](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.5)。项目采用 [MIT](LICENSE) 许可证。Android 0.1.8 需配套升级服务端，本轮真机覆盖安装尚未验收；Windows 旧版已验证虚拟机安装与服务启停，新版完整图形界面仍待验收。macOS 未提供本项目安装包。
 
-**当前源码：** Linux 0.1.13 / Android 0.1.6。新增原文与 AI 标注分离、个人原文字数回顾、每日单份日记、节点发现与备用地址，并恢复桌面关闭到托盘设置。安装包作为预览版发布，下载见上方链接。同步协议有更新，请配套升级服务端与 Android；详见 [更新记录](CHANGELOG.md)、[原文与 AI 标注](docs/original-annotations.md) 和 [服务节点连接](docs/node-connectivity.md)。
+**当前源码：** Linux 0.1.14 / Android 0.1.8 / DSH 插件 0.2.0-dev.5。新增独立读书笔记、原文摘录和回顾日目标趋势，兼容旧打勾记录；感想与摘录分开统计，日记与自由书写按各自文件统计。MCP、Agent 工具及配套 Skill 同步更新，Android 包含大备份与同步修复。请配套升级服务端与 Android，并停止旧服务后重新启动；详见 [更新记录](CHANGELOG.md)。
 
 ## 为什么做拾文
 
@@ -63,7 +63,7 @@
 
 ### Web 插件预览版
 
-已有 **DSH 0.2.2-alpha.3 / Node.js >=24.9** 的用户，可直接下载 **[拾文插件包（.tgz）](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.2.0-dev.4/dsh-shiwen-0.2.0-dev.4.tgz)**，无需克隆源码。安装命令、校验文件和已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.4)。
+已有 **DSH 0.2.2-alpha.3 / Node.js >=24.9** 的用户，可直接下载 **[拾文插件包（.tgz）](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.2.0-dev.5/dsh-shiwen-0.2.0-dev.5.tgz)**，无需克隆源码。安装命令、校验文件和已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.5)。
 
 直接在本仓库运行，不需要 Electron 或 DSH 上游源码：
 
@@ -101,10 +101,10 @@ Linux 安装包同时包含客户端、独立服务与 Node 运行环境，无�
 ```bash
 npm run package:linux
 # 退出客户端并停止旧服务后安装
-sudo apt install ./release/shiwen-dsh_0.1.13_amd64.deb
+sudo apt install ./release/linux/shiwen-dsh_0.1.14_amd64.deb
 ```
 
-源码启动的服务可在同一数据根目录下执行 `npm run server:stop` 停止；安装包也提供无需系统 Node 的管理命令，见 [独立服务说明](docs/server.md)。升级后重新启动本机服务。无需自行构建时，可直接下载下方的 v0.1.9 安装包。
+源码启动的服务可在同一数据根目录下执行 `npm run server:stop` 停止；安装包也提供无需系统 Node 的管理命令，见 [独立服务说明](docs/server.md)。升级后重新启动本机服务。无需自行构建时，可直接下载下方的 v0.1.14 安装包。
 
 ### 只运行独立服务，让浏览器访问
 
@@ -123,12 +123,12 @@ npm run server:url
 
 ### 已发布的 Linux 桌面版
 
-下载 **[Linux x64 安装包（.deb）](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.9/shiwen-dsh_0.1.9_amd64.deb)**。这是预览版，适合愿意反馈问题的用户；Windows 安装包见下方。校验文件与已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.9)。
+下载 **[Linux x64 安装包（.deb）](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.14/shiwen-dsh_0.1.14_amd64.deb)**。这是预览版，适合愿意反馈问题的用户；Windows 安装包见下方。校验文件与已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.14)。
 
 完整退出拾文并停止仍在运行的独立服务，再在下载目录安装或升级：
 
 ```bash
-sudo apt install ./shiwen-dsh_0.1.9_amd64.deb
+sudo apt install ./shiwen-dsh_0.1.14_amd64.deb
 ```
 
 从应用菜单打开「拾文」，或运行 `shiwen-dsh`。安装包包含 Electron、Node、DSH 和拾文插件，无需另外安装 Node 或保留源码目录。当前桌面验证环境为 Ubuntu 26.04 x64，其他发行版仍需验证。
@@ -198,7 +198,7 @@ Markdown 内容存放在本地资料数据库中，并非每条记录都是独�
 | 桌面尚待完成 | 自动更新、关闭窗口最小化到托盘的可配置行为、文章导出与版本界面 |
 | Android 已发布 | 完整本地资料库、对话/手机 Agent、多节点资料同步、文件备份与 DSH 管理页；现用设备覆盖升级、素材保存与同步已验收，其他系统与后台场景仍需验证。范围见 [Android 交付状态](docs/android/delivery-board.md) |
 
-现在可构建并通过 DSH CLI 安装独立组合包，已有 Linux 桌面版继续共用业务模块。组合包通过 [GitHub Release](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.4) 提供，尚未发布 npm；`dsh-plugin` 话题也不代表官方收录。详见 [插件架构与发布状态](docs/plugin-status.md)。
+现在可构建并通过 DSH CLI 安装独立组合包，已有 Linux 桌面版继续共用业务模块。组合包通过 [GitHub Release](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.5) 提供，尚未发布 npm；`dsh-plugin` 话题也不代表官方收录。详见 [插件架构与发布状态](docs/plugin-status.md)。
 
 ## 参与开发
 
@@ -224,3 +224,12 @@ npm run check:source
 感谢 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 提供原生对话、会话管理和 Agent 执行底座，让拾文可以专注于记录、资料整理和创作。
 
 拾文代码采用 [MIT](LICENSE) 许可证。本项目是独立社区项目，第三方组件遵循各自许可证，详见 [第三方说明](THIRD_PARTY_NOTICES.md)。
+
+## 本地发包目录
+
+正式包统一在 `release/<平台>/`，调试包在 `debug/<平台>/`；每个平台、渠道只保留最新版。构建成功并校验后自动替换旧包；失败时保留上一版。不要另建日期、版本或修复名称目录。完整规则见 [AGENTS.md](AGENTS.md)。
+
+- Linux：`npm run package:linux` → `release/linux/`；解包验收加 `-- --dir` → `debug/linux/`。
+- Windows：`npm run package:windows` → `release/windows/`；解包验收加 `-- --dir` → `debug/windows/`。
+- Android：配置签名环境后 `npm --prefix android run android:release` → `release/android/`；`android:debug` → `debug/android/`。
+- 插件：`npm run package:plugin` → `release/plugin/`；开发版本自动放入 `debug/plugin/`。

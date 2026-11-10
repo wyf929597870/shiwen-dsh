@@ -3,6 +3,44 @@
 0.1.4 是本仓库首次公开的 Linux 预览版；0.1.0–0.1.3 为本地开发与打包记录。
 0.1.4 is this repository's first public Linux preview; 0.1.0–0.1.3 are local development builds.
 
+## v0.1.14 / android-v0.1.8 / v0.2.0-dev.5 - 2026-11-10
+
+### 中文
+
+- 回顾整合日目标、单日详情及可切换项目的趋势图，支持阅读、运动、读书笔记、日记与自由书写。旧打勾保留完成状态，不推算时长或字数。
+- 日记与自由书写按各自文件及内容日期统计。新增独立读书笔记页：按书归集、按日期逐条记录，支持多段原文摘录及页码、草稿恢复与编辑。回顾仅计感想字数，摘录不计入；对应文件字数优先于同日打卡字数，历史混合资料不自动归类或改写。
+- 折叠积累明细、编辑与历史统计，分类字数不重复叠加到个人原文总计。
+- MCP 与桌面 Agent 工具支持读书笔记分类及结构化章节、页码、摘录；读取返回元数据，更新保留未提交字段，感想与摘录分开。回顾工具增加与页面一致的 originals/goals 和指定日期查询，配套 skill 与中英文接口说明同步更新。
+- 统一读书笔记与现有页面的字体、间距和主题，修复电脑端选书框中文裁切；本地安装包统一归档，成功构建后替换旧包。
+- Android versionCode 11。使用新增读书笔记分类时，桌面服务与 Android 应配套升级。
+
+### English
+
+- Integrate daily goals, day details and selectable trends into Review. Legacy checks retain completion without inventing durations or character counts.
+- Count journals and freewriting from their separate files and content dates. Add a dedicated reading-note page, grouping dated entries by book with optional excerpts, page references, draft recovery and editing. Review counts reflections only, excluding excerpts; matching file counts replace same-day checklist quantities. Leave mixed historical records unchanged.
+- Collapse details, edits and historical statistics; category counts are not added again to personal-original totals.
+- Extend MCP and desktop Agent tools with structured reading-note metadata, matching Review originals/goals and selected-date queries. Update the bundled skill and API documentation; Android Agent reads now include note metadata.
+- Align reading-note typography, spacing and themes with existing pages; fix clipped Chinese book-picker text on desktop. Archive local packages in canonical directories and replace older builds only after successful validation.
+- Android versionCode 11. Upgrade the desktop service and Android together before using the new reading-note category.
+
+## android-v0.1.7 - 2026-11-09
+
+### 中文
+
+- Android 修复版，`versionCode=10`，沿用既有发行签名，可覆盖升级并保留资料。
+- 移除资料库快照的 32 MiB 限制。备份快照逐项写入文件；恢复从文件流解析，避免整份字节数组、大字符串与跨库恢复的重复快照分配。压缩包及解压后总量仍限制为 1 GiB，并保留散列、附件集合和路径校验。
+- 修复备份弹窗导出选项不显示，以及大快照导出时内存溢出闪退的问题。继续支持旧版 ZIP 和加密备份，保留恢复请求的幂等指纹。
+- 修复接收电脑增量更新时漏存版本编号，导致手机后续修改一直等待前置版本的问题；核对原版本和内容后修复尚未发送的旧操作，明确显示仍被阻塞的同步。
+- 使用现用手机的 51.15 MiB 快照分别进行普通 ZIP、加密备份的隔离恢复及重新导出比对：644 条记录、1,162 个版本、42 条编辑活动、570 个附件描述和 566 份去重附件均一致；来源、客户端归档及同步恢复信息保留。
+
+### English
+
+- Android fix release, versionCode 10, signed with the existing release key for in-place upgrades.
+- Remove the 32 MiB library snapshot limit. Write snapshots to disk incrementally and parse restored snapshots from file streams, avoiding whole-file byte/string allocations and duplicate snapshots when restoring as a new library. Retain the 1 GiB archive/extracted-total bound and integrity, attachment and path validation.
+- Fix missing export choices and large-snapshot export crashes. Keep legacy ZIP/encrypted backups and existing idempotent restore-request fingerprints compatible.
+- Preserve version identities from desktop change events. Repair never-sent empty-parent operations only after verifying the acknowledged revision and original content; report blocked synchronization explicitly.
+- Restore and re-export a real 51.15 MiB phone snapshot through both plain ZIP and encrypted backups in the isolated test application. All 644 records, 1,162 versions, 42 edit activities, 570 attachment descriptors and 566 deduplicated payloads matched, with provenance, client archives and recovery information preserved.
+
 ## v0.1.13 - 2026-11-09
 
 ### 中文
