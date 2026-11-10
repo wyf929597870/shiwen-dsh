@@ -1,3 +1,4 @@
+import {artifactOutput} from './artifact-output.mjs';
 import {build,Platform,Arch} from 'electron-builder';
 import {createRequire} from 'node:module';
 import {cp,mkdir,readFile,writeFile,rm,symlink,realpath} from 'node:fs/promises';
@@ -8,10 +9,14 @@ import {pathToFileURL} from 'node:url';
 const root=resolve(import.meta.dirname,'..');
 const desktop=join(root,'upstream/dsh/apps/desktop');
 const target=join(desktop,'.desktop-build/targets/win-x64');
-const stage=join(root,'.runtime/windows-package');
+const stage=join(root,'.runtime/windows-package-'+(process.argv.includes('--dir')?'debug':'release'));
 const app=join(stage,'app'),shiwen=join(stage,'shiwen');
 const json=async path=>JSON.parse(await readFile(path,'utf8'));
 if(process.platform!=='win32'||process.arch!=='x64')throw Error('Windows x64 packaging requires Windows x64.');
+const unpacked=process.argv.includes('--dir');
+const output=await artifactOutput({root,platform:'windows',channel:unpacked?'debug':'release',args:process.argv.slice(2)});
+const outputDirectory=output.directory;
+try{
 const descriptor=await json(join(target,'dsh/desktop-runtime.json'));
 const {verifyDesktopRuntime}=await import(pathToFileURL(join(desktop,'lib/types/runtime-tree.js')).href);
 await verifyDesktopRuntime(join(target,'dsh'),descriptor.release.version,{platform:'win32',arch:'x64'});
@@ -97,7 +102,7 @@ const icoHeader=Buffer.alloc(22);icoHeader.writeUInt16LE(1,2);icoHeader.writeUIn
 const ico=join(icons,'shiwen.ico');await writeFile(ico,Buffer.concat([icoHeader,iconPng]));
 const artifacts=await build({targets:Platform.WINDOWS.createTarget(process.argv.includes('--dir')?['dir']:['nsis'],Arch.x64),publish:'never',config:{
  appId:'io.shiwen.dsh',productName:'拾文',executableName:'shiwen-dsh',
- directories:{app,output:join(root,'release/windows')},electronVersion:'44.7.0',electronDist:join(target,'electron'),
+ directories:{app,output:outputDirectory},electronVersion:'44.7.0',electronDist:join(target,'electron'),
  npmRebuild:false,asar:true,electronFuses:{runAsNode:true},
  files:['**/*','!node_modules/**/*.map'],
  extraResources:[
@@ -117,4 +122,6 @@ const artifacts=await build({targets:Platform.WINDOWS.createTarget(process.argv.
   await verifyDesktopRuntime(join(resources,'dsh'),descriptor.release.version,{platform:'win32',arch:'x64'});
  }
 }});
-console.log('Windows artifacts:',artifacts);
+console.log('Windows artifacts:',await output.publish(unpacked?[join(outputDirectory,'win-unpacked')]:artifacts,{unpacked}));
+await rm(stage,{recursive:true,force:true});
+}finally{await output.dispose();}

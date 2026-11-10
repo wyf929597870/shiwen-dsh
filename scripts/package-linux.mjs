@@ -1,3 +1,4 @@
+import {artifactOutput} from './artifact-output.mjs';
 import {build,Platform,Arch} from 'electron-builder';
 import {createRequire} from 'node:module';
 import {cp,mkdir,readFile,writeFile,rm,symlink,realpath} from 'node:fs/promises';
@@ -5,14 +6,16 @@ import {dirname,join,resolve} from 'node:path';
 import {execFileSync} from 'node:child_process';
 
 const root=resolve(import.meta.dirname,'..');
-const outputIndex=process.argv.indexOf('--out-dir');
-const outputDirectory=outputIndex<0?join(root,'release'):resolve(process.argv[outputIndex+1]);
 const desktop=join(root,'upstream/dsh/apps/desktop');
 const target=join(desktop,'.desktop-build/targets/linux-x64');
-const stage=join(root,'.runtime/linux-package');
+const stage=join(root,'.runtime/linux-package-'+(process.argv.includes('--dir')?'debug':'release'));
 const app=join(stage,'app'),shiwen=join(stage,'shiwen');
 const json=async path=>JSON.parse(await readFile(path,'utf8'));
 if(process.platform!=='linux'||process.arch!=='x64')throw Error('Linux x64 packaging requires Linux x64.');
+const unpacked=process.argv.includes('--dir');
+const output=await artifactOutput({root,platform:'linux',channel:unpacked?'debug':'release',args:process.argv.slice(2)});
+const outputDirectory=output.directory;
+try{
 const descriptor=await json(join(target,'dsh/desktop-runtime.json'));
 const {verifyDesktopRuntime}=await import(join(desktop,'lib/types/runtime-tree.js'));
 await verifyDesktopRuntime(join(target,'dsh'),descriptor.release.version,{platform:'linux',arch:'x64'});
@@ -116,4 +119,6 @@ const artifacts=await build({targets:Platform.LINUX.createTarget(process.argv.in
   await verifyDesktopRuntime(join(resources,'dsh'),descriptor.release.version,{platform:'linux',arch:'x64'});
  }
 }});
-console.log('Linux artifacts:',artifacts);
+console.log('Linux artifacts:',await output.publish(unpacked?[join(outputDirectory,'linux-unpacked')]:artifacts,{unpacked}));
+await rm(stage,{recursive:true,force:true});
+}finally{await output.dispose();}

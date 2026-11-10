@@ -13,6 +13,7 @@ npm --prefix android run check:ui
 npm --prefix android run sync
 cd android/native
 ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest
+node ../../scripts/collect-android.mjs --debug --include-tests
 ```
 
 `check:ui` 检查 JSX 中未定义的变量引用，防止仅转译成功但打开页面白屏；它不等于完整类型检查。`sync` 把当前本地页面装入 APK，不加载远程页面。
@@ -24,8 +25,8 @@ cd android/native
 ```bash
 # 先确认当前 Android 用户；以下以用户 0 为例。
 adb shell am get-current-user
-adb install --user 0 -r app/build/outputs/apk/debug/app-debug.apk
-adb install --user 0 -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb install --user 0 -r ../../debug/android/shiwen-android-0.1.8-debug.apk
+adb install --user 0 -r ../../debug/android/shiwen-android-0.1.8-debug-androidTest.apk
 adb shell am instrument --user 0 -w io.github.wyf929597870.shiwen.probe.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
@@ -51,15 +52,26 @@ adb shell am instrument --user 0 -w io.github.wyf929597870.shiwen.probe.test/and
 设置完成后在 `android/native/` 执行：
 
 ```bash
-./gradlew :app:assembleRelease
+./gradlew :app:testReleaseUnitTest :app:assembleRelease
+node ../../scripts/collect-android.mjs
 ```
 
 设置签名环境变量时，不要将密码直接写入可公开的命令记录或工作流 YAML。未设置私钥路径时只能得到未签名的 release APK，不能把它当可安装版本发布。
 
 正式 APK 发布前须用 Android SDK 的 `apksigner verify --verbose --print-certs` 校验签名，并生成 SHA-256 校验文件。首次上线还须验证从前一版本覆盖升级后资料库、草稿和凭据仍能读取；仅通过编译不足以证明升级安全。
 
-当前源码 `versionName=0.1.6`、`versionCode=9`。正式构建使用发布签名；调试构建仍使用独立的 `.probe` 应用 ID 和 `-debug` 版本后缀。
+当前源码 `versionName=0.1.8`、`versionCode=11`。正式构建使用发布签名；调试构建仍使用独立的 `.probe` 应用 ID 和 `-debug` 版本后缀。
 
 ## CI
 
 `.github/workflows/android.yml` 在相关 PR 或手动触发时检查服务协议、页面引用、JVM 测试并编译调试 APK。产物保留 7 天，供验收下载；工作流不持有正式签名密钥、不发布 GitHub Release，也不把模拟测试标作真机通过。
+
+## 大资料库备份验收（0.1.7）
+
+快照不再单独限制为 32 MiB；ZIP 大小和解压后的总量仍各限制为 1 GiB。备份在临时文件中流式编码，恢复从已校验散列的文件流解析，不再同时保留完整原始字节数组和字符串。JSON 对象仍在内存中完成关系校验，实际容量受设备内存和空闲存储影响，不能把 1 GiB 安全边界视为所有手机的容量承诺。
+
+`LibraryLargeArchiveTest` 覆盖超过 32 MiB 的正文、历史和附件往返，以及旧恢复指纹编码。真实备份可复制到独立 `.probe` 应用的 `cache/actual-library.zip`，通过仪器参数 `archiveFixture=actual-library.zip` 验证（需保持测试应用在前台，避免设备省电冻结）；设置 `encryptedFixture=true` 额外覆盖加密解密恢复。测试始终使用新资料库和独立 registry，输出 `cache/verified-restored.zip` 供逐项核对，不能将个人备份加入仓库或发行附件。
+
+## 安装包保留规则
+
+正式 APK 与校验文件只放在仓库根 `release/android/`，调试及仪器测试 APK 放在 `debug/android/`。每个渠道只保留最后一次成功构建的版本。收集脚本先检查签名及复制校验，再替换旧包并删除 Gradle 输出目录中的 APK 副本；失败时不删除上一版。不要手动建立版本或日期子目录。也可在仓库根使用 `npm --prefix android run android:release` 或 `android:debug` 一次完成构建与归档。

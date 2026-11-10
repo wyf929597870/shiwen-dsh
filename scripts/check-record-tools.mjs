@@ -4,7 +4,7 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
-const root=resolve(process.argv[2]??'release/linux-unpacked/resources/shiwen');
+const root=resolve(process.argv[2]??'debug/linux/linux-unpacked/resources/shiwen');
 const directory=await mkdtemp(join(tmpdir(),'shiwen-packaged-tools-'));
 process.env.SHIWEN_DATA_DIR=directory;
 const cleanup=[],tools=new Map();let library;

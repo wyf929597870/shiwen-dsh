@@ -5,6 +5,7 @@ node_modules/
 /plugins/*/lib/
 /dist/
 /release/
+/debug/
 /coverage/
 /.qa/
 

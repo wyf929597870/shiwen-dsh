@@ -8,9 +8,10 @@
     "preview:build": "node scripts/build-preview.mjs",
     "sync": "npm run build && cap sync android",
     "doctor": "node scripts/doctor.mjs",
-    "android:debug": "npm run sync && cd native && ./gradlew assembleDebug",
+    "android:debug": "npm run check:ui && npm run sync && cd native && ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest && node ../../scripts/collect-android.mjs --debug --include-tests",
     "check:ui": "node scripts/check-ui-references.mjs",
-    "test:markdown": "node --test scripts/markdown-renderer.test.mjs"
+    "test:markdown": "node --test scripts/markdown-renderer.test.mjs",
+    "android:release": "npm run check:ui && npm run sync && cd native && ./gradlew :app:testReleaseUnitTest :app:assembleRelease && node ../../scripts/collect-android.mjs"
   },
   "dependencies": {
     "@capacitor/android": "8.6.0",

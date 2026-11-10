@@ -59,9 +59,8 @@ jobs:
       - name: Compile and run JVM tests
         working-directory: android/native
         run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest
-      - name: Checksum test APK
-        working-directory: android/native/app/build/outputs/apk/debug
-        run: sha256sum app-debug.apk > SHA256SUMS
+      - name: Collect latest debug APKs
+        run: node scripts/collect-android.mjs --debug --include-tests
       - name: Keep test APK and reports
         uses: actions/upload-artifact@v7
         with:
@@ -69,8 +68,7 @@ jobs:
           retention-days: 7
           if-no-files-found: error
           path: |
-            android/native/app/build/outputs/apk/debug/app-debug.apk
-            android/native/app/build/outputs/apk/debug/SHA256SUMS
+            debug/android/
             android/native/app/build/reports/tests/testDebugUnitTest/
       - name: Keep failure reports
         if: failure()

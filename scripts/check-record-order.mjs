@@ -4,7 +4,7 @@ import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import assert from 'node:assert/strict';
-const executable=resolve(process.argv[2]??'release/linux-unpacked/shiwen-dsh');
+const executable=resolve(process.argv[2]??'debug/linux/linux-unpacked/shiwen-dsh');
 const data=await mkdtemp(join(tmpdir(),'shiwen-order-check-'));
 const delay=ms=>new Promise(done=>setTimeout(done,ms));
 async function until(fn){const deadline=Date.now()+90000;let last;while(Date.now()<deadline){try{const result=await fn();if(result)return result;}catch(error){last=error;}await delay(300);}throw last??Error('Timed out waiting for packaged app');}

@@ -6,7 +6,7 @@ import {join,resolve} from 'node:path';
 import {Client} from '@modelcontextprotocol/client';
 import {StdioClientTransport} from '@modelcontextprotocol/client/stdio';
 import assert from 'node:assert/strict';
-const executable=resolve(process.argv[2]??'release/linux-unpacked/shiwen-dsh');
+const executable=resolve(process.argv[2]??'debug/linux/linux-unpacked/shiwen-dsh');
 const data=await mkdtemp(join(tmpdir(),'shiwen-external-desktop-'));
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(fn){const deadline=Date.now()+90000;let last;while(Date.now()<deadline){try{const result=await fn();if(result)return result;}catch(e){last=e;}await delay(250);}throw last??Error('Timed out');}

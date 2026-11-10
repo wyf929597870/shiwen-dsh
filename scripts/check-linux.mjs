@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve,dirname} from 'node:path';
 import assert from 'node:assert/strict';
 import {startServer,stopServer} from './server-control.mjs';
-const executable=resolve(process.argv[2]??'release/linux-unpacked/shiwen-dsh');
+const executable=resolve(process.argv[2]??'debug/linux/linux-unpacked/shiwen-dsh');
 const previousExecutable=process.argv[3]?resolve(process.argv[3]):executable;
 const data=await mkdtemp(join(tmpdir(),'shiwen-packaged-check-'));
 const delay=ms=>new Promise(done=>setTimeout(done,ms));

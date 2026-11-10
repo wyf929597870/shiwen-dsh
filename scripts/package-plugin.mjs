@@ -1,4 +1,5 @@
-import {cp,mkdir,readFile,writeFile,rm} from 'node:fs/promises';
+import {artifactOutput} from './artifact-output.mjs';
+import {cp,mkdir,readFile,writeFile,rm,readdir} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
@@ -22,6 +23,10 @@ export async function preparePlugin({build=true}={}){
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  const dest=await preparePlugin();
- const out=join(root,'release');await mkdir(out,{recursive:true});
- execFileSync(process.platform==='win32'?'npm.cmd':'npm',['pack','--ignore-scripts','--pack-destination',out],{cwd:dest,stdio:'inherit',shell:process.platform==='win32'});
+ const manifest=JSON.parse(await readFile(join(dest,'package.json'),'utf8'));
+ const output=await artifactOutput({root,platform:'plugin',channel:manifest.version.includes('-')?'debug':'release',args:process.argv.slice(2)});
+ try{
+  execFileSync(process.platform==='win32'?'npm.cmd':'npm',['pack','--ignore-scripts','--pack-destination',output.directory],{cwd:dest,stdio:'inherit',env:{...process.env,npm_config_cache:join(root,'.runtime/npm-cache')},shell:process.platform==='win32'});
+  console.log('Plugin artifacts:',await output.publish((await readdir(output.directory)).filter(name=>name.endsWith('.tgz')).map(name=>join(output.directory,name))));
+ }finally{await output.dispose();}
 }

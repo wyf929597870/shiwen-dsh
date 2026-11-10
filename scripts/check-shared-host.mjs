@@ -7,7 +7,7 @@ import {join,resolve} from 'node:path';
 import assert from 'node:assert/strict';
 import {setupProfile} from './profile.mjs';
 const root=resolve(import.meta.dirname,'..');
-const resources=resolve(process.argv[2]??join(root,'release/linux-unpacked/resources'));
+const resources=resolve(process.argv[2]??join(root,'debug/linux/linux-unpacked/resources'));
 const runtime=join(resources,'dsh'),entry=join(runtime,'node_modules/@deepseek-ai/dsh-desktop-host/lib/index.js');
 const data=await mkdtemp(join(tmpdir(),'shiwen-shared-host-'));
 const home=join(data,'dsh');
