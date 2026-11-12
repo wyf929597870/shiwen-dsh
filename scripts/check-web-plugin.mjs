@@ -67,7 +67,7 @@ for(let round=0;round<4;round++){
    assert.equal((await rpc('snapshot')).records.length,0);
    const image=await rpc('stageImage',{name:'fixture.png',dataBase64:Buffer.from('89504e470d0a1a0a00010203','hex').toString('base64')});imageId=image.id;
    record=await rpc('saveMarkdown',{kind:'journal',title:'Web 插件验收日记',body:`# 标题\n\n我的原始日记。\n\n![图片](attachment:${imageId})`,imageIds:[imageId],requestId:'web-image-fixture'});
-   record=await rpc('updateRecord',{id:record.id,revision:record.revision,day:'2026-10-12',origin:'personal'});
+   record=await rpc('updateRecord',{id:record.id,revision:record.revision,day:'2026-10-12'});
    issued=await rpc('externalClientCreate',{name:'Web acceptance MCP',scopes:['create','read']});
   }else{
    assert.equal((await rpc('readMarkdown',{id:record.id})).dateInfo.day,'2026-10-12');

@@ -25,7 +25,7 @@ class ProbeRepository internal constructor(context: Context, private val namespa
         UUID.fromString(draft.requestId)
         require(draft.markdown.isNotBlank() && draft.markdown.length <= 1_000_000)
         require(draft.title.length <= 200 && draft.generation >= 0)
-        require(draft.kind in listOf("journal", "idea", "freewrite"))
+        require(draft.kind in listOf("journal", "freewrite", "reading_note", "idea", "web", "ai", "reference"))
         val hash = Canonical.hash(mapOf("title" to draft.title, "markdown" to draft.markdown,
             "kind" to draft.kind, "generation" to draft.generation))
         return db.runInTransaction(Callable {

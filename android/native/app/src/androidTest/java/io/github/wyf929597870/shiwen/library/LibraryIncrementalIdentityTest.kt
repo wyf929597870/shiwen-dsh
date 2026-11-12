@@ -14,6 +14,19 @@ import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class LibraryIncrementalIdentityTest {
+    @Test fun replayingTheSameDivergentEventDoesNotDuplicateOrReopenConflict() = withReplica { repo, sync ->
+        val first=event();sync.applyChange(repo,first)
+        val divergent=JSONObject(first.toString());val change=UUID.randomUUID().toString();val version=UUID.randomUUID().toString()
+        divergent.put("changeId",change).put("versionId",version)
+        divergent.getJSONObject("version").put("id",version).put("changeId",change)
+        sync.applyChange(repo,divergent);sync.applyChange(repo,divergent)
+        val conflicts=repo.dao.conflicts(100,0);assertEquals(1,conflicts.size)
+        repo.dao.updateConflict(conflicts.single().copy(state="resolved"))
+        sync.applyChange(repo,divergent)
+        assertTrue(repo.dao.conflicts(100,0).isEmpty())
+        assertEquals(first.getString("changeId"),repo.read(first.getJSONObject("record").getString("id")).changeId)
+    }
+
     @Test fun editingAnIncrementallyReceivedRecordUsesTheEventVersion() = withReplica { repo, sync ->
         val event = event()
         sync.applyChange(repo, event)

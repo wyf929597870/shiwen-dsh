@@ -105,13 +105,16 @@ export function createRemoteSessionsAdapter({ctx,library,ledger:providedLedger,r
     if(!args||typeof args!=='object'||Array.isArray(args)||JSON.stringify(args).length>120000)throw fail('INVALID_REQUEST','Invalid session request');
     const c=controller();let data;
     switch(action){
-      case 'capabilities':data={supportedActions:['list','catalog','models','create','state','events','send','status','cancel','selectModel','rename','respond',...(optional(ctx,'sessionSkillCatalog')?['skills']:[])]};break;
+      case 'capabilities':data={supportedActions:['list','catalog','models','create','state','events','send','status','cancel','selectModel','rename','respond',...(optional(ctx,'workspaceRegistry')?['archive','unarchive']:[]),...(optional(ctx,'sessionSkillCatalog')?['skills']:[])]};break;
       case 'skills':{
         const service=optional(ctx,'sessionSkillCatalog');if(!service)throw fail('SESSIONS_UNAVAILABLE','Skill catalog is unavailable');
         const result=await service.list({sessionId:text(args.sessionId,'sessionId')},signalOr(signal));
         data={skills:result.skills.map(({name,description,whenToUse,modelInvocable})=>({name,description,whenToUse,modelInvocable}))};break;
       }
-      case 'list':data=await c.list({},signalOr(signal));break;
+      case 'list':{
+        const registry=optional(ctx,'workspaceRegistry');
+        data={...await c.list({},signalOr(signal)),archivedSessionIds:[...(registry?.archivedSessionIds??[])]};break;
+      }
       case 'models':data=await c.modelCatalog();break;
       case 'catalog':data={presets:await optional(ctx,'agentPresets')?.list()??[],workspaces:(optional(ctx,'workspaceRegistry')?.list()??[]).map(w=>({id:w.id,title:w.title,path:w.path}))};break;
       case 'create':data=await create(args);break;
@@ -136,6 +139,22 @@ export function createRemoteSessionsAdapter({ctx,library,ledger:providedLedger,r
       case 'status':data=await adapter().reconcile(text(args.requestId,'requestId'));break;
       case 'cancel':data=await adapter().cancel(text(args.sessionId,'sessionId'));break;
       case 'rename':data=await c.rename({sessionId:text(args.sessionId,'sessionId'),title:text(args.title,'title',300)});break;
+      case 'archive':{
+        const registry=optional(ctx,'workspaceRegistry');
+        if(!registry)throw fail('SESSIONS_UNAVAILABLE','Workspace archive is unavailable');
+        const sessionId=text(args.sessionId,'sessionId');
+        try{await registry.archiveSession(sessionId,{stopActivity:args.stopActivity===true});}
+        catch(error){throw fail('SESSION_CONFLICT',error instanceof Error?error.message:'The session could not be archived');}
+        data={archivedSessionIds:[...registry.archivedSessionIds]};break;
+      }
+      case 'unarchive':{
+        const registry=optional(ctx,'workspaceRegistry');
+        if(!registry)throw fail('SESSIONS_UNAVAILABLE','Workspace archive is unavailable');
+        const sessionId=text(args.sessionId,'sessionId');
+        try{await registry.unarchiveSession(sessionId);}
+        catch(error){throw fail('SESSION_CONFLICT',error instanceof Error?error.message:'The session could not be restored');}
+        data={archivedSessionIds:[...registry.archivedSessionIds]};break;
+      }
       case 'selectModel':data=await c.selectModel({sessionId:text(args.sessionId,'sessionId'),provider:text(args.provider,'provider'),model:text(args.model,'model'),...(args.reasoningEffort?{reasoningEffort:text(args.reasoningEffort,'reasoningEffort')}:{})});break;
       case 'respond':data=await relay.respond(args);break;
       default:throw fail('INVALID_REQUEST','Unsupported session action');

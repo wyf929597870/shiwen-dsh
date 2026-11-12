@@ -18,11 +18,14 @@ test('删除持久化、撤销保留正文日期来源，过期请求不覆盖�
  assert.throws(()=>store.save({...saved,revision:receipt.revision,body:'不应保存'}),/已删除/);
  assert.throws(()=>store.remove({id:saved.id,revision:saved.revision}),/变更/);
  store.close();store=createStore(path);assert.equal(store.snapshot().records.length,0);
+ assert.deepEqual(store.removedRecords().map(({id,revision})=>({id,revision})),[receipt]);
+ assert.equal(store.removedRecords()[0].contentDay,'2026-11-01');
+ assert.ok(!JSON.stringify(store.removedRecords()).includes('我的历史正文'));
  assert.throws(()=>store.restoreRemoved({...receipt,revision:saved.revision}),/变更/);
  const restored=store.restoreRemoved(receipt),record=store.get(saved.id);
  assert.equal(record.body,saved.body);assert.equal(record.updated,saved.updated);assert.deepEqual(record.dateInfo,saved.dateInfo);
  const restoredVersions=store.versions({id:saved.id});assert.equal(restoredVersions.length,versions.length+2);assert.deepEqual(restoredVersions.slice(2),versions);assert.deepEqual(store.dshSources({id:saved.id}),provenance);
- assert.equal(store.snapshot().records.length,1);
+ assert.equal(store.snapshot().records.length,1);assert.deepEqual(store.removedRecords(),[]);
  assert.throws(()=>store.restoreRemoved(receipt),/变更/);
  assert.throws(()=>store.save({...saved,body:'过期正文'}),/更新/);
  assert.throws(()=>store.remove({id:saved.id,revision:saved.revision}),/变更/);

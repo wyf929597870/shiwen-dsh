@@ -60,21 +60,11 @@ internal fun localLibraryTools(repository: AgentLibraryAccess, approvedDraft: Pr
             withContext(Dispatchers.IO) { AgentLibraryQuery(repository).byDate(args.getValue("start"),args.getValue("end"),
                 args.getValue("cursor").toIntOrNull() ?: error("INVALID_DATE_CURSOR")).toString() }
         })
-        tool(LibraryTool("propose_memory", "只有用户明确希望记住时提出长期记忆候选。候选不会注入上下文，必须在本机人设设置里由用户确认。",listOf("body")) { args ->
-            withContext(Dispatchers.IO) { LocalAgentProfileStore(repository).propose(taskId,args.getValue("body")).toString() }
-        })
-        tool(LibraryTool("review_library", "按内容日期查看当前完整资料库，起止日期使用 YYYY-MM-DD；统计是否覆盖完整副本会明确返回。",listOf("start","end")) { args ->
-            withContext(Dispatchers.IO) { actions.review(args.getValue("start"),args.getValue("end")).toString() }
-        })
         tool(LibraryTool("propose_save_record", "提出保存新记录建议。patch是JSON字符串，包含kind/title/markdown及可选contentDay/dateBasis/url/annotation/stage；读书笔记用kind=reading_note，title为书名、markdown只含感想；annotation为JSON字符串，结构是{schema:shiwen.reading-note.v1,chapter:章节,page:页码,excerpts:[{text:摘录,page:页码}]}，摘录不计感想字数，同书每次记录独立保存。生成正文标为AI。仅创建待确认建议，用户确认前不能声称已保存。",listOf("patch")) { args ->
             withContext(Dispatchers.IO) { actions.propose(taskId,conversationId,"create",null,JSONObject(args.getValue("patch"))).toString() }
         })
         tool(LibraryTool("propose_update_record", "提出单条记录的修改建议。patch是JSON字符串，仅含要修改的kind/title/markdown/origin/processing/contentDay/dateBasis/url/annotation/stage。读书笔记的annotation保存章节页码与摘录，修改时读取并保留未修改的内容，不把摘录混入markdown。可以更正已有资料的类型和来源；正文改写始终标为AI，须用户确认。",listOf("id","patch")) { args ->
             withContext(Dispatchers.IO) { actions.propose(taskId,conversationId,"update",args.getValue("id"),JSONObject(args.getValue("patch"))).toString() }
-        })
-        for (action in listOf("delete","restore")) tool(LibraryTool("propose_${action}_record",
-            if(action=="delete") "提出将一条记录移入回收站的建议，必须由用户确认。" else "提出恢复一条回收站记录的建议，必须由用户确认。",listOf("id")) { args ->
-            withContext(Dispatchers.IO) { actions.propose(taskId,conversationId,action,args.getValue("id"),JSONObject()).toString() }
         })
     }
 }

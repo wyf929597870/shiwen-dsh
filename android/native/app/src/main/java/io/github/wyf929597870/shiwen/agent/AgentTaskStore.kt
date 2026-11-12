@@ -60,6 +60,11 @@ internal interface AgentTaskDao {
     @Query("SELECT COUNT(*) FROM agent_tasks WHERE conversationId='legacy-single-tasks'") fun legacyTaskCount(): Int
     @Query("SELECT COUNT(*) FROM agent_drafts WHERE conversationId='legacy-single-tasks'") fun legacyDraftCount(): Int
     @Insert(onConflict = OnConflictStrategy.ABORT) fun insertConversation(conversation: AgentConversation)
+    @Query("SELECT * FROM agent_conversations WHERE readOnly=0 ORDER BY updatedAt DESC, id ASC LIMIT 1")
+    fun latestWritableConversation(): AgentConversation?
+    @Query("DELETE FROM agent_tasks WHERE conversationId=:conversationId") fun deleteTasks(conversationId: String): Int
+    @Query("DELETE FROM agent_drafts WHERE conversationId=:conversationId") fun deleteDrafts(conversationId: String): Int
+    @Query("DELETE FROM agent_conversations WHERE id=:id AND readOnly=0") fun deleteConversation(id: String): Int
     @Query("UPDATE agent_conversations SET model=:model, modelRevision=:revision, title=:title, profileRevision=:profileRevision, profileAgentId=:profileAgentId, profileNodeId=:profileNodeId, systemContext=:systemContext, updatedAt=:at WHERE id=:id AND modelRevision IS NULL AND readOnly=0")
     fun bindConversation(id: String, model: String, revision: String, title: String, profileRevision: String?,
         profileAgentId: String?, profileNodeId: String?, systemContext: String?, at: String): Int

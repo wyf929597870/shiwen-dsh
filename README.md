@@ -12,7 +12,7 @@
 
 可下载 **[Android 0.1.8 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.8)**、**[Linux 0.1.15 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.15)**、**[Windows 0.1.9 预览版](https://github.com/wyf929597870/shiwen-dsh/releases/tag/windows-v0.1.9)**，以及 [DSH 插件 0.2.0-dev.5](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.5)。项目采用 [MIT](LICENSE) 许可证。Android 0.1.8 需配套升级服务端，本轮真机覆盖安装尚未验收；Windows 旧版已验证虚拟机安装与服务启停，新版完整图形界面仍待验收。macOS 未提供本项目安装包。
 
-**当前源码：** Linux 0.1.15 / Android 0.1.8 / DSH 插件 0.2.0-dev.5。新增独立读书笔记、原文摘录和回顾日目标趋势，兼容旧打勾记录；感想与摘录分开统计，日记与自由书写按各自文件统计。MCP、Agent 工具及配套 Skill 同步更新，Android 包含大备份与同步修复。请配套升级服务端与 Android，并停止旧服务后重新启动；详见 [更新记录](CHANGELOG.md)。
+**当前源码：** Linux 0.1.17 / Android 0.1.10 / DSH 插件 0.2.0-dev.6。手机对话页的会话下拉改为底部列表：本地会话可删除，服务器会话可归档与恢复，并支持查看已归档；对话输入框可收起，收起后消息区占满。服务端 `mobileSessions` 同步支持归档动作，MCP、Agent 工具及配套 Skill 已更新。请配套升级服务端与 Android，并停止旧服务后重新启动；详见 [更新记录](CHANGELOG.md)。
 
 ## 为什么做拾文
 

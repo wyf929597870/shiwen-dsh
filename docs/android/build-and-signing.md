@@ -25,8 +25,8 @@ node ../../scripts/collect-android.mjs --debug --include-tests
 ```bash
 # 先确认当前 Android 用户；以下以用户 0 为例。
 adb shell am get-current-user
-adb install --user 0 -r ../../debug/android/shiwen-android-0.1.8-debug.apk
-adb install --user 0 -r ../../debug/android/shiwen-android-0.1.8-debug-androidTest.apk
+adb install --user 0 -r ../../debug/android/shiwen-android-0.1.9-debug.apk
+adb install --user 0 -r ../../debug/android/shiwen-android-0.1.9-debug-androidTest.apk
 adb shell am instrument --user 0 -w io.github.wyf929597870.shiwen.probe.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
@@ -60,7 +60,7 @@ node ../../scripts/collect-android.mjs
 
 正式 APK 发布前须用 Android SDK 的 `apksigner verify --verbose --print-certs` 校验签名，并生成 SHA-256 校验文件。首次上线还须验证从前一版本覆盖升级后资料库、草稿和凭据仍能读取；仅通过编译不足以证明升级安全。
 
-当前源码 `versionName=0.1.8`、`versionCode=11`。正式构建使用发布签名；调试构建仍使用独立的 `.probe` 应用 ID 和 `-debug` 版本后缀。
+当前源码 `versionName=0.1.26`、`versionCode=29`。正式构建使用发布签名；调试构建仍使用独立的 `.probe` 应用 ID 和 `-debug` 版本后缀。
 
 ## CI
 

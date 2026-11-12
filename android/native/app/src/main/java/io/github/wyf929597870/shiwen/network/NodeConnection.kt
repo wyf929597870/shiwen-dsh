@@ -342,10 +342,10 @@ internal class NodeConnection(private val store: NodeSettingsStore) {
         private const val SESSION_RESPONSE_LIMIT = 1_048_576L
         private const val MOBILE_SYNC_REQUEST_LIMIT = 4 * 1024 * 1024
         private const val MOBILE_SYNC_RESPONSE_LIMIT = 4 * 1024 * 1024L
-        private val SESSION_REJECTION_CODES = setOf("INVALID_REQUEST", "SESSION_NOT_FOUND", "SESSION_CONFLICT", "MODEL_NOT_FOUND")
+        private val SESSION_REJECTION_CODES = setOf("INVALID_REQUEST", "SESSION_NOT_FOUND", "SESSION_CONFLICT", "MODEL_NOT_FOUND", "SESSIONS_UNAVAILABLE")
         private val SESSION_ACTIONS = setOf("capabilities", "list", "models", "catalog", "skills", "state", "events", "status",
-            "create", "selectModel", "send", "cancel", "respond", "rename")
-        private val SESSION_WRITE_ACTIONS = setOf("create", "selectModel", "send", "cancel", "respond", "rename")
+            "create", "selectModel", "send", "cancel", "respond", "rename", "archive", "unarchive")
+        private val SESSION_WRITE_ACTIONS = setOf("create", "selectModel", "send", "cancel", "respond", "rename", "archive", "unarchive")
         private val MOBILE_SYNC_REJECTION_CODES = setOf("INVALID_REQUEST", "VALIDATION_ERROR", "CONFLICT", "REVISION_CONFLICT", "OPERATION_REUSED",
             "EPOCH_MISMATCH", "LIBRARY_MISMATCH", "DEPENDENCY_MISSING", "ATTACHMENT_MISMATCH", "PROTOCOL_UNSUPPORTED",
             "SETUP_TARGET_BUSY", "SETUP_TARGET_CHANGED", "SETUP_TARGET_NOT_EMPTY", "SETUP_LEASE_EXPIRED", "SETUP_NOT_READY",
@@ -370,7 +370,8 @@ internal class NodeConnection(private val store: NodeSettingsStore) {
             "SCHEDULE_EXECUTION_PENDING", "NODE_AGENT_API_UNSUPPORTED", "NODE_MANAGEMENT_ACTION_DENIED", "SESSION_NOT_FOUND",
             "SESSION_CONFLICT", "MODEL_NOT_FOUND", "OPERATION_REUSED", "EPOCH_MISMATCH", "LIBRARY_MISMATCH", "DEPENDENCY_MISSING",
             "ATTACHMENT_MISMATCH", "PROTOCOL_UNSUPPORTED", "SETUP_TARGET_BUSY", "SETUP_TARGET_CHANGED", "SETUP_TARGET_NOT_EMPTY",
-            "SETUP_LEASE_EXPIRED", "SETUP_NOT_READY", "SETUP_ALREADY_COMMITTED", "MANIFEST_MISMATCH", "RECONCILIATION_REQUIRED"
+            "SETUP_LEASE_EXPIRED", "SETUP_NOT_READY", "SETUP_ALREADY_COMMITTED", "MANIFEST_MISMATCH", "RECONCILIATION_REQUIRED",
+            "SESSIONS_UNAVAILABLE"
         )
         private val MANAGEMENT_ACTIONS = setOf(
             "capabilities", "plugins.listBundles", "plugins.listPlugins", "plugins.marketIndexes", "plugins.marketSearch",

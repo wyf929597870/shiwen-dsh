@@ -66,7 +66,7 @@ internal class AgentRecordActions(private val repo: LibraryRepository) {
             val recordId = item.getString("recordId")
             if (action == "delete") patch.put("deleted",true)
             if (action == "restore") patch.put("deleted",false)
-            repo.update(recordId,item.getLong("expectedRevision"),id,patch)
+            repo.update(recordId,item.getLong("expectedRevision"),id,patch,allowOriginCorrection=patch.has("origin"))
         }
         item.put("status","applied").put("recordId",record.id).put("versionId",record.versionId)
             .put("appliedAt",Instant.now().toString());save(all);item

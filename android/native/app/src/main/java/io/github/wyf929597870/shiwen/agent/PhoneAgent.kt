@@ -20,7 +20,11 @@ internal class PhoneAgent(context: Context, private val repo: AgentLibraryAccess
     private val store: AgentTaskStore = AgentTaskStore(context, repo.libraryId),
     private val executorFactory: (ModelConfig) -> PromptExecutor = ModelTransport::create,
     private val profileProvider: () -> JSONObject? = { NodeSettingsStore(context).selectedProfile()
-        ?: (repo as? LibraryRepository)?.let { LocalAgentProfileStore(it).snapshot() } }) {
+        ?: run {
+            val content = "你是拾文助手，帮助用户记录、整理资料和思考。专业、坦诚、温和，尊重原文与来源；不把猜测写成事实。"
+            JSONObject().put("revision", io.github.wyf929597870.shiwen.model.Canonical.hash(mapOf("context" to content)))
+                .put("agentId", "shiwen-phone").put("nodeId", "builtin").put("systemContext", content)
+        } }) {
     init {
         (repo as? LibraryRepository)?.let {
             io.github.wyf929597870.shiwen.library.LibraryClientArchive(context).restoreConversations(it, store)
@@ -46,6 +50,21 @@ internal class PhoneAgent(context: Context, private val repo: AgentLibraryAccess
     fun selectConversation(id: String): JSObject {
         check(store.dao.conversation(id) != null) { "CONVERSATION_UNKNOWN" }
         store.dao.saveSessionState(AgentSessionState(activeId = id))
+        return snapshot()
+    }
+
+    /** Deletes one writable conversation with its tasks and draft; the active slot falls back to the newest writable one. */
+    fun deleteConversation(id: String): JSObject {
+        require(id != LEGACY_CONVERSATION_ID) { "CONVERSATION_READ_ONLY" }
+        check(!requireConversation(id).readOnly) { "CONVERSATION_READ_ONLY" }
+        check(id !in store.dao.runningConversationIds()) { "CONVERSATION_RUNNING" }
+        store.db.runInTransaction(Callable {
+            store.dao.deleteTasks(id)
+            store.dao.deleteDrafts(id)
+            store.dao.deleteConversation(id)
+            if (store.dao.activeConversationId() == id)
+                store.dao.saveSessionState(AgentSessionState(activeId = store.dao.latestWritableConversation()?.id))
+        })
         return snapshot()
     }
 
@@ -176,7 +195,7 @@ internal class PhoneAgent(context: Context, private val repo: AgentLibraryAccess
 
     companion object {
         private const val PAGE_SIZE = 20
-        private val CONTENT_KINDS = setOf("journal", "idea", "freewrite")
+        private val CONTENT_KINDS = setOf("journal", "freewrite", "reading_note", "idea", "web", "ai", "reference")
         private val instances = java.util.concurrent.ConcurrentHashMap<String, PhoneAgent>()
         fun get(context: Context, repo: AgentLibraryAccess): PhoneAgent = instances.computeIfAbsent(repo.libraryId) {
             PhoneAgent(context.applicationContext, repo)

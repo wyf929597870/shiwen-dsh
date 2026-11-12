@@ -1,3 +1,4 @@
+import {MessageDialog} from './MessageDialog.jsx';
 import './chat-translations.mjs';
 import './chat-redesign.css';
 import {t,useI18n} from './i18n.js';
@@ -5,7 +6,9 @@ import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {call} from '../bridge/library.mjs';
 import {RemoteChatPanel} from './RemoteChatPanel.jsx';
 import {AgentProposals} from './AgentProposals.jsx';
+import {SessionSheet} from './SessionSheet.jsx';
 import {MarkdownView} from './MarkdownView.jsx';
+import {MessageBubble} from './MessageBubble.jsx';
 
 // Writes from mounted and unmounted chat views share one queue. Each queued value
 // contains the conversation id captured at edit time, never a mutable selection.
@@ -20,7 +23,7 @@ const uid = () => crypto.randomUUID();
 const emptyDraft = () => ({id:uid(), input:'', saveOriginal:false, kind:'journal', localGeneration:0});
 const isRunning = task => task && ['admitted','running'].includes(task.status);
 const terminalLabels = {succeeded:'已完成', failed:'失败', interrupted:'已中断', cancelled:'已取消', admitted:'排队中', running:'正在处理'};
-const kindLabels = {journal:'日记', idea:'想法', freewrite:'自由书写'};
+const kindLabels = {journal:'日记', freewrite:'自由书写', reading_note:'读书笔记', idea:'想法', web:'网页', ai:'AI 讨论', reference:'参考资料'};
 const mergeTaskPage = (current, rows, position = 'latest') => {
   const latest = new Map(rows.map(row => [row.id, row]));
   const known = new Set(current.map(row => row.id));
@@ -36,30 +39,34 @@ export function ChatPanel(props) {
   const node=nodes.find(item=>item.id===selected);
   const sending=value=>{setBusy(value);props.onSending?.(value);};
   return <div className="chat-execution">
-    <div className="chat-execution-bar">
-      <div className="chat-mode-switch" role="group" aria-label={t('助手运行位置')}>
+    <details className="chat-execution-bar chat-mode-menu">
+      <summary>{mode==='local'?t('手机助手'):t('服务器助手')} ▾</summary><div className="chat-mode-switch" role="group" aria-label={t('助手运行位置')}>
         <button type="button" aria-pressed={mode==='local'} disabled={busy} onClick={()=>setMode('local')}>{t('手机助手')}</button>
         <button type="button" aria-pressed={mode==='remote'} disabled={busy} onClick={()=>setMode('remote')}>{t('服务器助手')}</button>
       </div>
       {mode==='remote'&&<select aria-label={t('会话服务器')} disabled={busy} value={selected} onChange={event=>setSelected(event.target.value)}><option value="">{t('选择服务器')}</option>{nodes.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select>}
-    </div>
+    </details>
     {mode==='remote'?<>
-      {node?<RemoteChatPanel key={`${node.id}:${node.configRevision}`} node={node} onSending={sending}/>:<p>{t('请先在设置中添加并连接服务器。')}<button className="text" onClick={props.onOpenSettings}>{t('打开设置')}</button></p>}</>:<LocalChatPanel {...props} onSending={sending}/>}
+      {node?<RemoteChatPanel key={`${node.id}:${node.configRevision}`} node={node} onSending={sending} onDirect={props.onDirect}/>:<p>{t('请先在设置中添加并连接服务器。')}<button className="text" onClick={props.onOpenSettings}>{t('打开设置')}</button></p>}</>:<LocalChatPanel {...props} onSending={sending}/>}
   </div>;
 }
 
-function LocalChatPanel({ready, config, onRead, onDirect, onSending, onOpenSettings}) {
+function LocalChatPanel({ready, config, onRead, onDirect, onSending, onOpenSettings, onOpenModel}) {
   useI18n();
   const [conversations, setConversations] = useState([]), [activeId, setActiveId] = useState(null);
   const [draft, setDraft] = useState(emptyDraft), [tasks, setTasks] = useState([]), [nextOffset, setNextOffset] = useState(null);
   const [loading, setLoading] = useState(false), [sending, setSending] = useState(false), [message, setMessage] = useState('');
   const [conflict, setConflict] = useState(false), [profileIssue, setProfileIssue] = useState('');
+  const [sessionNoticeClosed,setSessionNoticeClosed]=useState(false),[taskError,setTaskError]=useState('');
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(true),[chooseSaveKind,setChooseSaveKind]=useState(false),[composerExpanded,setComposerExpanded]=useState(false);
   const draftRef = useRef(draft), activeIdRef = useRef(activeId), conversationsRef = useRef([]), mounted = useRef(false), generation = useRef(0), timer = useRef(null);
   const createId = useRef(null), tasksByConversation = useRef(new Map());
   const active = useMemo(() => conversations.find(item => item.id === activeId) || null, [conversations, activeId]);
   const legacy = activeId === 'legacy-single-tasks';
   const archived = Boolean(active?.archived || active?.readOnly || legacy);
   const revisionChanged = Boolean(config?.configured && active?.modelRevision && active.modelRevision !== config.revision);
+  useEffect(()=>setSessionNoticeClosed(false),[activeId,archived,revisionChanged]);
 
   const loadRecent = useCallback(async (conversationId, offset = 0, append = false) => {
     const result = await call('agentRecent', {conversationId, offset});
@@ -217,9 +224,32 @@ function LocalChatPanel({ready, config, onRead, onDirect, onSending, onOpenSetti
     } catch (error) { setMessage(`${t('切换会话失败，原会话草稿已保留：','Could not switch conversations. The previous draft is preserved: ')}${error.message}`); }
     finally { if (mounted.current) setLoading(false); }
   };
-  const createConversation = async () => {
-    if (sending) return;
+  const toggleComposer = useCallback(() => {
+    setComposerOpen(open => {
+      const next = !open;
+      localStorage.setItem('shiwen.chat.composerOpen', next ? '1' : '0');
+      return next;
+    });
+  }, []);
+  const deleteConversation = async item => {
+    const wasActive = item.id === activeIdRef.current;
+    const token = wasActive ? ++generation.current : generation.current;
     try {
+      setLoading(true); setMessage('');
+      if (wasActive && activeId && !archived) await flush(activeId, draftRef.current);
+      const snapshot = await call('agentDeleteConversation', {id:item.id});
+      if (!mounted.current || generation.current !== token) return;
+      const next = adoptSnapshot(snapshot);
+      if (wasActive) {
+        setTasks([]); setNextOffset(null); setProfileIssue('');
+        if (next) await readConversation(next, token);
+      }
+    } catch (error) {
+      setMessage(`${t('删除会话失败：','Could not delete the conversation: ')}${error.message || error}`);
+    } finally { if (mounted.current) setLoading(false); }
+  };
+  const createConversation = async () => {
+    if (sending) return;    try {
       if (activeId && !archived) await flush(activeId, draftRef.current);
       const token = ++generation.current;
       setLoading(true); setMessage(''); setConflict(false);
@@ -302,47 +332,60 @@ function LocalChatPanel({ready, config, onRead, onDirect, onSending, onOpenSetti
   };
   const rescue = () => onDirect?.(draft.input, {rescue:true, kind:draft.kind});
   const startWithNewModel = async () => { await createConversation(); };
+  const sheetItems = conversations.map(item => ({
+    id: item.id,
+    title: item.title,
+    subtitle: [item.archived ? t('归档') : '', item.running ? t('运行中') : '',
+      item.updatedAt ? String(item.updatedAt).slice(0,16).replace('T',' ') : ''].filter(Boolean).join(' · '),
+    running: item.running === true,
+    readOnly: Boolean(item.readOnly),
+    archived: false
+  }));
   return <section className="chat-panel" aria-label={t('AI 对话')}>
     <div className="chat-toolbar">
       <div><strong>{t('拾文助手')}</strong><span>{active?.title || t('打开或新建会话')}{active?.model ? ` · ${active.model}` : ''}</span></div>
       <div className="chat-session-controls">
-        <select aria-label={t('选择会话')} value={activeId || ''} disabled={!ready || loading || sending} onChange={event => selectConversation(event.target.value)}>
-          {!activeId && <option value="">{t('选择会话')}</option>}
-          {conversations.map(item => <option key={item.id} value={item.id}>{item.archived ? `${t('归档')} · ` : ''}{item.title || t('新会话')}{item.updatedAt ? ` · ${String(item.updatedAt).slice(0,16).replace('T',' ')}` : ''}</option>)}
-        </select>
+        <button type="button" className="session-trigger" aria-haspopup="dialog" aria-expanded={sheetOpen}
+          aria-label={t('选择会话')} title={t('选择会话')} disabled={!ready || loading || sending} onClick={() => setSheetOpen(true)}>
+          <span>{active?.title || t('选择会话')}</span><span className="session-trigger-caret" aria-hidden="true">▾</span>
+        </button>
         <button className="chip chat-icon-action" aria-label={t('刷新会话状态','Refresh conversations')} title={t('刷新会话状态','Refresh conversations')} disabled={!ready||loading||sending} onClick={async()=>{try{await refreshConversationSnapshot();}catch(error){setMessage(`${t('会话状态读取失败：','Could not refresh conversation status: ')}${error.message||error}`);}}}>↻</button>
         <button className="chip chat-icon-action" aria-label={t('新会话','New conversation')} title={t('新会话','New conversation')} disabled={!ready || loading || sending} onClick={createConversation}>＋</button>
       </div>
     </div>
     {runningElsewhere.map(item=><button key={item.id} className="session-running" onClick={()=>selectConversation(item.id)}>{t(`“${item.title}”仍有任务运行 · 查看`,`A task is still running in “${item.title}” · View`)}</button>)}
-    {(archived || revisionChanged) && <div className="session-notice" role="status">
+    {(archived || revisionChanged) && !sessionNoticeClosed && <MessageDialog title={t('会话状态','Conversation status')} onClose={()=>setSessionNoticeClosed(true)}>
       {legacy ? <><strong>{t('历史单次任务（只读）')}</strong><span>{t('旧任务不会自动重发。若有旧草稿，可直接保存到本机资料库。','Old tasks are not resent automatically. Any old draft can be saved directly to the phone library.')}</span></> : archived ? <><strong>{t('归档会话（只读）')}</strong><span>{t('可以查看历史内容；新内容请创建会话。','History is available to read. Create a new conversation to continue.')}</span></> : <><strong>{t('模型配置已变化')}</strong><span>{t('为避免在同一会话混用模型版本，请新建会话继续。','Start a new conversation to avoid mixing model versions in one conversation.')}</span><button className="text" onClick={startWithNewModel}>{t('新建会话继续')}</button></>}
-    </div>}
-    {profileIssue && <div className="session-notice" role="alert"><strong>{t('服务端人设状态需要处理')}</strong><span>{profileIssue}</span><div className="profile-actions"><button className="chip" onClick={onOpenSettings}>{t('打开设置')}</button><button className="chip" onClick={createConversation}>{t('新建会话')}</button></div></div>}
+    </MessageDialog>}
+    {profileIssue && <MessageDialog title={t('服务端人设状态需要处理')} message={profileIssue} onClose={()=>setProfileIssue('')}><div className="profile-actions"><button className="chip" onClick={()=>{setProfileIssue('');onOpenSettings();}}>{t('打开设置')}</button><button className="chip" onClick={()=>{setProfileIssue('');createConversation();}}>{t('新建会话')}</button></div></MessageDialog>}
     {legacy && draft.input && <div className="legacy-rescue"><p>{draft.input}</p><button className="primary" onClick={rescue}>{t('直接记录这份旧草稿')}</button></div>}
     <div className="conversation" role="log" aria-live="polite">
       {!tasks.length && !draft.input && <div className="chat-welcome"><h1>{t('把想法放在这里')}</h1><p className="secondary">{t('和拾文助手讨论日常、整理资料，再把有价值的内容留在资料库。')}</p></div>}
       {nextOffset != null && <button className="text" disabled={loading} onClick={loadOlder}>{t('加载更早的对话')}</button>}
       {tasks.map(task => <article className="turn" key={task.id}>
-        <div className="user-message"><MarkdownView markdown={task.input}/></div>
-        <div className="agent-message"><span className="task-status">{t(terminalLabels[task.status] || task.status)}{task.model ? ` · ${task.model}` : ''}</span>
-          {Number.isInteger(task.contextTurns) && <span className="task-context"> · {t(`本轮参考 ${task.contextTurns} 轮对话${task.omittedTurns ? `，另有 ${task.omittedTurns} 轮未纳入` : ''}`,`Context: ${task.contextTurns} conversation turns${task.omittedTurns ? `; ${task.omittedTurns} more omitted` : ''}`)}</span>}
-          {task.output && <MarkdownView markdown={task.output}/>}{task.error && <p className="error">{task.error}</p>}
+        <MessageBubble role="user" text={task.input} onDirect={onDirect}/>
+        <div className="agent-message"><img className="chat-avatar" src="./shiwen-mark.png" alt=""/>{task.status!=='succeeded'&&<span className="task-status">{t(terminalLabels[task.status] || task.status)}</span>}
+          {isRunning(task) && Number.isInteger(task.contextTurns) && <span className="task-context"> · {t(`本轮参考 ${task.contextTurns} 轮对话${task.omittedTurns ? `，另有 ${task.omittedTurns} 轮未纳入` : ''}`,`Context: ${task.contextTurns} conversation turns${task.omittedTurns ? `; ${task.omittedTurns} more omitted` : ''}`)}</span>}
+          {task.output && <MessageBubble role="assistant" text={task.output} onDirect={onDirect} embedded/>}{task.error && <button className="text" onClick={()=>setTaskError(task.error)}>{t('查看失败原因','View error')}</button>}
           {task.recordId && <button className="receipt" onClick={() => onRead?.(task.recordId)}>✓ {t('原文已保存为素材 · 查看','Original saved as material · View')}</button>}
           {isRunning(task) && <button className="text" onClick={() => cancel(task)}>{t('取消任务')}</button>}
         </div>
       </article>)}
+      {activeId&&!legacy&&<AgentProposals key={activeId} conversationId={activeId} onRead={onRead}/>}
     </div>
-    {activeId&&!legacy&&<AgentProposals key={activeId} conversationId={activeId} onRead={onRead}/>}
-    {!archived && <div className="agent-composer">
-      {!config?.configured && <div className="model-guide"><strong>{t('先配置模型')}</strong><span>{t('模型服务商与密钥请在设置中填写，密钥由 Android 原生层保管。')}</span><button className="text" onClick={onOpenSettings}>{t('打开设置')}</button></div>}
-      {revisionChanged && <p className="secondary">{t('模型版本已改变，请新建会话继续。')}</p>}
-      <textarea aria-label={t('发送消息')} placeholder={t('记录想法、提问，或让助手整理素材…')} value={draft.input} onChange={event => edit({input:event.target.value})} disabled={!ready || loading || sending || conflict} />
-      <div className="save-original"><label><input type="checkbox" checked={draft.saveOriginal} onChange={event => edit({saveOriginal:event.target.checked})} disabled={!ready || loading || sending || conflict}/>{t('将我的原文保存到素材')}</label>
-        {draft.saveOriginal && <select aria-label={t('素材类型')} value={draft.kind} onChange={event => edit({kind:event.target.value})} disabled={!ready || loading || sending || conflict}>{Object.entries(kindLabels).map(([key,label]) => <option key={key} value={key}>{t(label)}</option>)}</select>}
-      </div>
-      <div className="chat-actions"><button className="chip" disabled={!draft.input.trim()} onClick={rescue}>{t('直接记录')}</button><button className="primary" disabled={!ready || loading || sending || !draft.input.trim() || !config?.configured || revisionChanged || conflict} onClick={send}>{t(sending ? '正在发送…' : '发送')}</button></div>
-    </div>}
-    {message && <p className="error" role="alert">{message}</p>}
+    {!archived && (composerOpen ? <div className={`agent-composer${composerExpanded?' is-expanded':''}`}>
+      <div className="composer-input-row"><textarea rows={1} aria-label={t('发送消息')} placeholder={config?.configured?t('输入消息…','Message…'):t('请先配置模型','Configure a model first')} value={draft.input} onChange={event => edit({input:event.target.value})} disabled={!ready || loading || sending || conflict} />
+      <button className="primary composer-send" onPointerDown={event=>event.preventDefault()} disabled={!ready || loading || sending || !draft.input.trim() || !config?.configured || revisionChanged || conflict} onClick={send}>{t(sending ? '发送中…' : '发送')}</button></div>
+      <div className="composer-save-option"><label><input type="checkbox" checked={draft.saveOriginal} onChange={event=>{if(event.target.checked)setChooseSaveKind(true);else edit({saveOriginal:false});}} disabled={!ready||loading||sending||conflict}/>{t('发送时保存全文','Save full text on send')}</label>{draft.saveOriginal&&<button type="button" className="text composer-kind-button" onClick={()=>setChooseSaveKind(true)}>{t(kindLabels[draft.kind]||kindLabels.journal)} ▾</button>}<button type="button" className="text composer-expand-button" onClick={()=>setComposerExpanded(value=>!value)}>{composerExpanded?t('缩小输入框','Shrink input'):t('展开输入框','Expand input')}</button></div>
+    </div> : <button type="button" className="composer-fold-button" aria-expanded="false" onClick={toggleComposer}>⌃ {t('展开输入框')}</button>)}
+    {chooseSaveKind&&<MessageDialog title={t('选择素材类型','Choose material type')} closeLabel={t('取消','Cancel')} onClose={()=>setChooseSaveKind(false)}><div className="message-kind-options">{Object.entries(kindLabels).map(([key,label])=><button type="button" className="chip" key={key} onClick={()=>{edit({saveOriginal:true,kind:key});setChooseSaveKind(false);}}>{t(label)}</button>)}</div></MessageDialog>}
+    {message&&<MessageDialog message={message} onClose={()=>setMessage('')}/>}
+    {taskError&&<MessageDialog title={t('任务失败','Task failed')} message={taskError} onClose={()=>setTaskError('')}/>}
+    <SessionSheet open={sheetOpen} title={t('会话')} items={sheetItems} activeId={activeId}
+      onSelect={selectConversation} onCreate={createConversation} onPrimary={deleteConversation}
+      primaryLabel={t('删除')}
+      confirmText={item => t(`删除会话“${item.title || '新会话'}”？对话记录和草稿会一并删除，无法恢复。`,
+        `Delete “${item.title || 'Untitled'}”? Its turns and draft are removed and cannot be restored.`)}
+      onClose={() => setSheetOpen(false)}/>
   </section>;
 }

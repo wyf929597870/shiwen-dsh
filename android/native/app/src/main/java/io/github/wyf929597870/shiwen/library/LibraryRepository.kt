@@ -547,8 +547,51 @@ class LibraryRepository internal constructor(
         }
     }
 
+    /** Repair only legacy bootstrap conflicts whose stored snapshot still exactly matches the known server head. */
+    internal fun readConflictWithBootstrapRevision(id: String): LibraryConflict = db.runInTransaction(Callable {
+        val conflict = checkNotNull(dao.conflict(id)) { "SYNC_CONFLICT_NOT_FOUND" }
+        if (conflict.state != "open" || conflict.operationId != "bootstrap" || (conflict.remoteRevision ?: 0L) > 0L ||
+            registryRow.integrity != "complete") return@Callable conflict
+        val head = dao.remoteHead(conflict.recordId) ?: return@Callable conflict
+        if (head.revision <= 0 || head.versionId.isNullOrBlank() || head.versionId == "null") return@Callable conflict
+        val equal = runCatching {
+            val snapshot = JSONObject(conflict.remoteJson)
+            val current = JSONObject(head.recordJson)
+            snapshot.optString("id") == conflict.recordId && current.optString("id") == conflict.recordId &&
+                snapshot.optBoolean("deleted") == head.deleted &&
+                Canonical.hash(plain(snapshot)) == Canonical.hash(plain(current))
+        }.getOrDefault(false)
+        val revision = recoverableBootstrapRevision(conflict.operationId, conflict.state, registryRow.integrity,
+            conflict.remoteRevision, head.revision, head.versionId, head.recordId == conflict.recordId, equal)
+            ?: return@Callable conflict
+        conflict.copy(remoteRevision = revision).also { dao.updateConflict(it) }
+    })
+
+    /** Refresh an old conflict against the exact locally observed server head, preserving its previous snapshots. */
+    internal fun refreshConflictSnapshot(id: String, expectedRevision: Long, expectedVersionId: String,
+        expectedChangeId: String?, expectedLocalRevision: Long): LibraryConflict = db.runInTransaction(Callable {
+        val conflict = checkNotNull(dao.conflict(id)) { "SYNC_CONFLICT_NOT_FOUND" }
+        check(conflict.state == "open") { "SYNC_CONFLICT_NOT_OPEN" }
+        val head = checkNotNull(dao.remoteHead(conflict.recordId)) { "SYNC_REMOTE_HEAD_MISSING" }
+        val current = read(conflict.recordId)
+        check(head.revision == expectedRevision && head.versionId == expectedVersionId &&
+            head.changeId == expectedChangeId && current.revision == expectedLocalRevision) { "CONFLICT_HEAD_CHANGED" }
+        check(head.revision > 0 && !head.versionId.isNullOrBlank() && head.versionId != "null") { "SYNC_REMOTE_VERSION_MISSING" }
+        val remote = validateRecord(JSONObject(head.recordJson))
+        check(remote.optString("id") == conflict.recordId && remote.has("markdown") && remote.has("kind") &&
+            remote.optBoolean("deleted") == head.deleted) { "SYNC_REMOTE_RECORD_INVALID" }
+        remote.put("versionId", head.versionId).put("changeId", head.changeId ?: JSONObject.NULL)
+        val prior = conflict.copy(id = UUID.randomUUID().toString(), state = "superseded")
+        dao.putConflict(prior)
+        val refreshed = conflict.copy(localJson = localRecordJson(current).put("versionId", current.versionId)
+            .put("changeId", current.changeId).toString(), remoteJson = remote.toString(),
+            remoteRevision = head.revision)
+        dao.updateConflict(refreshed)
+        refreshed
+    })
+
     /** Resolve a conflict by accepting the exact remote head after a revision check. */
-    fun resolveConflictRemote(conflictId: String, expectedRevision: Long, requestId: String): LibraryRecord {
+    fun resolveConflictRemote(conflictId: String, expectedRevision: Long, requestId: String, expectedLocalRevision: Long? = null): LibraryRecord {
         UUID.fromString(requestId)
         val conflict = checkNotNull(dao.conflict(conflictId)) { "SYNC_CONFLICT_NOT_FOUND" }
         val fingerprint = Canonical.hash(mapOf("conflictId" to conflictId, "resolution" to "keep-remote", "expectedRevision" to expectedRevision))
@@ -557,11 +600,12 @@ class LibraryRepository internal constructor(
             return read(prior.recordId)
         }
         val current = read(conflict.recordId)
+        check(expectedLocalRevision == null || current.revision == expectedLocalRevision) { "CONFLICT_HEAD_CHANGED" }
         val knownHead = dao.remoteHead(current.id)
         check(conflict.state == "open" && conflict.remoteRevision == expectedRevision &&
             (knownHead == null || knownHead.revision <= expectedRevision)) { "CONFLICT_HEAD_CHANGED" }
         val conflictValue = JSONObject(conflict.remoteJson)
-        val conflictRecord = conflictValue.optJSONObject("record") ?: conflictValue.takeIf { it.has("id") }
+        val conflictRecord = conflictValue.optJSONObject("record") ?: conflictValue.optJSONObject("currentRecord") ?: conflictValue.takeIf { it.has("id") }
         val remote = validateRecord(conflictRecord ?: knownHead?.takeIf { it.revision == expectedRevision }
             ?.let { JSONObject(it.recordJson) } ?: error("SYNC_REMOTE_RECORD_MISSING"))
         check(remote.optString("id") == current.id) { "SYNC_REMOTE_RECORD_INVALID" }
@@ -573,11 +617,22 @@ class LibraryRepository internal constructor(
                 "ANNOTATION_RELATION_CHANGED"
             }
         } else check(!remote.has("annotationOf") || remote.isNull("annotationOf")) { "ANNOTATION_RELATION_CHANGED" }
-        val remoteVersionId = remote.optString("versionId").takeIf { it.isNotBlank() }
+        val hasSnapshotIdentity = remote.optString("versionId").let { it.isNotBlank() && it != "null" } ||
+            conflictValue.optJSONObject("currentHead")?.optString("versionId")?.let { it.isNotBlank() && it != "null" } == true
+        if (!hasSnapshotIdentity && knownHead?.revision == expectedRevision) {
+            check(sameConflictSnapshot(remote, JSONObject(knownHead.recordJson))) { "CONFLICT_HEAD_CHANGED" }
+        }
+        val remoteVersionId = remote.optString("versionId").takeIf { it.isNotBlank() && it != "null" }
+            ?: conflictValue.optJSONObject("currentHead")?.optString("versionId")?.takeIf { it.isNotBlank() && it != "null" }
             ?: knownHead?.takeIf { it.revision == expectedRevision }?.versionId ?: error("SYNC_REMOTE_VERSION_MISSING")
-        val remoteChangeId = remote.optString("changeId").takeIf { it.isNotBlank() }
+        val remoteChangeId = remote.optString("changeId").takeIf { it.isNotBlank() && it != "null" }
+            ?: conflictValue.optJSONObject("currentHead")?.optString("changeId")?.takeIf { it.isNotBlank() && it != "null" }
             ?: knownHead?.takeIf { it.revision == expectedRevision }?.changeId ?: current.changeId
-        val remoteVersion = remote.optJSONObject("currentVersion")
+        fun matchesRemoteHead(head: LibraryRemoteHead?): Boolean = head == null || head.revision < expectedRevision ||
+            (head.revision == expectedRevision && (head.versionId == null || head.versionId == remoteVersionId) &&
+                (head.changeId == null || head.changeId == remoteChangeId))
+        check(matchesRemoteHead(knownHead)) { "CONFLICT_HEAD_CHANGED" }
+        val remoteVersion = remote.optJSONObject("currentVersion") ?: conflictValue.optJSONObject("currentVersion")
         val remoteDoc = remoteVersion?.optJSONObject("doc") ?: remoteVersion?.takeIf { it.has("provenance") }
         val remoteProvenance = remote.optJSONObject("provenance") ?: remoteDoc?.optJSONObject("provenance")
         val nextRevision = current.revision + 1
@@ -601,9 +656,9 @@ class LibraryRepository internal constructor(
                 return@runInTransaction
             }
             val latest = checkNotNull(dao.conflict(conflictId)) { "SYNC_CONFLICT_NOT_FOUND" }
+            check(dao.record(current.id)?.revision == current.revision) { "CONFLICT_HEAD_CHANGED" }
             val latestHead = dao.remoteHead(current.id)
-            check(latest.state == "open" && latest.remoteRevision == expectedRevision &&
-                (latestHead == null || latestHead.revision <= expectedRevision)) {
+            check(latest.state == "open" && latest.remoteRevision == expectedRevision && matchesRemoteHead(latestHead)) {
                 "CONFLICT_HEAD_CHANGED"
             }
             dao.updateRecord(next)

@@ -3,6 +3,96 @@
 0.1.4 是本仓库首次公开的 Linux 预览版；0.1.0–0.1.3 为本地开发与打包记录。
 0.1.4 is this repository's first public Linux preview; 0.1.0–0.1.3 are local development builds.
 
+## android-v0.1.26 - 2026-11-12
+
+### 中文
+
+- 精简手机导航，优化会话、素材列表、类型选择和设置页面；支持从对话内容保存素材。
+- 改进资料库同步冲突的比较、自动读取和处理入口，区分主动放弃的旧修改与未完成写入。
+- 新建日记时显示追加说明，会话保存原文支持全部七种素材类型。
+- Android versionCode 29，沿用既有发行签名。
+
+### English
+
+- Streamline Android navigation and improve chat, material lists, type selection, and settings; save conversation content as material.
+- Improve sync conflict comparison and discovery, and distinguish discarded conflict branches from unresolved writes.
+- Show journal append guidance inline and support all seven material types when saving chat input.
+- Android versionCode 29, signed with the existing release key.
+
+## android-v0.1.11 - 2026-11-12
+
+### 中文
+
+- 精简手机主导航为对话和素材，保留资料库连接、同步与旧草稿处理入口。
+- 直接记录和素材编辑支持选择类型，保留文章关联与读书笔记来源；同日日记追加和类型冲突有明确提示。
+- 手机助手使用服务端同步的人格与记忆；移除手机本地管理工具，应用标识旁显示实际安装版本。
+- Android versionCode 14，沿用既有发行签名。
+
+### English
+
+- Simplify Android navigation to chat and materials while retaining library synchronization and legacy draft recovery.
+- Support record types in quick capture and editing, preserving article links and reading-note sources.
+- Use the selected server's assistant profile and display the installed app version beside the logo.
+- Android versionCode 14, signed with the existing release key.
+
+## android-v0.1.10 - 2026-11-11
+
+### 中文
+
+- 手机对话页的会话下拉改为底部会话列表：本地「手机助手」会话可直接删除（连同该会话的对话记录与草稿，不可恢复）；「服务器助手」会话可归档与恢复，归档后从列表移除，服务器数据保留，与电脑端右键菜单的归档语义一致。
+- 两处会话列表都支持「显示已归档」筛选；运行中和只读会话的移除入口置灰并说明原因。
+- 对话输入框可收起，收起后消息区占满；展开/收起状态本机记忆。
+- 修正输入框固定占五行导致消息区被挤压、以及键盘弹起时整页滚动的问题。
+- Android versionCode 13，沿用既有发行签名。
+
+### English
+
+- Replace the phone conversation dropdown with a bottom session list. Phone-agent conversations can be deleted with their turns and draft (not recoverable); server conversations can be archived and restored, leaving the server data intact and matching the desktop right-click archive.
+- Both lists offer a "show archived" filter; running and read-only rows keep their action disabled with the reason shown.
+- The chat input can be collapsed so the message list fills the screen, and the choice is remembered on the device.
+- Fix the five-line input squeezing the message list and the whole page scrolling when the keyboard opens.
+- Android versionCode 13, signed with the existing release key.
+
+## v0.1.17 - 2026-11-11
+
+### 中文
+
+- 手机远程会话接口 `mobileSessions` 新增 `archive` 与 `unarchive`，转发到 DSH 工作区注册表的归档集合；`list` 结果一并返回 `archivedSessionIds`，供手机端过滤已归档会话。
+- 归档与电脑端右键菜单共用同一份归档集合，两端状态一致；归档保留服务器数据，可随时取消归档。
+- 缺少工作区注册表时返回 `SESSIONS_UNAVAILABLE`，归档被拒时返回 `SESSION_CONFLICT`，手机端可按明确结果提示。
+
+### English
+
+- Add `archive` and `unarchive` to the phone `mobileSessions` action set, forwarded to the DSH workspace registry archive set; `list` now returns `archivedSessionIds` so the phone can filter archived conversations.
+- Archiving shares the archive set with the desktop right-click menu, so both clients agree; server data is preserved and can be unarchived at any time.
+- Return `SESSIONS_UNAVAILABLE` when the workspace registry is missing and `SESSION_CONFLICT` when the host refuses an archive, so the phone can report a definite result.
+
+## android-v0.1.9 - 2026-11-10
+
+### 中文
+
+- 修复手机助手待确认保存建议超出屏幕后无法找到操作按钮的问题：建议随对话滚动，确认与拒绝放在正文预览之前。
+- 手机与服务器会话输入框默认至少显示 5 行；小屏可滚动访问输入和保存回执。
+- 素材与创作详情的操作栏吸附顶部，编辑、保存、插入图片和更多操作随滚动保持可用；正文编辑区扩大到至少 360 像素。
+- Android versionCode 12，沿用既有发行签名。
+
+### English
+
+- Keep phone-agent save proposals inside the scrollable conversation and place decisions before body previews so long proposals cannot hide their buttons.
+- Show at least five lines in phone and server chat inputs; allow scrolling on short screens.
+- Keep material and article actions at the top while scrolling, including edit, save, insert image and more; enlarge the body editor to at least 360 pixels.
+- Android versionCode 12, signed with the existing release key.
+
+## v0.1.16 - 2026-11-10
+
+### 中文
+
+- 素材页增加常驻“已删除”列表，可在重新打开应用后恢复记录；恢复保留正文、日期、版本和同步信息。同一天已存在另一篇日记时会提示冲突，避免覆盖。
+
+### English
+
+- Add a persistent deleted-records list to Materials so records can be restored after reopening the app. Restore preserves content, dates, versions and sync history, and checks for conflicting same-day journals.
+
 ## v0.1.15 - 2026-11-10
 
 ### 中文

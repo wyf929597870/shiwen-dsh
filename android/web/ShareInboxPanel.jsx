@@ -1,3 +1,4 @@
+import {MessageDialog} from './MessageDialog.jsx';
 import React,{useCallback,useEffect,useState} from 'react';
 import {call} from '../bridge/library.mjs';
 import {useI18n} from './i18n.js';
@@ -68,6 +69,6 @@ export function ShareInboxPanel({ready,libraryId,libraries=[],onPageStateChange}
       </article>;
     })}
     {items.length===0&&<p className="empty-state">{t('收件箱为空。','The inbox is empty.')}</p>}
-    {message&&<p className="success-note" role="status">{message}</p>}{error&&<p className="error" role="alert">{error}</p>}
+    {(error||message)&&<MessageDialog message={error||message} onClose={()=>{setError('');setMessage('');}}/>}
   </section>;
 }

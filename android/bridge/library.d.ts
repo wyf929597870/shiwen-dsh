@@ -7,6 +7,7 @@ export interface AgentConversationSnapshot { items:AgentConversation[]; activeId
 export interface AgentTask { id:string; conversationId:string; input:string; output:string; status:'admitted'|'running'|'succeeded'|'failed'|'interrupted'|'cancelled'; error?:string; model:string; updatedAt:string; recordId?:string; contextTurns:number; omittedTurns:number }
 export type ModelConfig = {configured:false} | {configured:true; name:string; baseUrl:string; model:string; revision:string};
 export interface Methods {
+  appInfo: {args:Record<string,never>; result:{versionName:string;versionCode:number}};
   libraryList: {args:Record<string,never>; result:LibraryRegistry};
   libraryCreate: {args:{name:string}; result:LibraryContext};
   librarySelect: {args:{libraryId:string}; result:LibraryContext};
@@ -22,13 +23,14 @@ export interface Methods {
   recordList: {args:{libraryId:string; query?:string; kind?:MobileRecordKind; excludeKind?:MobileRecordKind; cursor?:string|null; limit?:number; deleted?:boolean}; result:RecordPage};
   recordRead: {args:{libraryId:string; id:string}; result:MobileRecord};
   recordCreate: {args:{libraryId:string; requestId:string; localGeneration:number; record:MobileRecordInput; stagedAttachmentIds?:string[]}; result:RecordMutationResult};
-  recordUpdate: {args:{libraryId:string; id:string; expectedRevision:number; requestId:string; localGeneration:number; patch:Partial<MobileRecordInput>; stagedAttachmentIds?:string[]}; result:RecordMutationResult};
+  recordUpdate: {args:{libraryId:string; id:string; expectedRevision:number; requestId:string; localGeneration:number; patch:Partial<MobileRecordInput>; stagedAttachmentIds?:string[]; draftSlot?:string}; result:RecordMutationResult};
   attachmentPick: {args:{libraryId:string};result:{cancelled?:boolean;items:Array<{id:string;name:string;hash:string;byteLength:number;mimeType:string}>}};
   attachmentStageDelete: {args:{libraryId:string;ids:string[]};result:{deleted:number}};
   recordDelete: {args:{libraryId:string; id:string; expectedRevision:number; requestId:string}; result:RecordMutationResult};
   recordRestore: {args:{libraryId:string; id:string; expectedRevision:number; requestId:string}; result:RecordMutationResult};
   recordVersions: {args:{libraryId:string; id:string; cursor?:string|null; limit?:number}; result:RecordVersionPage};
-  recordDraftRead: {args:{libraryId:string;slot:'composer'|'materials'|'articles'};result:{draft:null|RecordEditorDraft;nextGeneration:number}};
+  recordDraftRead: {args:{libraryId:string;slot:'composer'|'materials'|'articles'|`annotation:${string}`};result:{draft:null|RecordEditorDraft;nextGeneration:number}};
+  legacyAnnotationDrafts: {args:{libraryId:string};result:{recordIds:string[]}};
   recordDraftSave: {args:{libraryId:string;slot:'composer'|'materials'|'articles';requestId:string;localGeneration:number;content:Record<string,unknown>;pendingMutation?:PendingRecordMutation|null};result:{saved:true}};
   recordDraftAcknowledge: {args:{libraryId:string;slot:'composer'|'materials'|'articles';requestId:string;localGeneration:number};result:{cleared:boolean}};
   projectList: {args:{libraryId:string; query?:string; stage?:ArticleStage; cursor?:string|null; limit?:number}; result:RecordPage};
@@ -40,7 +42,8 @@ export interface Methods {
   syncProgress: {args:{boundLibraryId:string;pageGeneration:number;targetLibraryId?:string;operationId:string}; result:SyncProgress};
   syncConflicts: {args:{libraryId:string;cursor?:string|null;limit?:number}; result:{items:SyncConflictSummary[];nextCursor?:string|null}};
   syncConflictRead: {args:{libraryId:string;conflictId:string}; result:{conflict:SyncConflict}};
-  syncConflictResolve: {args:{libraryId:string;conflictId:string;expectedRemoteRevision?:number;resolution:ConflictResolution;requestId:string}; result:RecordMutationResult};
+  syncConflictRefresh: {args:{libraryId:string;conflictId:string;expectedRemoteRevision:number;expectedVersionId:string;expectedChangeId?:string|null;expectedLocalRevision:number}; result:{conflictId:string}};
+  syncConflictResolve: {args:{libraryId:string;conflictId:string;expectedRemoteRevision?:number;expectedLocalRevision?:number;resolution:ConflictResolution;requestId:string}; result:RecordMutationResult};
   settingsGet: {args:Record<string,never>;result:{theme:'system'|'light'|'dark';language:'zh-CN'|'en'|string;systemDark:boolean}};
   settingsUpdate: {args:{theme?:'system'|'light'|'dark';language?:'zh-CN'|'en'|string};result:{theme:'system'|'light'|'dark';language:string;systemDark:boolean}};
   librarySettingsGet: {args:{libraryId:string};result:LibrarySyncPreferences};
@@ -53,6 +56,7 @@ export interface Methods {
   agentConversations: {args:Record<string,never>; result:AgentConversationSnapshot};
   agentCreateConversation: {args:{id:string}; result:AgentConversationSnapshot};
   agentSelectConversation: {args:{id:string}; result:AgentConversationSnapshot};
+  agentDeleteConversation: {args:{id:string}; result:AgentConversationSnapshot};
   agentRecent: {args:{conversationId:string; offset?:number}; result:{items:AgentTask[]; nextOffset?:number|null}};
   agentStatus: {args:{conversationId:string; id:string}; result:AgentTask|{status:'unknown'}};
   agentSend: {args:{conversationId:string; id:string; input:string; saveOriginal:boolean; kind:'journal'|'idea'|'freewrite'; localGeneration:number; revision:string}; result:AgentTask};
@@ -148,7 +152,7 @@ export interface LibraryRegistry {items:LibraryDescriptor[];activeId:string|null
 export interface ReviewTotals {added:number;removed:number;net:number;personalRecords:number;collected:number;web:number;ai:number;articles:number;finalized:number;reference:number;historicalChars:number;historicalRecords:number}
 export interface ReviewDay {day:string;added:number;removed:number;net:number;historical:number;collected:number}
 export interface ReviewReport {totals:ReviewTotals;daily:ReviewDay[];isComplete:boolean;completeThrough:string|null;localPending:number}
-export interface LibrarySyncStatus {state:string;role:LibraryContext['role'];integrity:LibraryContext['integrity'];appliedCursor:number|null;completeCursor:number|null;pendingCount:number|null;rejectedCount?:number|null;rejectedOperations?:Array<{operationId:string;recordId:string;code:string}>;conflictCount:number|null;lastSyncedAt:string|null;lastError?:string|null}
+export interface LibrarySyncStatus {state:string;role:LibraryContext['role'];integrity:LibraryContext['integrity'];appliedCursor:number|null;completeCursor:number|null;pendingCount:number|null;rejectedCount?:number|null;rejectedOperations?:Array<{operationId:string;recordId:string;title?:string|null;code:string}>;conflictCount:number|null;lastSyncedAt:string|null;lastError?:string|null}
 export interface SyncProgress {state:string;phase?:string;completed?:number|null;total?:number|null;appliedCursor?:number|null;completeCursor?:number|null;error?:string|null}
 export interface SyncConflictSummary {id:string;recordId:string;title?:string;createdAt?:string;kind?:MobileRecordKind}
 export interface SyncConflict {id:string;recordId:string;base:MobileRecord|null;local:MobileRecord;remote:MobileRecord|null;[key:string]:unknown}

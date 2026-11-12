@@ -1,8 +1,11 @@
+import {MessageDialog} from './MessageDialog.jsx';
 import './chat-translations.mjs';
 import {t,useI18n} from './i18n.js';
 import React,{useCallback,useEffect,useRef,useState} from 'react';
 import {call} from '../bridge/library.mjs';
 import {MarkdownView} from './MarkdownView.jsx';
+import {MessageBubble} from './MessageBubble.jsx';
+import {SessionSheet} from './SessionSheet.jsx';
 import {mergeSessionEvents,sessionEventPresentation} from './remote-session-state.mjs';
 
 const fresh=()=>({requestId:crypto.randomUUID(),text:'',mode:'queue',pending:false,localGeneration:0});
@@ -11,10 +14,11 @@ const safeTitle=row=>typeof title(row)==='string'?title(row):row.sessionId;
 
 function Interaction({item,clientId,onReply,busy}){
   useI18n();
-  const [answers,setAnswers]=useState({});const request=item.request??{};
+  const [answers,setAnswers]=useState({}),[open,setOpen]=useState(true);const request=item.request??{};
   const answerFor=question=>answers[question.id]??{selected:[],custom:''};
   const update=(question,patch)=>setAnswers(current=>({...current,[question.id]:{...(current[question.id]??{selected:[],custom:''}),...patch}}));
-  return <div className="session-notice" role="alert">
+  if(!open)return <button type="button" className="chip" onClick={()=>setOpen(true)}>{t('查看待处理请求','View pending request')}</button>;
+  return <MessageDialog title={t('待处理请求','Pending request')} onClose={()=>setOpen(false)}>
     <strong>{t(item.event==='approval/request'?'工具需要你的确认':'助手需要你的回答',item.event==='approval/request'?'A tool needs your approval':'The assistant needs your answer')}</strong>
     <small>{t('会话','Session')}：{item.agentId}</small>
     {item.event==='approval/request'?<><p>{request.reason??request.toolName??t('执行工具','Run tool')}</p><details><summary>{t('查看请求详情','View request details')}</summary><pre>{JSON.stringify(request,null,2)}</pre></details><div className="profile-actions">
@@ -30,16 +34,20 @@ function Interaction({item,clientId,onReply,busy}){
       <button className="primary" disabled={busy||!(request.questions??[]).length||(request.questions??[]).some(question=>!answerFor(question).selected.length&&!answerFor(question).custom.trim())}
         onClick={()=>onReply({clientId,eventId:item.eventId,value:{answers:request.questions.map(question=>({id:question.id,...answerFor(question)}))}})}>{t('提交回答')}</button>
     </>:<p>{t('此交互暂需在 DSH 网页处理：','Handle this interaction in the DSH web app: ')}{item.event}</p>}
-  </div>;
+  </MessageDialog>;
 }
 
-export function RemoteChatPanel({node,onSending}){
+export function RemoteChatPanel({node,onSending,onDirect}){
   useI18n();
   const [sessions,setSessions]=useState([]),[sessionId,setSessionId]=useState(''),[catalog,setCatalog]=useState({presets:[],workspaces:[]});
   const [skills,setSkills]=useState([]);
   const [workspace,setWorkspace]=useState(''),[preset,setPreset]=useState(''),[models,setModels]=useState({groups:[]});
   const [events,setEvents]=useState([]),[state,setState]=useState(null),[more,setMore]=useState(false),[cut,setCut]=useState(null);
+  const [unavailableDismissed,setUnavailableDismissed]=useState(false);
+  useEffect(()=>setUnavailableDismissed(false),[sessionId,state?.interactionUnavailable]);
   const [draft,setDraft]=useState(fresh),[busy,setBusy]=useState(false),[feedback,setFeedback]=useState(null),[creationStateReady,setCreationStateReady]=useState(false);
+  const [archivedIds,setArchivedIds]=useState([]),[showArchived,setShowArchived]=useState(false),[sheetOpen,setSheetOpen]=useState(false);
+  const [composerOpen,setComposerOpen]=useState(true),[composerExpanded,setComposerExpanded]=useState(false);
   const setError=value=>setFeedback(value?{kind:'error',text:value}:null);
   const setSuccess=value=>setFeedback(value?{kind:'success',text:value}:null);
   const mounted=useRef(true),session=useRef(''),draftRef=useRef(draft),writes=useRef(Promise.resolve()),createRequest=useRef(null),lastCursor=useRef(-1);
@@ -106,10 +114,52 @@ export function RemoteChatPanel({node,onSending}){
       rpc('skills',{sessionId:id}).then(result=>{if(mounted.current&&session.current===id)setSkills(result.skills??[]);}).catch(()=>{});
     }catch(e){setError(e.message);}finally{if(mounted.current)setBusy(false);}
   };
+  const refreshList=useCallback(async()=>{
+    const result=await rpc('list');
+    if(!mounted.current)return;
+    setSessions(result.items??[]);setArchivedIds(result.archivedSessionIds??[]);
+  },[rpc]);
+  const archiveSession=async item=>{
+    setBusy(true);setError('');
+    try{
+      const result=await rpc('archive',{sessionId:item.id,stopActivity:true});
+      if(!mounted.current)return;
+      setArchivedIds(result.archivedSessionIds??[]);
+      if(session.current===item.id){session.current='';setSessionId('');setEvents([]);setState(null);setSkills([]);}
+      setSuccess(t('会话已归档，服务器数据保留，可在“显示已归档”里恢复。','Conversation archived. Its data stays on the server; restore it from “Show archived”.'));
+    }catch(e){if(mounted.current)setError(`${t('归档失败：','Could not archive the conversation: ')}${e.message||e}`);}
+    finally{if(mounted.current)setBusy(false);}
+  };
+  const unarchiveSession=async item=>{
+    setBusy(true);setError('');
+    try{
+      const result=await rpc('unarchive',{sessionId:item.id});
+      if(mounted.current)setArchivedIds(result.archivedSessionIds??[]);
+    }catch(e){if(mounted.current)setError(`${t('恢复失败：','Could not restore the conversation: ')}${e.message||e}`);}
+    finally{if(mounted.current)setBusy(false);}
+  };
+  const toggleComposer=useCallback(()=>{
+    setComposerOpen(open=>{
+      const next=!open;
+      localStorage.setItem('shiwen.chat.composerOpen',next?'1':'0');
+      return next;
+    });
+  },[]);
+  const activeRow=sessions.find(row=>row.sessionId===sessionId);
+  const sheetItems=sessions
+    .filter(row=>showArchived||!archivedIds.includes(row.sessionId))
+    .map(row=>({
+      id:row.sessionId,
+      title:safeTitle(row),
+      subtitle:[row.running?t('运行中','Running'):'',archivedIds.includes(row.sessionId)?t('已归档','Archived'):''].filter(Boolean).join(' · '),
+      running:row.running===true,
+      readOnly:false,
+      archived:archivedIds.includes(row.sessionId)
+    }));
   useEffect(()=>{
     mounted.current=true;setError('');
     setCreationStateReady(false);
-    rpc('list').then(result=>{if(mounted.current)setSessions(result.items??[]);}).catch(e=>mounted.current&&setError(`${t('无法读取服务器会话列表：','Could not read server conversations: ')}${e.message||e}`));
+    rpc('list').then(result=>{if(mounted.current){setSessions(result.items??[]);setArchivedIds(result.archivedSessionIds??[]);}}).catch(e=>mounted.current&&setError(`${t('无法读取服务器会话列表：','Could not read server conversations: ')}${e.message||e}`));
     rpc('catalog').then(result=>{if(mounted.current)setCatalog(result);}).catch(e=>mounted.current&&setError(`${t('无法读取工作区与助手列表：','Could not read workspaces and agents: ')}${e.message||e}`));
     rpc('models').then(result=>{if(mounted.current)setModels(result);}).catch(e=>mounted.current&&setError(`${t('无法读取服务器模型列表：','Could not read server models: ')}${e.message||e}`));
     readCreationState();
@@ -164,10 +214,13 @@ export function RemoteChatPanel({node,onSending}){
   };
   const reply=async args=>{setBusy(true);try{await rpc('respond',args);await refresh(sessionId);}catch(e){setError(`${t('决定未确认，请刷新：','The decision was not confirmed. Refresh and check: ')}${e.message}`);}finally{setBusy(false);}};
   return <section className="chat-panel" aria-label={t('服务器 AI 对话')}>
-    <div className="session-notice"><strong>{node.name} · {t('服务器会话')}</strong><span>{t('由这台服务器运行 Agent、工具和模型；离线时可切换手机助手继续记录。')}</span></div>
-    <div className="chat-session-controls"><select aria-label={t('服务器会话')} value={sessionId} disabled={busy} onChange={event=>choose(event.target.value)}>
-      <option value="">{t('选择服务器会话','Choose a server conversation')}</option>{sessions.map(row=><option key={row.sessionId} value={row.sessionId}>{safeTitle(row)}{row.running?` · ${t('运行中','Running')}`:''}</option>)}</select>
-      <button className="chip chat-icon-action" aria-label={t('刷新会话','Refresh conversations')} title={t('刷新会话','Refresh conversations')} disabled={busy} onClick={async()=>{try{setSessions((await rpc('list')).items??[]);}catch(e){setError(e.message);}}}>↻</button></div>
+    <div className="chat-session-controls">
+      <button type="button" className="session-trigger" aria-haspopup="dialog" aria-expanded={sheetOpen}
+        aria-label={t('服务器会话')} title={t('服务器会话')} disabled={busy} onClick={()=>setSheetOpen(true)}>
+        <span>{sessionId?(activeRow?safeTitle(activeRow):sessionId):t('选择服务器会话','Choose a server conversation')}</span>
+        <span className="session-trigger-caret" aria-hidden="true">▾</span>
+      </button>
+      <button className="chip chat-icon-action" aria-label={t('刷新会话','Refresh conversations')} title={t('刷新会话','Refresh conversations')} disabled={busy} onClick={async()=>{try{await refreshList();}catch(e){setError(e.message);}}}>↻</button></div>
     <details className="remote-create"><summary>{t('新建会话','New conversation')}</summary><label>{t('工作区','Workspace')}<select value={workspace} disabled={busy} onChange={event=>setWorkspace(event.target.value)}><option value="">{t('服务端默认','Server default')}</option>{catalog.workspaces.map(row=><option key={row.id} value={row.id}>{row.title}</option>)}</select></label>
       <label>{t('助手','Agent')}<select value={preset} disabled={busy} onChange={event=>setPreset(event.target.value)}><option value="">{t('服务端默认','Server default')}</option>{catalog.presets.map(row=><option key={row.id} value={row.id} disabled={Boolean(row.broken)}>{row.name??row.id}</option>)}</select></label><button className="chip" disabled={busy||!creationStateReady} onClick={()=>create(false)}>{t(createRequest.current?'核对创建回执':'创建',createRequest.current?'Check creation receipt':'Create')}</button>{!creationStateReady&&<button className="text" disabled={busy} onClick={readCreationState}>{t('重试读取创建回执','Retry reading creation receipt')}</button>}{catalog.presets.some(row=>row.id==='cordis'&&!row.broken)&&<button className="chip" disabled={busy||!creationStateReady||Boolean(createRequest.current)} onClick={()=>create(true)}>{t('创建自己的插件','Create your own plugin')}</button>}</details>
     {sessionId&&<>
@@ -176,16 +229,24 @@ export function RemoteChatPanel({node,onSending}){
         {state?.running&&<button className="chip" disabled={busy} onClick={async()=>{setBusy(true);try{await rpc('cancel',{sessionId});await refresh(sessionId);}catch(e){setError(e.message);}finally{setBusy(false);}}}>{t('停止生成')}</button>}
       </div>
       <div className="conversation" role="log" aria-live="polite">{more&&<button className="text" disabled={busy} onClick={older}>{t('加载更早消息')}</button>}
-        {events.map(row=>{const view=sessionEventPresentation(row);if(!view)return null;return <article className="turn" key={row.event.seq}>{view.role==='tool'?<details><summary>{view.label}</summary><pre>{view.text}</pre></details>:<div className={view.role==='user'?'user-message':'agent-message'}><MarkdownView markdown={view.text}/>{view.interrupted&&<small>{t('这次回答已中断')}</small>}</div>}</article>;})}
+        {events.map(row=>{const view=sessionEventPresentation(row);if(!view)return null;return <article className="turn" key={row.event.seq}>{view.role==='tool'?<details><summary>{view.label}</summary><pre>{view.text}</pre></details>:<MessageBubble role={view.role} text={view.text} onDirect={onDirect}>{view.interrupted&&<small>{t('这次回答已中断')}</small>}</MessageBubble>}</article>;})}
         {state?.running&&<p className="secondary">{t('服务器正在处理…')}</p>}
       </div>
       {(state?.interactions?.items??[]).map(item=><Interaction key={item.eventId} item={item} clientId={state.interactions.clientId} busy={busy} onReply={reply}/>)}
-      {state?.interactionUnavailable&&state?.pendingInput?.length>0&&<p role="alert">{t('审批连接不可用，请在服务器网页处理待确认请求。','Approval connection is unavailable. Handle pending requests in the server web app.')}</p>}
-      <div className="agent-composer">{skills.length>0&&<details><summary>{t('本会话技能','Session skills')} · {skills.length}</summary>{skills.map(skill=><div className="management-row" key={skill.name}><strong>/{skill.name}</strong><p className="secondary">{skill.description}</p><button className="chip" disabled={busy||draft.pending} onClick={()=>persist({...draftRef.current,text:`/${skill.name} ${draftRef.current.text}`})}>{t('加入待发送消息','Add to draft')}</button></div>)}</details>}<textarea maxLength={32000} aria-label={t('远程会话消息')} placeholder={t('发送给服务器助手…')} value={draft.text} disabled={busy||draft.pending} onChange={event=>persist({...draftRef.current,text:event.target.value})}/>
-        <div className="chat-actions"><label>{t('发送方式')}<select value={draft.mode} disabled={busy||draft.pending} onChange={event=>persist({...draftRef.current,mode:event.target.value})}><option value="queue">{t('排队执行')}</option><option value="steer">{t('补充当前任务')}</option></select></label>
-        {draft.pending?<button className="primary" disabled={busy} onClick={reconcile}>{t('核对发送回执')}</button>:<button className="primary" disabled={busy||!draft.text.trim()} onClick={send}>{t('发送')}</button>}</div>
-      </div>
+      {state?.interactionUnavailable&&state?.pendingInput?.length>0&&!unavailableDismissed&&<MessageDialog message={t('审批连接不可用，请在服务器网页处理待确认请求。','Approval connection is unavailable. Handle pending requests in the server web app.')} onClose={()=>setUnavailableDismissed(true)}/>}
+      {composerOpen?<div className={`agent-composer${composerExpanded?' is-expanded':''}`}>
+        <div className="composer-input-row"><textarea rows={1} maxLength={32000} aria-label={t('远程会话消息')} placeholder={t('发送给服务器助手…')} value={draft.text} disabled={busy||draft.pending} onChange={event=>persist({...draftRef.current,text:event.target.value})}/>
+        {draft.pending?<button className="primary composer-send" onPointerDown={event=>event.preventDefault()} disabled={busy} onClick={reconcile}>{t('核对回执')}</button>:<button className="primary composer-send" onPointerDown={event=>event.preventDefault()} disabled={busy||!draft.text.trim()} onClick={send}>{t('发送')}</button>}</div>
+        <div className="remote-composer-options"><button type="button" className="text composer-expand-button" onClick={()=>setComposerExpanded(value=>!value)}>{composerExpanded?t('缩小输入框','Shrink input'):t('展开输入框','Expand input')}</button><label>{t('发送方式')}<select value={draft.mode} disabled={busy||draft.pending} onChange={event=>persist({...draftRef.current,mode:event.target.value})}><option value="queue">{t('排队执行')}</option><option value="steer">{t('补充当前任务')}</option></select></label>{skills.length>0&&<details><summary>{t('快捷技能','Skills')}</summary><div>{skills.map(skill=><button className="chip" key={skill.name} disabled={busy||draft.pending} onClick={()=>persist({...draftRef.current,text:`/${skill.name} ${draftRef.current.text}`})}>/{skill.name}</button>)}</div></details>}</div>
+      </div>:<button type="button" className="composer-fold-button" aria-expanded="false" onClick={toggleComposer}>⌃ {t('展开输入框','Show input')}</button>}
     </>}
-    {feedback&&<p role={feedback.kind==='error'?'alert':'status'} className={feedback.kind==='error'?'error':'success-note'}>{feedback.text}</p>}
+    {feedback&&<MessageDialog message={feedback.text} onClose={()=>setFeedback(null)}/>}
+    <SessionSheet open={sheetOpen} title={t('服务器会话','Server conversations')} items={sheetItems} activeId={sessionId}
+      onSelect={choose} onCreate={()=>create(false)} onPrimary={archiveSession} onRestore={unarchiveSession}
+      primaryLabel={t('归档')}
+      confirmText={item=>t(`归档会话“${item.title}”？它会从列表移出，服务器数据保留，可随时恢复；正在运行的任务会被停止。`,
+        `Archive “${item.title}”? It leaves the list, stays on the server, and can be restored at any time. Running work will be stopped.`)}
+      showArchived={showArchived} archivedCount={archivedIds.length}
+      onToggleArchived={()=>setShowArchived(value=>!value)} onClose={()=>setSheetOpen(false)}/>
   </section>;
 }

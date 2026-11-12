@@ -42,6 +42,45 @@ test('session read adapter forwards pinned DSH history cursors and rejects inval
   }finally{adapter.close();}
 });
 
+test('session archive forwards to the workspace registry and reports the durable archive set',async()=>{
+  const archived=[],calls=[];
+  const registry={
+    get archivedSessionIds(){return [...archived];},
+    archiveSession:async(id,options)=>{calls.push({id,options});if(!archived.includes(id))archived.push(id);},
+    unarchiveSession:async id=>{calls.push({id,unarchive:true});archived.splice(archived.indexOf(id),1);}
+  };
+  const c={list:async()=>({items:[{sessionId:'s1'},{sessionId:'s2'}]})};
+  const adapter=createRemoteSessionsAdapter({
+    ctx:{get:key=>key==='sessionController'?c:key==='workspaceRegistry'?registry:undefined},
+    library:{},relay:{close(){}}});
+  try{
+    const listed=await adapter.execute('list',{});
+    assert.deepEqual(listed.data.items.map(row=>row.sessionId),['s1','s2']);
+    assert.deepEqual(listed.data.archivedSessionIds,[]);
+    const result=await adapter.execute('archive',{sessionId:'s2',stopActivity:true});
+    assert.deepEqual(result.data.archivedSessionIds,['s2']);
+    assert.deepEqual(calls[0],{id:'s2',options:{stopActivity:true}});
+    assert.deepEqual((await adapter.execute('list',{})).data.archivedSessionIds,['s2']);
+    assert.deepEqual((await adapter.execute('unarchive',{sessionId:'s2'})).data.archivedSessionIds,[]);
+    assert.deepEqual(archived,[]);
+  }finally{adapter.close();}
+});
+
+test('session archive refuses without a registry or when the host rejects it',async()=>{
+  const adapter=createRemoteSessionsAdapter({
+    ctx:{get:key=>key==='sessionController'?{}:undefined},library:{},relay:{close(){}}});
+  try{await assert.rejects(adapter.execute('archive',{sessionId:'s1'}),{code:'SESSIONS_UNAVAILABLE'});}
+  finally{adapter.close();}
+  const refusing=createRemoteSessionsAdapter({
+    ctx:{get:key=>key==='sessionController'?{}:key==='workspaceRegistry'
+      ?{archivedSessionIds:[],archiveSession:async()=>{throw Error('session still running');}}
+      :undefined},library:{},relay:{close(){}}});
+  try{
+    await assert.rejects(refusing.execute('archive',{sessionId:'s1'}),{code:'SESSION_CONFLICT'});
+    await assert.rejects(refusing.execute('archive',{}),{code:'INVALID_REQUEST'});
+  }finally{refusing.close();}
+});
+
 test('interaction relay only accepts explicit single-use decisions and respects stream generation',async()=>{
   let wake,stopped=false;const received=[];const frames=[{type:'waterfall',eventId:'e1',agentId:'s1',event:'approval/request',request:{toolName:'edit_file'}}];
   const peer={principal:{kind:'owner'}};

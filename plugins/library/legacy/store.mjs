@@ -513,7 +513,8 @@ export function createStore(path,{recover=true}={}) {
       addCurrentVersion(id,'删除记录');
       appendSyncChange(id,'delete',{createActivity:false,preserveSources:true});return {id,revision:revision+1};
     })(),
-    restoreRemoved:({id,revision})=>{
+    removedRecords:()=>db.prepare("SELECT id,kind,title,revision,updated FROM records WHERE deleted=1 AND kind<>'ai_annotation' ORDER BY updated DESC, rowid DESC").all().map(row=>({...row,contentDay:get(row.id)?.contentDay??null})),
+    restoreRemoved:({id,revision})=>db.transaction(()=>{
       requireText(id,100);if(!Number.isInteger(revision)||revision<1)throw new Error('版本无效');
       const original=get(id);if(original?.kind==='ai_annotation')throw new Error('批注只能通过专用接口修改');if(original?.kind==='journal')assertJournalDay(id,original.contentDay);
       const result=db.prepare('UPDATE records SET deleted=0,revision=revision+1 WHERE id=? AND revision=? AND deleted=1').run(id,revision);
@@ -521,7 +522,7 @@ export function createStore(path,{recover=true}={}) {
       addCurrentVersion(id,'恢复已删除记录');
       appendSyncChange(id,'restore',{createActivity:false,preserveSources:true});
       return {id,revision:revision+1};
-    },
+    })(),
     versions:({id})=>db.prepare('SELECT * FROM versions WHERE record=? ORDER BY revision DESC').all(id).map(r=>({...r,doc:parse(r.doc),...(annotationOf(r.record)?{annotationOf:annotationOf(r.record)}:{})})),
     restoreVersion:({id,versionId,revision})=>{const v=db.prepare('SELECT * FROM versions WHERE id=? AND record=?').get(versionId,id);if(!v)throw new Error('版本不存在');const current=db.prepare('SELECT id FROM versions WHERE record=? ORDER BY revision DESC LIMIT 1').get(id);return save({id,revision,doc:parse(v.doc),title:v.title,reason:`恢复版本 ${v.revision}`},{syncAction:'restore',parentVersionIds:[...new Set([current?.id,versionId].filter(Boolean))]});},
     draft:({value,origin='personal'})=>{requireText(value,1000000);if(!origins.includes(origin))throw new Error('无效来源');db.transaction(()=>{setSetting('captureDraft',value);setSetting('captureDraftOrigin',origin);})();return true;},

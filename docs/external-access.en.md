@@ -1,6 +1,6 @@
 # External agents and Shiwen
 
-Shiwen 0.1.3 (Linux x64) includes a local HTTP service, an official SDK stdio MCP bridge, a CLI and a portable Skill. All adapters use the same record service; they do not open the database directly.
+Shiwen 0.1.15 (Linux x64) includes a local HTTP service, an official SDK stdio MCP bridge, a CLI and a portable Skill. Public previews from 0.1.4 on share the same flow; reading notes and daily-goal review need 0.1.14 or later. All adapters use the same record service; they do not open the database directly.
 
 ## Connect
 

@@ -1,4 +1,5 @@
 import React, {useEffect, useRef, useState} from 'react';
+import {MessageDialog} from './MessageDialog.jsx';
 import {call} from '../bridge/library.mjs';
 import {MarkdownView} from './MarkdownView.jsx';
 import {enqueueRecordDraft,flushRecordDraft} from './record-draft-queue.mjs';
@@ -44,6 +45,6 @@ export function AnnotationPanel({libraryId, original, attachments, t, onStateCha
       {editor&&<div><label>{t('标题','Title')}<input value={editor.title} maxLength={200} disabled={busy||uncertain} onChange={e=>change({...editor,title:e.target.value})}/></label><label>{t('标注正文 · Markdown','Annotation · Markdown')}<button className="chip" disabled={busy||uncertain} onClick={insert}>{t('插入图片','Insert image')}</button><textarea className="record-editor" value={editor.body} disabled={busy||uncertain} onChange={e=>change({...editor,body:e.target.value})}/></label><div className="node-actions"><button className="primary" disabled={busy||!editor.body.trim()} onClick={save}>{uncertain?t('再次核对保存结果','Retry save'):t('保存','Save')}</button><button className="chip" disabled={busy||uncertain} onClick={cancel}>{t('取消','Cancel')}</button></div></div>}
       {items.map(item=><article key={item.id}><h3>{item.title||t('未命名标注','Untitled annotation')}</h3><p className="secondary">{item.annotationOf?.versionId!==original.versionId?t('基于较早版本','Based on an earlier version'):t('基于当前版本','Based on current version')}</p><MarkdownView markdown={item.markdown} libraryId={libraryId} recordId={item.id} attachmentDescriptors={item.attachmentDescriptors||[]}/><div className="node-actions">{!deleted&&<button className="chip" disabled={busy||!!editor||!!stateAction} onClick={()=>change({id:item.id,revision:item.revision,title:item.title||'',body:item.markdown||'',requestId:crypto.randomUUID(),staged:[],descriptors:item.attachmentDescriptors||[]})}>{t('编辑','Edit')}</button>}<button className="chip" disabled={busy||!!editor||!!stateAction} onClick={()=>state(item)}>{deleted?t('恢复','Restore'):t('删除','Delete')}</button></div></article>)}
       {!items.length&&!editor&&<p className="empty-state">{t('暂无 AI 标注。','No AI annotations yet.')}</p>}</div>}
-    {error&&<p className="error" role="alert">{error}</p>}
+    {error&&<MessageDialog message={error} onClose={()=>setError('')}/>}
   </section>;
 }

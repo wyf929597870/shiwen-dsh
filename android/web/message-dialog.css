@@ -1,0 +1,9 @@
+.message-dialog-backdrop{position:fixed;inset:0;z-index:500;background:#0008;display:flex;align-items:center;justify-content:center;padding:20px}
+.message-dialog{width:min(100%,400px);max-height:75dvh;overflow:auto;background:#252d2a;color:#edf3ef;border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 16px 48px #0004}
+.message-dialog h2{font-size:18px;margin:0 0 12px}.message-dialog p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6}.message-dialog>button{display:block;margin:18px 0 0 auto}
+html[data-theme=light] .message-dialog{background:#fff;color:#202a25}
+.message-save-kind{display:grid;gap:8px;margin:12px 0;color:var(--muted)}
+.message-save-kind select{width:100%;border:1px solid var(--line);border-radius:8px;padding:10px;color:inherit}
+html[data-theme=light] .message-save-kind select{background:#f8faf9;color:#20282d}
+
+.message-kind-options{display:grid;gap:8px;margin:12px 0}.message-kind-options .chip{width:100%;text-align:left;border-radius:10px}

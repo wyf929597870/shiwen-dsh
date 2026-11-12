@@ -277,6 +277,14 @@ class LibraryProbePlugin : Plugin() {
         activity.moveTaskToBack(true)
         call.resolve()
     }, call)
+    @PluginMethod fun appInfo(call: PluginCall) = trusted({
+        try {
+            val info = context.packageManager.getPackageInfo(context.packageName, 0)
+            @Suppress("DEPRECATION")
+            val code = if (android.os.Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()
+            call.resolve(JSObject().put("versionName", info.versionName ?: "").put("versionCode", code))
+        } catch (error: Exception) { call.reject(error.message ?: "APP_INFO_UNAVAILABLE") }
+    }, call)
     private fun run(call: PluginCall, checkContext: Boolean = true, network: Boolean = false, action: () -> JSObject) {
         trusted({
             val admitted = generation.get()
@@ -356,6 +364,7 @@ class LibraryProbePlugin : Plugin() {
         JSObject(syncCoordinator.connect(call.getString("nodeId") ?: error("NODE_ID_REQUIRED")).toString())
     }
     @PluginMethod fun syncNow(call: PluginCall) = run(call, network = true) {
+        if ((call.getString("mode") ?: "manual") == "manual") refreshSelectedProfile()
         JSObject(syncCoordinator.syncNow(repository.libraryId, call.getString("mode") ?: "manual").toString())
     }
     @PluginMethod fun syncProgress(call: PluginCall) = run(call, checkContext = false) {
@@ -396,21 +405,43 @@ class LibraryProbePlugin : Plugin() {
         val rows = repository.dao.conflicts(limit + 1, offset)
         val hasMore = rows.size > limit
         val items = rows.take(limit).map { conflict ->
+            val snapshot = runCatching { JSONObject(conflict.localJson) }.getOrDefault(JSONObject())
+            val local = snapshot.optJSONObject("record") ?: snapshot.optJSONObject("payload") ?: snapshot
+            val row = repository.dao.record(conflict.recordId)
             JSObject().put("id", conflict.id).put("recordId", conflict.recordId).put("operationId", conflict.operationId)
+                .put("title", local.optString("title").takeIf { it.isNotBlank() } ?: row?.title ?: "")
+                .put("kind", local.optString("kind").takeIf { it.isNotBlank() } ?: row?.kind ?: "")
+                .put("contentDay", local.optString("contentDay").takeIf { it.isNotBlank() && it != "null" } ?: row?.contentDay ?: JSONObject.NULL)
                 .put("remoteRevision", conflict.remoteRevision ?: JSONObject.NULL).put("state", conflict.state)
                 .put("createdAt", conflict.createdAt)
         }
         JSObject().put("items", JSArray(items)).put("nextCursor", if (hasMore) (offset + limit).toString() else JSONObject.NULL)
     }
     @PluginMethod fun syncConflictRead(call: PluginCall) = run(call) {
-        val conflict = checkNotNull(repository.dao.conflict(call.getString("conflictId") ?: error("SYNC_CONFLICT_ID_REQUIRED"))) {
-            "SYNC_CONFLICT_NOT_FOUND"
-        }
+        val conflict = repository.readConflictWithBootstrapRevision(call.getString("conflictId") ?: error("SYNC_CONFLICT_ID_REQUIRED"))
         val localSnapshot = JSONObject(conflict.localJson)
         val remoteSnapshot = JSONObject(conflict.remoteJson)
         val localRecord = localSnapshot.optJSONObject("record") ?: localSnapshot.optJSONObject("payload") ?: localSnapshot
         val remoteRecord = remoteSnapshot.optJSONObject("record") ?: remoteSnapshot.optJSONObject("currentRecord") ?: remoteSnapshot
-        val dto = JSObject().put("id", conflict.id).put("recordId", conflict.recordId).put("operationId", conflict.operationId)
+        val head = repository.dao.remoteHead(conflict.recordId)
+        val current = repository.dao.record(conflict.recordId)
+        val storedHead = remoteSnapshot.optJSONObject("currentHead") ?: remoteRecord
+        val oldVersion = storedHead.optString("versionId").takeIf { it.isNotBlank() && it != "null" }
+        val oldChange = storedHead.optString("changeId").takeIf { it.isNotBlank() && it != "null" }
+        val localVersion = localRecord.optString("versionId").takeIf { it.isNotBlank() && it != "null" }
+        val localChanged = current != null && if (localVersion != null) localVersion != current.versionId else
+            localRecord.has("markdown") && (localRecord.optString("markdown") != current.markdown ||
+                localRecord.optString("title") != current.title || localRecord.optString("kind") != current.kind ||
+                localRecord.optBoolean("deleted") != current.deleted)
+        val unknownIdentityChanged = head != null && conflict.remoteRevision == head.revision && oldVersion == null && oldChange == null &&
+            !runCatching { io.github.wyf929597870.shiwen.library.sameConflictSnapshot(remoteRecord, JSONObject(head.recordJson)) }.getOrDefault(false)
+        val changed = localChanged || unknownIdentityChanged || (head != null && (conflict.remoteRevision != head.revision ||
+            (oldVersion != null && oldVersion != head.versionId) || (oldChange != null && oldChange != head.changeId)))
+        val latest = if (head != null && head.revision > 0 && !head.versionId.isNullOrBlank() && head.versionId != "null" && current != null)
+            JSObject().put("revision", head.revision).put("versionId", head.versionId)
+                .put("changeId", head.changeId ?: JSONObject.NULL).put("localRevision", current.revision) else null
+        val dto = JSObject().put("headChanged", changed).put("latestHead", latest ?: JSONObject.NULL)
+            .put("id", conflict.id).put("recordId", conflict.recordId).put("operationId", conflict.operationId)
             .put("base", JSONObject(conflict.baseJson)).put("local", localRecord).put("remote", remoteRecord)
             .put("localVersion", localSnapshot.optJSONObject("version") ?: JSONObject.NULL)
             .put("localOperation", localSnapshot.optJSONObject("operation") ?: JSONObject.NULL)
@@ -418,13 +449,28 @@ class LibraryProbePlugin : Plugin() {
             .put("remoteRevision", conflict.remoteRevision ?: JSONObject.NULL).put("state", conflict.state).put("createdAt", conflict.createdAt)
         JSObject().put("conflict", dto)
     }
+    @PluginMethod fun syncConflictRefresh(call: PluginCall) = run(call) {
+        val conflictId = call.getString("conflictId") ?: error("SYNC_CONFLICT_ID_REQUIRED")
+        val revision = io.github.wyf929597870.shiwen.library.parseRemoteRevision(call.data.opt("expectedRemoteRevision"))
+            ?: error("SYNC_REMOTE_REVISION_REQUIRED")
+        val versionId = call.getString("expectedVersionId") ?: error("SYNC_REMOTE_VERSION_MISSING")
+        val localRevision = io.github.wyf929597870.shiwen.library.parseRemoteRevision(call.data.opt("expectedLocalRevision"))
+            ?: error("RECORD_REVISION_REQUIRED")
+        val changeId = call.getString("expectedChangeId")?.takeIf { it.isNotBlank() && it != "null" }
+        val refreshed = repository.refreshConflictSnapshot(conflictId, revision, versionId, changeId, localRevision)
+        JSObject().put("conflictId", refreshed.id)
+    }
     @PluginMethod fun syncConflictResolve(call: PluginCall) = run(call) {
         val conflictId = call.getString("conflictId") ?: error("SYNC_CONFLICT_ID_REQUIRED")
         val requestId = call.getString("requestId") ?: error("MISSING_REQUEST")
-        val expectedRemoteRevision = call.getLong("expectedRemoteRevision") ?: error("SYNC_REMOTE_REVISION_REQUIRED")
+        val expectedRemoteRevision = io.github.wyf929597870.shiwen.library.parseRemoteRevision(call.data.opt("expectedRemoteRevision"))
+            ?: error("SYNC_REMOTE_REVISION_REQUIRED")
         val conflict = checkNotNull(repository.dao.conflict(conflictId)) { "SYNC_CONFLICT_NOT_FOUND" }
         check(conflict.state == "open") { "SYNC_CONFLICT_NOT_OPEN" }
         check(conflict.remoteRevision == expectedRemoteRevision) { "CONFLICT_HEAD_CHANGED" }
+        val expectedLocal = if (call.data.has("expectedLocalRevision"))
+            io.github.wyf929597870.shiwen.library.parseRemoteRevision(call.data.opt("expectedLocalRevision"))
+                ?: error("RECORD_REVISION_REQUIRED") else null
         val resolution = call.getObject("resolution") ?: error("SYNC_RESOLUTION_REQUIRED")
         val kind = resolution.optString("kind")
         val remote = repository.dao.remoteHead(conflict.recordId)
@@ -438,10 +484,11 @@ class LibraryProbePlugin : Plugin() {
             if (expectedChange != null) check(remote?.changeId == expectedChange) { "CONFLICT_HEAD_CHANGED" }
         }
         val record = when (kind) {
-            "keep-remote" -> repository.resolveConflictRemote(conflictId, expectedRemoteRevision, requestId)
+            "keep-remote" -> repository.resolveConflictRemote(conflictId, expectedRemoteRevision, requestId, expectedLocal)
             "keep-local" -> {
                 val currentRemote = checkNotNull(remote) { "SYNC_REMOTE_HEAD_MISSING" }
                 val current = repository.read(conflict.recordId)
+                check(expectedLocal == null || current.revision == expectedLocal) { "CONFLICT_HEAD_CHANGED" }
                 val patch = JSONObject().put("title", current.title).put("markdown", current.markdown).put("kind", current.kind)
                     .put("origin", current.origin).put("processing", current.processing)
                     .put("contentDay", current.contentDay ?: JSONObject.NULL).put("dateBasis", current.dateBasis)
@@ -463,6 +510,7 @@ class LibraryProbePlugin : Plugin() {
                         error("INVALID_RECORD_FIELD")
                 }
                 val current = repository.read(conflict.recordId)
+                check(expectedLocal == null || current.revision == expectedLocal) { "CONFLICT_HEAD_CHANGED" }
                 repository.update(current.id, current.revision, requestId, patch, currentRemote, "resolve", conflictId)
             }
             else -> error("SYNC_RESOLUTION_INVALID")
@@ -550,8 +598,12 @@ class LibraryProbePlugin : Plugin() {
         val expected = call.data.opt("expectedRevision") as? Number ?: error("INVALID_REVISION")
         val patch = call.getObject("patch") ?: error("RECORD_PATCH_REQUIRED")
         val staged = stagedAttachments(call, patch)
-        val record = repository.update(call.getString("id") ?: "", expected.toLong(), call.getString("requestId") ?: error("MISSING_REQUEST"),
-            patch, stagedAttachments = staged)
+        val requestId = call.getString("requestId") ?: error("MISSING_REQUEST")
+        val record = try { repository.update(call.getString("id") ?: "", expected.toLong(), requestId,
+            patch, stagedAttachments = staged) } catch (error: IllegalStateException) {
+            if (error.message == "JOURNAL_DAY_EXISTS") call.getString("draftSlot")?.let { recordEditorDrafts.releaseRejected(repository.libraryId, it, requestId) }
+            throw error
+        }
         JSObject().put("record", json(record, true)).put("syncState", record.syncState)
     }
     @PluginMethod fun recordDelete(call: PluginCall) = run(call) {
@@ -575,6 +627,9 @@ class LibraryProbePlugin : Plugin() {
     @PluginMethod fun recordDraftRead(call: PluginCall) = run(call) {
         JSObject(recordEditorDrafts.read(repository.libraryId,
             call.getString("slot") ?: error("RECORD_DRAFT_SLOT_REQUIRED")).toString())
+    }
+    @PluginMethod fun legacyAnnotationDrafts(call: PluginCall) = run(call) {
+        JSObject().put("recordIds", recordEditorDrafts.pendingAnnotationSlots(repository.libraryId))
     }
     @PluginMethod fun recordDraftSave(call: PluginCall) = run(call) {
         val pending = call.getObject("pendingMutation")
@@ -848,6 +903,9 @@ class LibraryProbePlugin : Plugin() {
     @PluginMethod fun agentSelectConversation(call: PluginCall) = run(call) {
         agent.selectConversation(call.getString("id") ?: "")
     }
+    @PluginMethod fun agentDeleteConversation(call: PluginCall) = run(call) {
+        agent.deleteConversation(call.getString("id") ?: "")
+    }
     @PluginMethod fun agentRecent(call: PluginCall) = run(call) {
         val offset = call.getInt("offset") ?: 0
         require(offset >= 0)
@@ -924,11 +982,13 @@ class LibraryProbePlugin : Plugin() {
             call.getString("taskId") ?: error("RECOVERY_TASK_REQUIRED")).toString())
     }
 
-    private fun json(row: LibraryRecord, full: Boolean): JSObject = JSObject().put("id", row.id)
+    private fun json(row: LibraryRecord, full: Boolean): JSObject {
+        val displayState = if (repository.dao.hasOpenConflict(row.id)) "conflict" else row.syncState
+        return JSObject().put("id", row.id)
         .put("title", row.title).put("kind", row.kind).put("createdAt", row.createdAt)
         .put("origin", row.origin).put("contentDay", row.contentDay ?: JSONObject.NULL)
-        .put("processing", row.processing).put("revision", row.revision).put("syncState", row.syncState)
-        .put("state", row.syncState).put("updatedAt", row.updatedAt).put("deleted", row.deleted)
+        .put("processing", row.processing).put("revision", row.revision).put("syncState", displayState)
+        .put("state", displayState).put("updatedAt", row.updatedAt).put("deleted", row.deleted)
         .put("stage", row.stage ?: JSONObject.NULL).put("dateBasis", row.dateBasis)
         .apply { row.annotationOfJson?.let { put("annotationOf", JSONObject(it)) } }
         .apply { if (full) {
@@ -937,6 +997,7 @@ class LibraryProbePlugin : Plugin() {
             put("attachmentDescriptors", attachmentDescriptors(row))
             put("versionId", row.versionId).put("changeId", row.changeId).put("serverRevision", row.serverRevision ?: JSONObject.NULL)
         } }
+    }
     private fun attachmentDescriptors(row: LibraryRecord): JSArray {
         val rows = repository.dao.allAttachments().associateBy { it.id }
         val source = org.json.JSONArray(row.attachmentDescriptorsJson)

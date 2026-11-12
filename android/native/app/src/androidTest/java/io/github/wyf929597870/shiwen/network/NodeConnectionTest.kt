@@ -31,10 +31,12 @@ class NodeConnectionTest {
         try {
             val profile = fixture(); val url = server.url("/").toString()
             val id = store.save(null, "隔离测试节点", url, true).getString("id")
+            server.enqueue(MockResponse().setBody("{\"authenticated\":false}"))
             server.enqueue(MockResponse().addHeader("Set-Cookie", "fixture-session=fixture-only; Path=/; HttpOnly").setBody("{\"ok\":true}"))
             server.enqueue(MockResponse().setBody("{\"authenticated\":true}"))
             server.enqueue(MockResponse().setBody(JSONObject().put("result", profile).toString()))
             NodeConnection(store).refresh(id, "fixture-password")
+            assertEquals("/auth/status", server.takeRequest(2, TimeUnit.SECONDS)!!.path)
             val login = server.takeRequest(2, TimeUnit.SECONDS)!!
             assertEquals("/auth/login", login.path)
             assertEquals(url.trimEnd('/'), login.getHeader("Origin"))
@@ -75,6 +77,7 @@ class NodeConnectionTest {
         val executor = Executors.newSingleThreadExecutor()
         oldNode.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
+                if (request.path == "/auth/status") return MockResponse().setBody("{\"authenticated\":true}")
                 requestArrived.countDown()
                 check(releaseResponse.await(5, TimeUnit.SECONDS))
                 return MockResponse().setBody("""{"result":{"name":"SOUL.md","body":"updated","revision":2}}""")
@@ -98,7 +101,7 @@ class NodeConnectionTest {
             assertEquals(id, result.nodeId)
             assertEquals(oldUrl, result.baseUrl)
             assertEquals("updated", (result.value as JSONObject).getString("body"))
-            assertEquals(1, oldNode.requestCount)
+            assertEquals(2, oldNode.requestCount)
             assertEquals(0, newNode.requestCount)
         } finally {
             releaseResponse.countDown()
@@ -118,6 +121,7 @@ class NodeConnectionTest {
         val executor = Executors.newSingleThreadExecutor()
         oldNode.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
+                if (request.path == "/auth/status") return MockResponse().setBody("{\"authenticated\":true}")
                 requestArrived.countDown()
                 check(releaseResponse.await(5, TimeUnit.SECONDS))
                 return MockResponse().setBody("""{"result":{"identity":{},"soul":{},"memories":[]}}""")
@@ -138,7 +142,7 @@ class NodeConnectionTest {
             releaseResponse.countDown()
 
             assertEquals("NODE_CHANGED", future.get(5, TimeUnit.SECONDS))
-            assertEquals(1, oldNode.requestCount)
+            assertEquals(2, oldNode.requestCount)
             assertEquals(0, newNode.requestCount)
         } finally {
             releaseResponse.countDown()

@@ -89,7 +89,7 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
         val row = repo.registryItem()
         val pendingOperations = repo.dao.pendingOutbox(100_000)
         val pending = pendingOperations.size
-        val rejectedOperations = repo.dao.allOutbox().filter { it.state == "rejected" }
+        val rejectedOperations = repo.dao.allOutbox().filter { isActionableRejection(it.state, it.lastError) }
         val conflicts = repo.dao.conflicts(100_000, 0).size
         val progress = repo.dao.meta("syncProgress")?.let(::JSONObject)
         return JSONObject().put("state", when {
@@ -103,6 +103,7 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
             .put("rejectedCount", rejectedOperations.size)
             .put("rejectedOperations", JSONArray(rejectedOperations.map { item ->
                 JSONObject().put("operationId", item.operationId).put("recordId", item.recordId)
+                    .put("title", repo.dao.record(item.recordId)?.title ?: JSONObject.NULL)
                     .put("code", item.lastError ?: "UNKNOWN")
             })).put("conflictCount", conflicts).put("appliedCursor", row.appliedCursor ?: JSONObject.NULL)
             .put("completeCursor", row.completeCursor ?: JSONObject.NULL).put("lastSyncedAt", row.lastSyncedAt ?: JSONObject.NULL)
@@ -680,11 +681,6 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
                 val row = fromRecord(item)
                 val existing = dao.record(row.id)
                 if (existing == null) dao.insertRemoteRecord(row)
-                else if (!sameContent(existing, row)) {
-                    val head = dao.remoteHead(row.id)
-                    dao.putConflict(LibraryConflict(UUID.randomUUID().toString(), row.id, "bootstrap", "{}",
-                        recordJson(existing).toString(), recordJson(row).toString(), head?.revision, "open", Instant.now().toString()))
-                }
                 dao.putRemoteHead(LibraryRemoteHead(row.id, 0, null, null, row.deleted, recordJson(row).toString(), Instant.now().toString()))
             }
             "heads" -> {
@@ -699,8 +695,11 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
                     if (remote != null && sameContent(local, remote)) dao.updateRecord(local.copy(
                         versionId = item.optString("versionId"), changeId = item.optString("changeId"),
                         serverRevision = rev, syncState = "synced"))
-                    else if (remote != null) dao.putConflict(LibraryConflict(UUID.randomUUID().toString(), id, "bootstrap-head",
-                        "{}", recordJson(local).toString(), recordJson(remote).toString(), rev, "open", Instant.now().toString()))
+                    else if (remote != null) {
+                        val conflictId = stableConflictId(repo.libraryId, "bootstrap:$id", rev, item.optString("changeId"))
+                        if (dao.conflict(conflictId) == null) dao.putConflict(LibraryConflict(conflictId, id, "bootstrap-head",
+                            "{}", recordJson(local).toString(), recordJson(remote).toString(), rev, "open", Instant.now().toString()))
+                    }
                     dao.putRemoteHead(LibraryRemoteHead(id, rev, item.optString("versionId").takeIf { it.isNotBlank() },
                         item.optString("changeId").takeIf { it.isNotBlank() }, item.optBoolean("deleted"),
                         dao.remoteHead(id)?.recordJson ?: "{}", Instant.now().toString()))
@@ -758,7 +757,8 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
         event.optJSONArray("activities")?.let { activities -> for (i in 0 until activities.length()) applySnapshotItem(repo, "activities", activities.getJSONObject(i)) }
         if (observed != null && (observed.revision > revision || observed.revision == revision && observed.changeId == eventChangeId)) return
         if (observed != null && observed.revision == revision && observed.changeId != eventChangeId) {
-            repo.dao.putConflict(LibraryConflict(UUID.randomUUID().toString(), row.id, eventChangeId ?: "branch",
+            val conflictId = stableConflictId(repo.libraryId, "event:${eventChangeId ?: versionId}", revision, observed.changeId)
+            if (repo.dao.conflict(conflictId) == null) repo.dao.putConflict(LibraryConflict(conflictId, row.id, eventChangeId ?: "branch",
                 observed.recordJson, recordJson(repo.dao.record(row.id) ?: row).toString(), recordJson(row).toString(), revision,
                 "open", Instant.now().toString()))
             return

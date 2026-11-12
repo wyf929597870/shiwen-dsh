@@ -18,7 +18,8 @@
     "@capacitor/core": "8.6.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
-    "markdown-it": "^15.0.3"
+    "markdown-it": "^15.0.3",
+    "diff": "^8.0.0"
   },
   "devDependencies": {
     "@capacitor/cli": "8.6.0",

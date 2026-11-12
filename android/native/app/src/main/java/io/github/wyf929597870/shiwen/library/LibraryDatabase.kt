@@ -158,6 +158,7 @@ interface LibraryDao {
     @Update fun updateOutbox(row: LibraryOutbox): Int
     @Insert(onConflict = OnConflictStrategy.REPLACE) fun putConflict(row: LibraryConflict)
     @Query("SELECT * FROM conflicts WHERE state='open' ORDER BY createdAt DESC, id DESC LIMIT :limit OFFSET :offset") fun conflicts(limit: Int, offset: Int): List<LibraryConflict>
+    @Query("SELECT EXISTS(SELECT 1 FROM conflicts WHERE recordId=:recordId AND state='open')") fun hasOpenConflict(recordId: String): Boolean
     @Query("SELECT * FROM conflicts WHERE id=:id") fun conflict(id: String): LibraryConflict?
     @Query("SELECT * FROM conflicts ORDER BY id") fun allConflicts(): List<LibraryConflict>
     @Update fun updateConflict(row: LibraryConflict): Int

@@ -11,4 +11,12 @@ html[data-theme="light"] .library-connection.is-online{color:#187548}html[data-t
 .sheet-list{overflow:auto;overscroll-behavior:contain}.sheet-library{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:64px;padding:10px 12px;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--line)}.sheet-library>span:first-child{min-width:0;display:flex;flex-direction:column;gap:4px}.sheet-library strong{overflow-wrap:anywhere}.sheet-library small{color:var(--muted)}.sheet-library[aria-current]{background:#29443b;border-radius:9px;color:var(--mint)}.sheet-manage{min-height:48px;text-align:left;background:none;border:0;color:var(--mint);padding:10px 12px}
 html[data-theme="light"] .library-sheet{background:#fff}html[data-theme="light"] .sheet-library[aria-current]{background:#e3f3ec;color:#1d6d53}
 @media(max-height:440px){.app>.shell-header{display:flex;min-height:44px;padding-top:2px;padding-bottom:2px}}
-@media (max-height:700px){.app:has(.agent-composer textarea:focus)>nav{display:none}.app:has(.agent-composer textarea:focus) .chat-welcome{display:none}}
+@media (max-height:700px){.app:has(.agent-composer textarea:focus) .chat-welcome{display:none}}
+
+.app-version { font-size: 0.68rem; font-weight: 400; white-space: nowrap; opacity: 0.72; }
+.app>nav{display:flex;justify-content:stretch}
+.app>nav button{flex:1;min-width:0}
+.app>main:has(.record-detail-open){padding-top:0}
+.app:has(>.composer) main{flex:0 0 auto;padding-bottom:0}
+.app:has(>.composer)>.composer{flex:1;min-height:0;display:flex;flex-direction:column;margin-top:4px}
+.app:has(>.composer)>.composer textarea{flex:1;max-height:none}

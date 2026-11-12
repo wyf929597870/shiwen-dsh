@@ -150,6 +150,78 @@ class LibraryConflictResolutionTest {
         assertEquals(0, activity.added); assertEquals(0, activity.removed)
     }
 
+    @Test fun keepRemoteReadsWrappedConflictRecordAndHead() = withRepository { repo ->
+        val created = repo.create(UUID.randomUUID().toString(), input("原稿"), 1)
+        val local = repo.update(created.id, created.revision, UUID.randomUUID().toString(), JSONObject().put("markdown", "手机内容"))
+        val remoteRecord = local.copy(markdown = "服务内容", sourcesJson = JSONArray().put(JSONObject().put("text", "服务内容").put("origin", "personal")).toString())
+        val remote = addRemoteHead(repo, remoteRecord)
+        val original = conflict(repo, local, remote)
+        val record = JSONObject(remote.recordJson).apply { remove("versionId"); remove("changeId") }
+        val snapshot = JSONObject().put("currentRecord", record).put("currentHead", JSONObject()
+            .put("revision", remote.revision).put("versionId", remote.versionId).put("changeId", remote.changeId))
+        repo.dao.putConflict(original.copy(remoteJson = snapshot.toString()))
+        val result = repo.resolveConflictRemote(original.id, remote.revision, UUID.randomUUID().toString())
+        assertEquals("服务内容", result.markdown)
+        assertEquals(remote.versionId, result.versionId)
+        assertEquals("resolved-remote", repo.dao.conflict(original.id)!!.state)
+    }
+
+    @Test fun legacyBootstrapConflictRecoversRevisionOnlyForExactServerSnapshot() = withRepository { repo ->
+        val created = repo.create(UUID.randomUUID().toString(), input("起点"), 1)
+        val local = repo.update(created.id, created.revision, UUID.randomUUID().toString(), JSONObject().put("markdown", "手机"))
+        val remoteRecord = local.copy(markdown = "服务端", sourcesJson = JSONArray().put(JSONObject().put("text", "服务端").put("origin", "personal")).toString())
+        val remote = addRemoteHead(repo, remoteRecord, 7)
+        val legacy = LibraryConflict(UUID.randomUUID().toString(), local.id, "bootstrap", "{}", "{}", remote.recordJson, null, "open", "2026-11-07T10:00:00Z")
+        repo.dao.putConflict(legacy)
+        val mismatched = legacy.copy(id = UUID.randomUUID().toString(), remoteJson = JSONObject(remote.recordJson).put("title", "不同快照").toString())
+        repo.dao.putConflict(mismatched)
+        assertNull(repo.readConflictWithBootstrapRevision(mismatched.id).remoteRevision)
+        val recovered = repo.readConflictWithBootstrapRevision(legacy.id)
+        assertEquals(7L, recovered.remoteRevision)
+        assertEquals(7L, repo.dao.conflict(legacy.id)!!.remoteRevision)
+        val saved = repo.resolveConflictRemote(legacy.id, 7L, UUID.randomUUID().toString())
+        assertEquals("服务端", saved.markdown)
+        assertEquals("open", repo.dao.conflict(mismatched.id)!!.state)
+    }
+
+    @Test fun refreshConflictPreservesOldSnapshotsAndRejectsMovedHeads() = withRepository { repo ->
+        val created = repo.create(UUID.randomUUID().toString(), input("原文"), 1)
+        val local = repo.update(created.id, created.revision, UUID.randomUUID().toString(), JSONObject().put("markdown", "手机内容"))
+        val oldHead = addRemoteHead(repo, local, 2)
+        val conflict = conflict(repo, local, oldHead)
+        val latestRecord = local.copy(markdown = "最新服务端", sourcesJson = JSONArray().put(JSONObject().put("text", "最新服务端").put("origin", "personal")).toString())
+        val latest = addRemoteHead(repo, latestRecord, 3)
+        val rejected = runCatching { repo.refreshConflictSnapshot(conflict.id, oldHead.revision, oldHead.versionId!!, oldHead.changeId, local.revision) }.exceptionOrNull()
+        assertEquals("CONFLICT_HEAD_CHANGED", rejected?.message)
+        assertEquals(1, repo.dao.allConflicts().size)
+        val refreshed = repo.refreshConflictSnapshot(conflict.id, latest.revision, latest.versionId!!, latest.changeId, local.revision)
+        assertEquals("最新服务端", JSONObject(refreshed.remoteJson).getString("markdown"))
+        assertEquals("手机内容", JSONObject(refreshed.localJson).getString("markdown"))
+        assertEquals(3L, refreshed.remoteRevision)
+        val old = repo.dao.allConflicts().single { it.state == "superseded" }
+        assertEquals(conflict.remoteJson, old.remoteJson)
+        assertEquals(conflict.localJson, old.localJson)
+        assertEquals("open", refreshed.state)
+        val changed = repo.update(local.id, local.revision, UUID.randomUUID().toString(), JSONObject().put("markdown", "手机再次修改"))
+        val error = runCatching { repo.resolveConflictRemote(conflict.id, latest.revision, UUID.randomUUID().toString(), local.revision) }.exceptionOrNull()
+        assertEquals("CONFLICT_HEAD_CHANGED", error?.message)
+        assertEquals("手机再次修改", changed.markdown)
+        assertEquals("open", repo.dao.conflict(conflict.id)!!.state)
+    }
+
+    @Test fun sameRevisionWithoutSnapshotIdentityRejectsDifferentContent() = withRepository { repo ->
+        val created = repo.create(UUID.randomUUID().toString(), input("原稿"), 1)
+        val local = repo.update(created.id, created.revision, UUID.randomUUID().toString(), JSONObject().put("markdown", "手机"))
+        val remote = addRemoteHead(repo, local, 2)
+        val snapshot = JSONObject(remote.recordJson).apply { remove("versionId"); remove("changeId"); put("title", "较早快照") }
+        val conflict = LibraryConflict(UUID.randomUUID().toString(), local.id, "old", "{}", "{}", snapshot.toString(), 2, "open", "2026-11-07T10:00:00Z")
+        repo.dao.putConflict(conflict)
+        val error = runCatching { repo.resolveConflictRemote(conflict.id, 2, UUID.randomUUID().toString()) }.exceptionOrNull()
+        assertEquals("CONFLICT_HEAD_CHANGED", error?.message)
+        assertEquals(local.markdown, repo.read(local.id).markdown)
+        assertEquals("open", repo.dao.conflict(conflict.id)!!.state)
+    }
+
     @Test fun sameRevisionDifferentChangeIdIsAStaleCASConflict() = withRepository { repo ->
         val created = repo.create(UUID.randomUUID().toString(), input("起点"), 1)
         val local = repo.update(created.id, created.revision, UUID.randomUUID().toString(), JSONObject().put("markdown", "本地"))
@@ -165,6 +237,8 @@ class LibraryConflictResolutionTest {
         }.exceptionOrNull()
 
         assertEquals("CONFLICT_HEAD_CHANGED", error?.message)
+        val remoteError = runCatching { repo.resolveConflictRemote(conflict.id, remote.revision, UUID.randomUUID().toString()) }.exceptionOrNull()
+        assertEquals("CONFLICT_HEAD_CHANGED", remoteError?.message)
         assertEquals(before.markdown, repo.read(local.id).markdown)
         assertEquals("open", repo.dao.conflict(conflict.id)!!.state)
     }

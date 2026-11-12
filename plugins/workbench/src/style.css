@@ -272,3 +272,7 @@
 .sw-annotation-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.sw-annotation-detail-head h4{margin:0 0 12px;overflow-wrap:anywhere}.sw-annotation-detail-head button{flex-shrink:0}
 
 .sw-mobile-nav{grid-template-columns:repeat(5,minmax(0,1fr))}
+
+.sw-removed-list{max-height:300px;overflow:auto}.sw-removed-list h2{font-size:16px;margin:0 0 8px}.sw-removed-list>div{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0}.sw-removed-list span{min-width:0;overflow-wrap:anywhere}.sw-removed-list button{flex:none}
+
+@media (max-width:760px){.sw-head-actions{flex-wrap:wrap;justify-content:flex-end}}

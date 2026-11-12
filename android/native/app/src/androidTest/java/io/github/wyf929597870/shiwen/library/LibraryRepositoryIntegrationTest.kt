@@ -286,6 +286,18 @@ class LibraryRepositoryIntegrationTest {
         assertTrue(repo.dao.pendingOutbox(10).isEmpty())
     }
 
+    @Test fun conflictIndicatorTracksOpenConflictsForEachRecord() = withRepository { repo ->
+        val first=repo.create(UUID.randomUUID().toString(),input("冲突测试").put("kind","idea"),1)
+        val second=repo.create(UUID.randomUUID().toString(),input("另一条").put("kind","idea"),1)
+        val conflict=LibraryConflict(UUID.randomUUID().toString(),first.id,UUID.randomUUID().toString(),"{}","{}","{}",1,"open",java.time.Instant.now().toString())
+        assertFalse(repo.dao.hasOpenConflict(first.id))
+        repo.dao.putConflict(conflict)
+        assertTrue(repo.dao.hasOpenConflict(first.id))
+        assertFalse(repo.dao.hasOpenConflict(second.id))
+        repo.dao.updateConflict(conflict.copy(state="resolved"))
+        assertFalse(repo.dao.hasOpenConflict(first.id))
+    }
+
     @Test fun approvedSourceCorrectionPreservesTextAndDoesNotInventNewWriting() = withRepository { repo ->
         val original=repo.create(UUID.randomUUID().toString(),input("被错误标记的口述原话","ai"),1)
         val actions=AgentRecordActions(repo)

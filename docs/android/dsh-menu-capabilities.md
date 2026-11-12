@@ -1,5 +1,8 @@
 # Android parity for DSH and Shiwen menus
 
+> 范围更新：Android 功能收敛方向见 [移动端精简范围](mobile-scope.md)。本文保留历史背景，其中要求移动端与桌面管理能力对齐的内容不再作为现行要求。
+
+
 > **Current implementation status (2026-11-06):** The Android Settings UI now exposes node-bound Plugins, Automation tasks, and External access pages. These pages use the narrow `mobileManagement` owner API and native external-client wrappers described below; they do not implement general DSH Typert Remote, remote sessions, or Creator session setup. The earlier source inventory remains useful as an upstream reference, while the matrix near the end records the present mobile boundary.
 
 This inventory uses the pinned local DSH source `0.2.2-alpha.3` and current Shiwen plugin source. It identifies real UI modules and service methods; it does not read user-installed profile/configuration data.

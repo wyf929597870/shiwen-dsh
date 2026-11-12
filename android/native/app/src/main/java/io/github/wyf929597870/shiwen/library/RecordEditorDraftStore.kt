@@ -55,6 +55,10 @@ internal class RecordEditorDraftStore(context: Context, namespace: String = "shi
                 .put("pendingMutation", row.pendingMutationJson?.let(::JSONObject) ?: JSONObject.NULL).put("updatedAt", row.updatedAt)
         })
 
+    fun pendingAnnotationSlots(libraryId: String): JSONArray = JSONArray(db.dao().all(libraryId)
+        .filter { it.requestId != null && it.slot.startsWith("annotation:") }
+        .map { it.slot.removePrefix("annotation:") })
+
     fun restoreArchive(libraryId: String, rows: JSONArray, digest: String) = db.runInTransaction {
         val marker = db.dao().get(libraryId, "archive-restore-marker")
         if (marker?.contentJson == digest) return@runInTransaction
@@ -119,6 +123,14 @@ internal class RecordEditorDraftStore(context: Context, namespace: String = "shi
         db.dao().put(RecordEditorDraftRow(libraryId, slot, requestId, localGeneration, contentJson,
             pendingJson, System.currentTimeMillis()))
         return JSONObject().put("saved", true)
+    }
+
+    @Synchronized
+    fun releaseRejected(libraryId: String, slot: String, requestId: String) {
+        validateScope(libraryId, slot)
+        val current = db.dao().get(libraryId, slot) ?: return
+        if (current.requestId != requestId || current.pendingMutationJson == null) return
+        db.dao().put(current.copy(pendingMutationJson = null, updatedAt = System.currentTimeMillis()))
     }
 
     @Synchronized

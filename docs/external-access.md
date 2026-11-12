@@ -1,6 +1,6 @@
 # 外部 Agent 接入拾文
 
-适用版本：拾文 0.1.3，Linux x64。MCP 使用官方 `@modelcontextprotocol/server` 2.2.0 的 stdio 服务；HTTP 和 CLI 调用同一套资料接口，不直接访问 SQLite。
+适用版本：拾文 0.1.15，Linux x64（0.1.4 起的公开预览版沿用同一套流程；读书笔记与日目标趋势需 0.1.14 及以上）。MCP 使用官方 `@modelcontextprotocol/server` 2.2.0 的 stdio 服务；HTTP 和 CLI 调用同一套资料接口，不直接访问 SQLite。
 
 ## 桌面操作
 

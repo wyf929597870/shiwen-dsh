@@ -64,6 +64,23 @@ class RecordEditorDraftStoreTest {
         } finally { store.closeForTest() }
     }
 
+    @Test fun rejectedMutationReleasesOnlyMatchingRequestAndKeepsDraft() {
+        val store = RecordEditorDraftStore(ApplicationProvider.getApplicationContext(), "record-editor-rejected-${id()}")
+        val library = id(); val request = id(); val body = content("保留的正文")
+        val pending = JSONObject().put("action", "update").put("requestId", request)
+            .put("localGeneration", 2).put("id", "record-1").put("expectedRevision", 4).put("patch", JSONObject(body.toString()))
+        try {
+            store.save(library, "materials", request, 2, body, pending)
+            store.releaseRejected(library, "materials", id())
+            assertFalse(store.read(library, "materials").getJSONObject("draft").isNull("pendingMutation"))
+            store.releaseRejected(library, "materials", request)
+            val draft = store.read(library, "materials").getJSONObject("draft")
+            assertTrue(draft.isNull("pendingMutation"))
+            assertEquals("保留的正文", draft.getJSONObject("content").getString("markdown"))
+            store.save(library, "materials", id(), 3, body)
+        } finally { store.closeForTest() }
+    }
+
     @Test fun pendingMutationCannotBeChangedOrOverwrittenByANewerDraft() {
         val store = RecordEditorDraftStore(ApplicationProvider.getApplicationContext(), "record-editor-lock-${id()}")
         val library = id(); val request = id(); val body = content("保持的内容")

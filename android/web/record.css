@@ -56,7 +56,16 @@ html[data-theme=light] .share-inbox-item input,html[data-theme=light] .share-inb
 .record-metadata>summary{cursor:pointer;color:var(--muted)}
 html[data-theme=light] .record-source{color:#334149}
 .review-period{display:flex;align-items:center;gap:8px}.review-period select,.review-period input{min-width:0;max-width:100%;border:1px solid var(--line);border-radius:9px;padding:10px;background:transparent;color:inherit}.review-period select{flex:1}@media(max-width:560px){.review-period{display:flex;flex-wrap:wrap}.review-period input[type=month]{width:auto;flex:1}}
-.record-actions{position:relative}.record-actions summary{cursor:pointer;border:1px solid var(--line);border-radius:9px;padding:7px 10px;list-style:none}.record-actions[open]{z-index:2;display:flex;flex-wrap:wrap;gap:6px}.record-actions[open] summary{width:100%}.record-detail-head{position:static;padding-block:4px}
+.record-actions{position:relative}.record-actions summary{cursor:pointer;border:1px solid var(--line);border-radius:9px;padding:7px 10px;list-style:none}
+.record-action-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:6;display:grid;gap:6px;width:min(280px,80vw);max-height:50dvh;overflow:auto;padding:10px;border:1px solid var(--line);border-radius:10px;background:#22272e;box-shadow:0 8px 24px #0003}
+.record-action-menu .chip{text-align:left;white-space:normal}
+.record-detail-head{position:sticky;top:0;z-index:5;flex-wrap:wrap;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);background:#1d2127}
+.record-detail-head>div:last-child{margin-left:auto;justify-content:flex-end}
+.record-detail-head .chip,.record-detail-head .primary,.record-actions summary{min-height:40px}
+.record-detail .record-editor{width:100%;min-height:max(360px,55dvh);font-family:inherit;font-size:16px;line-height:1.8;padding:12px;scroll-margin-top:110px}
+.app .composer textarea{min-height:calc(5 * 1.7em + 8px);max-height:55dvh}
+html[data-theme=light] .record-detail-head{background:#f2f5f4}
+html[data-theme=light] .record-action-menu{background:#fff}
 html[data-theme=light] .review-period select,html[data-theme=light] .review-period input{background:#f8faf9;color:#20282d}
 .source-results{max-height:40dvh;overflow:auto;overscroll-behavior:contain}.source-results>label{display:flex;align-items:flex-start;gap:8px}.source-results input[type=checkbox]{width:auto;flex:none}
 
@@ -67,3 +76,41 @@ html[data-theme=light] .markdown-view th{background:#edf1f2}
 .markdown-view .md-network-image{max-width:100%;white-space:normal;overflow-wrap:anywhere;color:inherit;background:transparent;border:1px solid var(--line);border-radius:6px;padding:6px 9px;cursor:pointer}
 .md-image-viewer{width:min(96vw,1000px);max-width:96vw;max-height:96vh;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--surface,#fff);color:inherit}.md-image-viewer::backdrop{background:#000c}.md-image-viewer img{display:block;max-width:100%;max-height:80vh;margin:auto;object-fit:contain}.md-image-viewer button{display:block;margin:0 0 8px auto;padding:6px 12px}
 .markdown-view .md-attachment-pending,.markdown-view .md-image-missing{display:inline-block;padding:2px 7px;border:1px solid var(--line);border-radius:6px;color:var(--muted);overflow-wrap:anywhere}.markdown-view .md-attachment-image{display:block;max-width:100%;max-height:70vh;margin:10px auto;object-fit:contain;border-radius:8px}
+.sync-section>summary{cursor:pointer;font-weight:600;min-height:28px}
+.sync-section[open]>summary{margin-bottom:12px}
+.conflict-list-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0}
+.conflict-list-head .secondary{font-size:12px}
+.conflict-group{border-top:1px solid var(--line);padding:8px 0}
+.conflict-group>summary{cursor:pointer;list-style:none;display:flex;flex-direction:column;gap:4px;padding:6px 0}
+.conflict-group>summary span{font-size:12px;color:var(--muted)}
+.conflict-group .library-conflict-row{padding:10px 8px;color:var(--mint)}
+.message-dialog .conflict-detail{padding:0;margin:0;border:0}
+.message-dialog .conflict-version{max-height:22dvh}
+.message-dialog .conflict-actions{position:sticky;bottom:-20px;padding:10px 0;background:#252d2a}
+html[data-theme=light] .message-dialog .conflict-actions{background:#fff}
+.conflict-refresh{padding:10px 12px;margin-bottom:12px;border:1px solid var(--line);border-radius:9px}
+.conflict-refresh p{margin:0 0 10px;line-height:1.5;font-size:13px}
+.conflict-view-toggle{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.conflict-diff-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7;font-size:14px}
+.conflict-diff-text mark{background:#ffe2a3;color:#4b3000;border-radius:3px;padding:1px 2px}
+.conflict-metadata-diff>div{display:grid;gap:3px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;overflow-wrap:anywhere}
+.conflict-metadata-diff p{margin:6px 0;font-size:13px}
+.conflict-list h3{font-size:16px;margin:0}
+.conflict-comparison-note{margin:0 0 10px;color:var(--muted);font-size:12px;line-height:1.4}
+.message-dialog .conflict-version{max-height:none;overflow:visible}
+
+/* Compact materials search and a floating create action above the navigation. */
+.record-search{display:block!important;margin:0 0 16px!important}
+.record-search-row{position:relative;display:flex;align-items:center}
+.record-search-row input[type=search]{width:100%;padding-right:54px;box-sizing:border-box}
+.record-filter-toggle{position:absolute;right:5px;top:4px;bottom:4px;width:42px;border:0;border-radius:8px;background:transparent;color:var(--muted);font-size:19px}
+.record-filter-toggle i{position:absolute;right:5px;top:4px;width:7px;height:7px;border-radius:50%;background:var(--mint)}
+.record-search select{display:block;width:100%;margin-top:8px;background:var(--surface,#22272e)}
+.record-create-fab{position:fixed;right:max(20px,calc((100vw - 760px)/2 + 20px));bottom:calc(88px + env(safe-area-inset-bottom));z-index:5;min-height:48px;box-shadow:0 4px 15px #0003}
+.record-list-only .record-list{padding-bottom:72px}
+/* Separate materials with spacing instead of full-width rules. */
+.record-list-only .record-list{display:grid;gap:8px}
+.record-list-only .record-list-row{border:0;border-radius:10px;background:var(--surface,#22272e);padding:13px 14px}
+html[data-theme=light] .record-list-only .record-list-row{background:#fff}
+
+.record-kind-control{display:flex;justify-content:space-between;align-items:center;width:100%;min-height:42px;padding:9px;border:1px solid var(--line);border-radius:10px;background:#1e2329;color:inherit;text-align:left}.record-journal-note{margin:4px 0 10px;color:var(--muted);font-size:12px;line-height:1.5}html[data-theme=light] .record-kind-control{background:#f8faf9;color:#20282d;border-color:#cbd4d8}
