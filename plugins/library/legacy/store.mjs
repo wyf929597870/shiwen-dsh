@@ -305,7 +305,7 @@ export function createStore(path,{recover=true}={}) {
       if(appendDaily){const incomingOrigin=archive?input.origin:'personal';const attribute=node=>{if(node.type==='text'&&!node.marks?.some(mark=>mark.type==='provenance'))node.marks=[...(node.marks??[]),{type:'provenance',attrs:{origin:incomingOrigin}}];for(const child of node.content??[])attribute(child);};attribute(incoming);}
       const doc=appendDaily?{type:'doc',content:[...old.doc.content,{type:'paragraph',content:[]},...incoming.content]}:input.doc??old?.doc??incoming;const {text,groups}=readDoc(doc,origin);
       if(markdownSource(doc).length>1000000)throw new Error('单篇内容超过大小限制，请缩短内容后重试');
-      if(!text.trim()&&kind!=='article')throw new Error('先写下一些内容再保存');
+      if(!text.trim()&&kind!=='article'&&!(kind==='reading_note'&&decodeReadingNote(input.annotation??old?.annotation)?.excerpts.length))throw new Error('先写下一些内容再保存');
       const title=requireText((appendDaily?old.title:input.title)??old?.title??'',200).trim()||text.split('\n')[0].slice(0,32)||'未命名文章';
       const url=requireText(input.url??old?.url??'',2048);if(url&&!/^https?:\/\//.test(url))throw new Error('来源地址必须是 HTTP 或 HTTPS 链接');
       const annotation=requireText(input.annotation??old?.annotation??'',10000);
@@ -444,8 +444,9 @@ export function createStore(path,{recover=true}={}) {
       const prior=db.prepare('SELECT result FROM operations WHERE id=?').get(operationId);
       if(prior){const receipt=parse(prior.result);if(receipt.fingerprint!==fingerprint)throw Error('请求编号已用于不同内容');return receipt.record;}
       const old=input.id?get(input.id):null;
-      if(input.id&&(!old||old.deleted||old.kind!=='reading_note'||old.origin!=='personal'))throw Error('个人读书笔记不存在');
+      if(input.id&&(!old||old.deleted||old.kind!=='reading_note'||!['personal','external'].includes(old.origin)))throw Error('个人读书笔记不存在');
       if(old&&!decodeReadingNote(old.annotation))throw Error('此笔记的备注格式需要先核对');
+      if(old&&decodeReadingNote(old.annotation).schema==='shiwen.reading-note.v2'&&input.noteType===undefined)throw Error('此笔记包含类型信息，请使用新版编辑器');
       const doc=old?updateMarkdownDoc(old.doc,value.reflection,'personal',old.origin):plainDoc(value.reflection,'personal');
       const saved=save({id:input.id,revision:input.revision,kind:'reading_note',title:value.book,doc,annotation:value.annotation},{inTransaction:true,beforeSync:record=>{
         db.prepare('INSERT INTO record_dates(record,day,basis) VALUES(?,?,?) ON CONFLICT(record) DO UPDATE SET day=excluded.day,basis=excluded.basis').run(record.id,value.day,'读书笔记记录日期');
@@ -455,7 +456,7 @@ export function createStore(path,{recover=true}={}) {
     })();
   }
   function readingNoteList(){
-    return {scope:createHash('sha256').update(path).digest('hex').slice(0,24),records:orderedRecords().filter(r=>r.kind==='reading_note'&&r.origin==='personal').map(r=>({id:r.id,revision:r.revision,title:r.title,contentDay:r.contentDay,created:r.created,annotation:r.annotation,markdown:markdownSource(parse(r.doc))}))};
+    return {scope:createHash('sha256').update(path).digest('hex').slice(0,24),records:orderedRecords().filter(r=>r.kind==='reading_note'&&['personal','external'].includes(r.origin)).map(r=>({id:r.id,revision:r.revision,title:r.title,contentDay:r.contentDay,created:r.created,annotation:r.annotation,markdown:markdownSource(parse(r.doc))}))};
   }
   function reviewPreview(args={}){
     const range=dateRange(args.period??'7',args.month,args.now?new Date(args.now):new Date(),args.timeZone),within=day=>day&&day>=range.start&&day<=range.end;
@@ -504,14 +505,15 @@ export function createStore(path,{recover=true}={}) {
       })();
     },
     importDate:({id,day})=>{assertJournalDay(id,day);const row=importInfo(id);if(!row||row.path===':assets')throw new Error('记录不是导入文档');if(day!==null&&validDay(day)!==day)throw new Error('请输入有效日期');db.transaction(()=>{db.prepare("UPDATE imports SET day=?,date_basis='人工修正' WHERE record=?").run(day,id);if(day)db.prepare('UPDATE records SET created=?,updated=CASE WHEN revision=1 THEN ? ELSE updated END WHERE id=?').run(day+'T12:00:00+08:00',day+'T12:00:00+08:00',id);bumpSyncRevision(id,'导入日期修正');appendSyncChange(id,'update',{createActivity:false,preserveSources:true});})();return get(id);},
-    remove:({id,revision})=>db.transaction(()=>{
+    remove:({id,revision,requestId})=>db.transaction(()=>{
+      if(requestId!==undefined){requireText(requestId,100);if(!requestId)throw Error('请求编号不能为空');const previous=db.prepare('SELECT result FROM operations WHERE id=?').get('delete:'+requestId);if(previous){const receipt=parse(previous.result);if(receipt.id!==id||receipt.beforeRevision!==revision)throw Error('请求编号已用于不同内容');return receipt.result;}}
       requireText(id,100);if(!Number.isInteger(revision)||revision<1)throw new Error('版本无效');
       if(get(id)?.kind==='ai_annotation')throw new Error('批注只能通过专用接口修改');
       const result=db.prepare('UPDATE records SET deleted=1,revision=revision+1 WHERE id=? AND revision=? AND deleted=0').run(id,revision);
       if(!result.changes)throw new Error('内容已变更或已删除，请刷新');
       if(getSetting('editingDraft')?.id===id)db.prepare("DELETE FROM settings WHERE key='editingDraft'").run();
       addCurrentVersion(id,'删除记录');
-      appendSyncChange(id,'delete',{createActivity:false,preserveSources:true});return {id,revision:revision+1};
+      appendSyncChange(id,'delete',{createActivity:false,preserveSources:true});const deletedRecord={id,revision:revision+1};if(requestId!==undefined)db.prepare('INSERT INTO operations VALUES(?,?)').run('delete:'+requestId,JSON.stringify({id,beforeRevision:revision,result:deletedRecord}));return deletedRecord;
     })(),
     removedRecords:()=>db.prepare("SELECT id,kind,title,revision,updated FROM records WHERE deleted=1 AND kind<>'ai_annotation' ORDER BY updated DESC, rowid DESC").all().map(row=>({...row,contentDay:get(row.id)?.contentDay??null})),
     restoreRemoved:({id,revision})=>db.transaction(()=>{

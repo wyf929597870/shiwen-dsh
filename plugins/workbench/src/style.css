@@ -276,3 +276,10 @@
 .sw-removed-list{max-height:300px;overflow:auto}.sw-removed-list h2{font-size:16px;margin:0 0 8px}.sw-removed-list>div{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0}.sw-removed-list span{min-width:0;overflow-wrap:anywhere}.sw-removed-list button{flex:none}
 
 @media (max-width:760px){.sw-head-actions{flex-wrap:wrap;justify-content:flex-end}}
+
+/* Keep the reading measure independent of the list and window width. */
+.sw-library-view .sw-detail.sw-reading-record{padding:0 clamp(24px,3vw,56px) 48px;scrollbar-gutter:stable both-edges}
+.sw-library-view .sw-reading-record>*{max-width:760px;margin-inline:auto}
+.sw-library-view .sw-reading-record>.sw-markdown{line-height:1.95}
+.sw-library-view .sw-reading-record>.sw-markdown p{margin-bottom:1.25em}
+@media(max-width:760px){.sw-library-view .sw-detail.sw-reading-record{padding:0 8px 32px;scrollbar-gutter:auto}}

@@ -1,0 +1,60 @@
+/* Compact reading flow: one list, detail or editor at a time. */
+@media (max-width: 760px) {
+  .rn-page { height: auto; min-height: 100%; padding: 16px; overflow: visible; }
+  .rn-page .rn-layout { display: block; min-width: 0; }
+  .rn-page .rn-sidebar, .rn-page .rn-main { min-width: 0; }
+  .rn-mode-list .rn-main, .rn-mode-detail .rn-sidebar, .rn-mode-editor .rn-sidebar { display: none; }
+  .rn-page .rn-heading { display: block !important; }
+  .rn-page.rn-mode-detail .rn-heading, .rn-page.rn-mode-editor .rn-heading { display: none !important; }
+  .rn-page .rn-heading .rn-book-select { max-width: none; width: 100%; }
+  .rn-page .rn-book-select select { padding-left: 44px; }
+  .rn-page .rn-toolbar { display: flex; align-items: stretch; gap: 10px; margin-bottom: 18px; }
+  .rn-page .rn-search { width: 100%; min-width: 0; flex: 1 1 100%; }
+  .rn-page .rn-search select { padding: 6px 10px; }
+  .rn-page .rn-chapter-filter { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 150px; color: var(--rn-muted); }
+  .rn-page .rn-chapter-filter select { width: 100%; min-width: 0; padding: 8px; }
+  .rn-page .rn-toolbar-options { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .rn-page .rn-sort select { max-width: none; padding: 8px; }
+  .rn-page .rn-card-grid { display: block; }
+  .rn-page .rn-group { display: block; margin: 0 0 22px; }
+  .rn-page .rn-group > h2 { display: block; overflow-wrap: anywhere; line-height: 1.5; font-size: 16px; margin: 0 0 10px; }
+  .rn-page .rn-list-item { display: flex; flex-direction: column; align-items: stretch; gap: 9px; width: 100%; text-align: left; padding: 16px 0; margin: 0; border: 0; border-bottom: 1px solid var(--rn-line); border-radius: 0; background: transparent; line-height: 1.7; overflow-wrap: anywhere; }
+  .rn-page .rn-list-item > span { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 3; -webkit-box-orient: vertical; font-family: Georgia, 'Noto Serif CJK SC', 'Songti SC', serif; font-size: 16px; }
+  .rn-page .rn-list-item small { color: var(--rn-muted); font-size: 13px; }
+  .rn-page .rn-detail { display: flex; flex-direction: column; min-height: calc(100dvh - 110px); min-width: 0; padding-inline: 8px; overflow-wrap: anywhere; }
+  .rn-page .rn-mobile-back { display: inline-flex; align-self: flex-start; padding: 8px 0; margin-bottom: 22px; font-size: 16px; }
+  .rn-page .rn-detail-top { display: contents; }
+  .rn-page .rn-detail-top > p { order: 0; margin: 0 0 32px; font-size: 16px; font-weight: 600; line-height: 1.65; overflow-wrap: anywhere; }
+  .rn-page .rn-detail-top > p span { color: var(--rn-muted); }
+  .rn-page .rn-detail-excerpt-title { order: 1; font-size: 16px; margin: 0 0 16px; }
+  .rn-page .rn-detail-excerpt { order: 2; border-left: 3px solid var(--rn-mint); margin: 0 0 20px; padding: 0 0 0 17px; font: 21px/1.85 Georgia, 'Noto Serif CJK SC', 'Songti SC', serif; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .rn-page .rn-detail-meta { order: 3; color: var(--rn-muted); font-size: 13px; line-height: 1.7; margin: 0 0 24px; }
+  .rn-page .rn-detail-thought { order: 4; border-top: 1px solid var(--rn-line); margin-top: 16px; padding-top: 22px; font-size: 16px; line-height: 1.8; }
+  .rn-page .rn-detail-thought h2 { font-size: 16px; margin: 0 0 16px; }
+  .rn-page .rn-detail-nav { order: 8; display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid var(--rn-line); margin-top: auto; padding: 16px 0; color: var(--rn-muted); }
+  .rn-page .rn-detail-nav button { padding: 8px 0; min-height: 44px; color: var(--rn-fg); }
+  .rn-page .rn-detail-actions { order: 9; display: flex; gap: 10px; padding: 8px 0 max(12px, env(safe-area-inset-bottom)); }
+  .rn-page .rn-detail-actions > button:first-child { flex: 1; min-width: 0; min-height: 48px; background: var(--rn-mint); color: var(--rn-primary-fg); font-weight: 600; }
+  .rn-page .rn-more-actions { position: relative; flex: none; }
+  .rn-page .rn-more-actions summary { display: flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 16px; border: 1px solid var(--rn-line); border-radius: 6px; cursor: pointer; list-style: none; }
+  .rn-page .rn-more-actions summary::-webkit-details-marker { display: none; }
+  .rn-page .rn-more-actions > button { position: absolute; right: 0; top: auto; bottom: calc(100% + 6px); min-width: 100%; min-height: 44px; border: 1px solid var(--rn-line); background: var(--rn-field-bg); box-shadow: 0 4px 16px #0003; }
+  .rn-page .rn-editor { border: 0; border-radius: 0; padding: 0; margin: 0; background: transparent; }
+  .rn-page .rn-editor-heading { margin: 0 0 20px; }
+  .rn-page .rn-editor-meta { margin: 0 0 16px; border-bottom: 1px solid var(--rn-line); }
+  .rn-page .rn-editor-meta summary { padding: 12px 0; color: var(--rn-muted); cursor: pointer; }
+  .rn-page .rn-editor .rn-meta { display: flex; gap: 10px; margin: 12px 0 18px; }
+  .rn-page .rn-editor .rn-meta > * { min-width: 0; max-width: 100%; }
+  .rn-page .rn-editor .rn-meta :is(input, select) { min-width: 0; max-width: 100%; }
+  .rn-page .rn-editor .rn-meta :is(input, select) { font-size: 16px; }
+  .rn-page .rn-editor .rn-inline-label { flex: 1 1 130px; }
+  .rn-page .rn-editor .rn-date { width: 100%; }
+  .rn-page .rn-editor .rn-reflection textarea, .rn-page .rn-excerpt-editor textarea { font-size: 16px; line-height: 1.7; }
+  .rn-page .rn-editor .rn-reflection textarea { min-height: 180px; }
+  .rn-page .rn-editor .rn-save-row { position: static; margin: 0; padding: 16px 0 max(16px, env(safe-area-inset-bottom)); display: flex; flex-wrap: wrap; gap: 10px; background: transparent; }
+  .rn-page .rn-editor .rn-save-row > div { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-left: auto; }
+  .rn-page .rn-editor .rn-save-row button { min-height: 44px; }
+  .app .rn-page .rn-primary { background: var(--rn-mint) !important; color: var(--rn-primary-fg) !important; border-radius: 8px; font-weight: 600; }
+  .app .rn-page :is(.rn-search select, .rn-chapter-filter select, .rn-sort select, .rn-editor .rn-inline-label select) { padding-left: 10px; }
+  .app .rn-page .rn-reflection > label { color: var(--rn-fg); font-size: 16px; font-weight: 600; margin-bottom: 12px; }
+}

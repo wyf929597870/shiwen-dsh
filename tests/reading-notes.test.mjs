@@ -40,10 +40,25 @@ test('note dates and metadata survive portable bootstrap; only personal notes ar
 test('metadata rejects invalid dates and excessive excerpts without inventing authorship',()=>{
  assert.throws(()=>validateReadingNote(input({day:'2026-02-30'})),/日期/);
  assert.throws(()=>validateReadingNote(input({book:'  '})),/书名/);
- assert.throws(()=>validateReadingNote(input({reflection:' '})),/感想/);
+ assert.throws(()=>validateReadingNote(input({reflection:' ',excerpts:[]})),/摘录或感想/);
  assert.throws(()=>encodeReadingNote({excerpts:[{text:'甲'.repeat(9000)},{text:'乙'.repeat(2000)}]}),/过长/);
  assert.equal(decodeReadingNote('普通备注'),null);
  assert.equal(decodeReadingNote(encodeReadingNote({excerpts:[{text:''},{text:'引用',page:'3'}]})).excerpts.length,1);
+});
+test('v1 retries and v2 types preserve excerpts without counting them as personal writing',t=>{
+ const s=store(t),old=input();const saved=s.readingNoteSave(old);
+ assert.equal(JSON.parse(saved.annotation).schema,'shiwen.reading-note.v1');
+ assert.equal(decodeReadingNote(saved.annotation).noteType,'excerpt');
+ assert.equal(decodeReadingNote(encodeReadingNote({})).noteType,'reflection');
+ assert.equal(s.readingNoteSave(old).id,saved.id);
+ assert.throws(()=>s.readingNoteSave({...old,noteType:'excerpt'}),/请求编号/);
+ const pure=s.readingNoteSave(input({noteType:'question',reflection:'',excerpts:[{text:'原书摘录'}]}));
+ assert.equal(JSON.parse(pure.annotation).schema,'shiwen.reading-note.v2');assert.equal(decodeReadingNote(pure.annotation).noteType,'question');
+ assert.equal(s.reviewPreview({period:'month',month:'2026-11',now:'2026-11-10T12:00:00Z'}).personalOriginalCharacters,4);
+ assert.throws(()=>s.readingNoteSave(input({id:pure.id,revision:pure.revision,reflection:'新想法'})),/新版编辑器/);
+ assert.throws(()=>validateReadingNote(input({noteType:'invalid'})),/类型/);
+ const sync=s.mobileSync(),deviceId=randomUUID(),identity=sync.identity({protocolVersion,deviceId}),snapshot=sync.bootstrapBegin({libraryId:identity.libraryId,epoch:identity.epoch,deviceId});
+ const portable=sync.bootstrapPage({snapshotId:snapshot.snapshotId,entityType:'records'}).items.find(x=>x.id===pure.id);recordSchema.parse(portable);assert.equal(portable.markdown,'');assert.equal(portable.annotation,pure.annotation);
 });
 test('mobile pagination and retry payload retain stable note identity and separated excerpts',async()=>{
  const calls=[],pending={input:input(),requestId:randomUUID(),recordId:randomUUID(),generation:1};

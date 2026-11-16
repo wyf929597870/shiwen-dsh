@@ -88,3 +88,35 @@ test('pre-upgrade update receipts remain replayable without the new optional met
  assert.deepEqual(store.updateRecord(args,{operationId}),updated);
  assert.equal(store.get(record.id).revision,updated.revision);
 });
+
+test('tool saves excerpt-only notes and preserves types on partial updates',t=>{
+ const {store,call}=setup(t);
+ const saved=call('shiwen_save',{requestId:'excerpt-only',kind:'reading_note',origin:'personal',title:'书',body:'',readingNote:{noteType:'excerpt',excerpts:[{text:'原文'}]}});
+ assert.equal(saved.readingNote.noteType,'excerpt');assert.equal(store.get(saved.id).body,'');
+ const updated=call('shiwen_update',{requestId:'excerpt-page',id:saved.id,revision:saved.revision,readingNote:{page:'5'}});
+ assert.equal(updated.readingNote.noteType,'excerpt');assert.equal(updated.readingNote.excerpts[0].text,'原文');
+ assert.throws(()=>call('shiwen_update',{requestId:'clear-only',id:saved.id,revision:updated.revision,readingNote:{excerpts:[]}}),/摘录或感想/);
+});
+
+test('pre-upgrade reading-note receipt uses the original v1 serialization',t=>{
+ const {store,dir}=setup(t),args={requestId:'legacy-note',book:'旧书',reflection:'旧想法',day:'2026-11-10',chapter:'一',page:'2',excerpts:[{text:'摘录',page:'3'}]};
+ const record=store.readingNoteSave(args);
+ const annotation=JSON.stringify({schema:'shiwen.reading-note.v1',chapter:'一',page:'2',excerpts:[{text:'摘录',page:'3'}]});
+ const fingerprint=createHash('sha256').update(JSON.stringify({id:null,revision:null,book:'旧书',reflection:'旧想法',day:'2026-11-10',annotation})).digest('hex');
+ const db=new Database(join(dir,'library.sqlite'));try{db.prepare('UPDATE operations SET result=? WHERE id=?').run(JSON.stringify({fingerprint,record}),'reading-note:legacy-note');}finally{db.close();}
+ assert.equal(store.readingNoteSave(args).id,record.id);assert.equal(store.get(record.id).revision,1);
+});
+
+test('separately imported highlights support independent edit and recoverable delete',t=>{
+ const {store,call}=setup(t);
+ const one=call('shiwen_save',{...note,requestId:'one',origin:'external',body:'',readingNote:{chapter:'一',excerpts:[{text:'划线甲'}]}});
+ const two=call('shiwen_save',{...note,requestId:'two',origin:'external',body:'想法乙',readingNote:{chapter:'一',excerpts:[{text:'划线乙'}]}});
+ assert.throws(()=>call('shiwen_save',{...note,requestId:'bad',readingNote:{excerpts:[{text:'甲'},{text:'乙'}]}}),/只能包含一条划线/);
+ assert.equal(store.readingNoteList().records.filter(x=>[one.id,two.id].includes(x.id)).length,2);
+ const draft=readingNoteDraft(store.get(one.id));const edited=store.readingNoteSave({...draft,requestId:'edit-one',excerpts:[{text:'改过的划线',page:''}]});
+ assert.equal(store.get(edited.id).origin,'external');assert.equal(readingNoteDraft(store.get(two.id)).excerpts[0].text,'划线乙');
+ const deleted=store.remove({id:edited.id,revision:edited.revision,requestId:'delete-once'});
+ assert.deepEqual(store.remove({id:edited.id,revision:edited.revision,requestId:'delete-once'}),deleted);
+ assert.throws(()=>store.remove({id:two.id,revision:two.revision,requestId:'delete-once'}),/请求编号/);
+ assert.equal(store.get(two.id).deleted,0);store.restoreRemoved({id:edited.id,revision:deleted.revision});assert.equal(store.get(edited.id).deleted,0);
+});

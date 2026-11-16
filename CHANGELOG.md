@@ -3,6 +3,24 @@
 0.1.4 是本仓库首次公开的 Linux 预览版；0.1.0–0.1.3 为本地开发与打包记录。
 0.1.4 is this repository's first public Linux preview; 0.1.0–0.1.3 are local development builds.
 
+## v0.1.24 - 2026-11-16
+
+### 中文
+
+- 素材和文章编辑改为停止输入 1 秒后自动保存草稿，连续输入时不再逐字写入；离开编辑区、切换页面和关闭窗口时补存最新草稿。
+- 复用素材列表渲染结果，减少大资料库编辑时的重复渲染；手动保存和取消会清除待执行的自动保存，防止旧草稿重新出现。
+- 汇集此前本地桌面版本的读书笔记改进：划线卡片、章节筛选、分页阅读、摘录与感想分开记录，以及写作素材引用。
+- 保留旧版多摘录笔记和 v1 元数据兼容；新划线可独立保存、编辑和恢复删除。
+- 本次发布 Linux x64 DEB 及 SHA-256 校验文件。Android 和 Windows 沿用各自已有发行版。
+
+### English
+
+- Save material and article drafts after one second of idle input instead of on every keystroke. Flush the latest draft when leaving the editor, navigating away, or closing the window.
+- Reuse material-list rendering while typing. Explicit saves and cancellations clear pending autosaves so stale drafts cannot reappear.
+- Include reading-note improvements from prior local desktop builds: highlight cards, chapter filters, paginated reading, separate excerpts and reflections, and citations in writing materials.
+- Preserve legacy multi-excerpt notes and v1 metadata compatibility; new highlights support independent saving, editing, and recoverable deletion.
+- This release provides a Linux x64 DEB and SHA-256 checksum. Android and Windows retain their existing releases.
+
 ## android-v0.1.26 - 2026-11-12
 
 ### 中文

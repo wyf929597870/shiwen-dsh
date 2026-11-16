@@ -119,12 +119,12 @@ CLI 可使用 `shiwen-bridge upload-image ./photo.png` 上传，命令输出附�
 
 ## 读书笔记与日目标趋势
 
-原有保存、搜索、读取和修改工具均支持 `kind: "reading_note"`。`title` 为书名，`body` 仅为感想；章节、页码、原文摘录使用结构化 `readingNote`，与页面共用存储格式。一本书可分日期多次记录，同日也可有多条；重试沿用 requestId，编辑用记录 ID 和最新 revision。未知日期保持未知，历史混杂资料不自动归类。
+原有保存、搜索、读取和修改工具均支持 `kind: "reading_note"`。`title` 为书名，`body` 仅为该条划线的个人感想（可为空）；章节、页码、原文摘录使用结构化 `readingNote`，与页面共用存储格式。每条划线单独一条记录，`excerpts` 只含一条，`noteType` 取 `excerpt`（摘录）、`reflection`（随想）、`question`（疑问），省略时沿用页面默认。一本书可分日期多次记录，同日也可有多条；重试沿用 requestId，编辑用记录 ID 和最新 revision。未知日期保持未知，历史混杂资料不自动归类。
 
 ```json
-{"requestId":"reading-note-unique-id","kind":"reading_note","origin":"personal","title":"书名","body":"我自己的感想","day":"2026-11-10","readingNote":{"chapter":"第一章","page":"12","excerpts":[{"text":"书中原文","page":"12"}]}}
+{"requestId":"reading-note-unique-id","kind":"reading_note","origin":"personal","title":"书名","body":"这条划线的感想，可留空","day":"2026-11-10","readingNote":{"noteType":"excerpt","chapter":"第一章","page":"12","excerpts":[{"text":"书中原文","page":"12"}]}}
 ```
 
-`shiwen_read` 返回结构化 `readingNote`。更新省略章节、页码、摘录即保留；传入 excerpts 数组表示完整替换，空数组清空。不能同时提交 readingNote 和原始 annotation。旧备注无法识别时不能静默覆盖。只摘录、没有感想的内容应作为参考资料保存。
+`shiwen_read` 返回结构化 `readingNote`。更新省略章节、页码、摘录即保留；传入 excerpts 数组表示完整替换，空数组清空。不能同时提交 readingNote 和原始 annotation。旧备注无法识别时不能静默覆盖。只有摘录、没有感想也可以单独成条（`body` 留空），不必转存为参考资料。历史记录可能包含多段摘录与一段共用感想，不对其臆造逐条对应关系；删除这类记录会连同其所有划线一起删除。
 
 `shiwen_review` 保留原有 totals/daily 编辑统计，并增加 originals（现存个人原文字数）和 goals（definitions/daily/summary），与页面复用同一算法。查询某一天用 `{"period":"1","day":"2026-11-10"}`；近 7/14/30 天、自然月沿用原参数。日记与自由书写分开统计；读书笔记只计感想，已有笔记字数优先于当天打卡数字，不重复相加。旧打勾只统计完成天数，未知数值为 null，不推算分钟或字数；统计结果不返回日记正文。
