@@ -3,6 +3,24 @@
 0.1.4 是本仓库首次公开的 Linux 预览版；0.1.0–0.1.3 为本地开发与打包记录。
 0.1.4 is this repository's first public Linux preview; 0.1.0–0.1.3 are local development builds.
 
+## v0.1.25 - 2026-11-16
+
+### 中文
+
+- 扩大桌面和网页素材正文编辑区，压缩编辑时的页头和列表占用；阅读与编辑操作栏随内容滚动保持可见。
+- 修复素材列表展开时的大资料库输入卡顿：只渲染视口附近的记录，避免每次输入都重新计算数千条记录的样式。
+- 保留全部记录的搜索、筛选和滚动访问，支持方向键及 Home/End 导航；继续使用停止输入 1 秒后保存草稿的行为。
+- 使用 4400 条虚构素材在完整桌面程序中复现并验证：输入显示延迟由约 400 毫秒降至约 7–21 毫秒。该结果来自隔离测试，实际耗时随设备而异。
+- 提供 Linux x64 DEB 和 SHA-256 校验文件。安装后请保存正在编辑的内容，退出时停止本机服务，再重新打开拾文以加载新版界面。
+
+### English
+
+- Enlarge the material editor on desktop and web, reduce surrounding chrome while editing, and keep reading/editing actions visible when scrolling.
+- Fix typing stalls with large material libraries by rendering only rows near the viewport, avoiding style recalculation across thousands of records on every input.
+- Keep full-library search, filtering, scrolling, and arrow/Home/End keyboard navigation. Drafts still save after one second of idle input.
+- Reproduced and verified in the complete desktop client using 4,400 synthetic records: input display latency fell from roughly 400 ms to 7–21 ms in the isolated test. Actual performance depends on the device.
+- Includes a Linux x64 DEB and SHA-256 checksum. After installation, save pending edits, quit while stopping the local service, then reopen Shiwen to load the updated interface.
+
 ## v0.1.24 - 2026-11-16
 
 ### 中文

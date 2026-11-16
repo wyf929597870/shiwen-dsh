@@ -50,6 +50,7 @@
 .sw-list-status button{padding:8px 6px;font-size:12px}
 .sw-list-status .sw-count{font-size:12px;padding:12px 0}
 .sw-list-items{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+.sw-virtual-materials{max-height:100dvh;overflow-anchor:none}
 .sw-library-view .sw-row{display:block;padding:14px 12px!important;min-height:76px}
 .sw-library-view .sw-row strong{white-space:normal;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;font-size:15px;line-height:1.55;font-weight:600}
 .sw-library-view .sw-row small{margin-top:7px;font-size:12px;font-variant-numeric:tabular-nums}
@@ -283,3 +284,23 @@
 .sw-library-view .sw-reading-record>.sw-markdown{line-height:1.95}
 .sw-library-view .sw-reading-record>.sw-markdown p{margin-bottom:1.25em}
 @media(max-width:760px){.sw-library-view .sw-detail.sw-reading-record{padding:0 8px 32px;scrollbar-gutter:auto}}
+
+
+/* Keep record actions reachable while reading and give editing the viewport. */
+.sw-library-view .sw-detail-head{position:sticky;top:0;z-index:2;background:var(--dsw-alias-bg-base);padding-block:10px 12px;border-bottom:1px solid var(--dsw-alias-border-l2)}
+.sw-library-view .sw-detail-head>div{flex-wrap:wrap;justify-content:flex-end}
+.sw-library-view .sw-detail{scroll-padding-top:76px}
+@media(min-width:761px){
+ .sw-library-view.sw-editing:not(.sw-writing-mode){padding:16px 20px}
+ .sw-library-view.sw-editing:not(.sw-writing-mode)>.sw-head{padding-bottom:12px;margin-bottom:12px}
+ .sw-editing:not(.sw-writing-mode) .sw-panel-heading h1{font-size:22px}
+ .sw-editing:not(.sw-writing-mode) .sw-panel-heading .sw-sub{display:none}
+ .sw-library-view.sw-editing:not(.sw-writing-mode):not(.sw-list-collapsed)>.sw-columns{grid-template-columns:clamp(210px,22%,280px) minmax(0,1fr)}
+ .sw-library-view.sw-editing:not(.sw-writing-mode) .sw-detail{display:flex;flex-direction:column;padding-left:20px;padding-bottom:0}
+ .sw-editing:not(.sw-writing-mode) .sw-detail-head{flex:none;margin-bottom:8px}
+ .sw-editing:not(.sw-writing-mode) .sw-editor{display:flex;flex-direction:column;flex:1;min-height:0}
+ .sw-editing:not(.sw-writing-mode) .sw-editor>label{flex:none;margin:6px 0;gap:5px}
+ .sw-editing:not(.sw-writing-mode) .sw-editor>.sw-editor-body{flex:1;min-height:0}
+ .sw-library-view.sw-editing:not(.sw-writing-mode) .sw-editor-body textarea{flex:1;width:100%;min-height:min(360px,45dvh);resize:vertical}
+ .sw-editing:not(.sw-writing-mode) .sw-editor>.sw-secondary{flex:none;align-self:flex-start;padding:8px 12px;margin-top:8px}
+}
