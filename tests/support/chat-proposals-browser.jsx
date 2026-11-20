@@ -23,7 +23,7 @@ export async function call(method,args={}){
   if(method==='agentStatus')return {status:'unknown'};
   if(method==='agentSend'){sent.push(args);return {status:'admitted'};}
   if(method==='agentAcknowledge')return {};
-  if(method==='agentRecent')return {items:[{id:args.conversationId+'-task',input:'记录到今天的日记：晚上运动了。',output:'已整理保存建议，请确认。',status:'succeeded'}]};
+  if(method==='agentRecent')return {items:[...sent.filter(row=>row.conversationId===args.conversationId).map(row=>({...row,status:'failed',output:'',error:'MODEL_EMPTY_REPLY',recordId:'saved-original'})).reverse(),{id:args.conversationId+'-task',input:'记录到今天的日记：晚上运动了。',output:'已整理保存建议，请确认。',status:'succeeded'}]};
   if(method==='agentRecordProposals')return {items:proposals.filter(item=>item.conversationId===args.conversationId).map(item=>({...item}))};
   if(method==='agentRecordDecide'){
     const item=proposals.find(item=>item.id===args.id&&item.conversationId===args.conversationId);
@@ -53,6 +53,8 @@ function composerVisible(){
   if(bounds.height>=rect.height)assert(rect.top>=bounds.top&&rect.bottom<=bounds.bottom+1,'Proposal pushed composer outside the chat viewport: '+JSON.stringify({top:rect.top,bottom:rect.bottom,panelTop:bounds.top,panelBottom:bounds.bottom}));
   const input=composer.querySelector('textarea'),style=getComputedStyle(input);
   assert(input.clientHeight<=60,'Chat input should stay compact by default');
+  assert(style.color==='rgb(32, 40, 45)'&&style.backgroundColor==='rgb(255, 255, 255)','Light input must have a visible dark foreground');
+  document.documentElement.dataset.theme='dark';const dark=getComputedStyle(input);assert(dark.color==='rgb(238, 242, 239)'&&dark.backgroundColor==='rgb(53, 61, 57)','Dark input must have a visible light foreground');document.documentElement.dataset.theme='light';
   reachable(input);
 }
 async function run(){
@@ -94,11 +96,15 @@ async function run(){
   const input=document.querySelector('.agent-composer textarea');input.focus();
   const nativeSetter=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set;
   nativeSetter.call(input,'测试发送');input.dispatchEvent(new Event('input',{bubbles:true}));await until(()=>!button('发送').disabled);
+  document.querySelector('.composer-save-option input').click();await until(()=>button('想法'));button('想法').click();
+  await until(()=>document.querySelector('.composer-save-option input').checked);
   const sendButton=button('发送'),before=sendButton.getBoundingClientRect();
   const down=new PointerEvent('pointerdown',{bubbles:true,cancelable:true,pointerType:'touch'});sendButton.dispatchEvent(down);
   assert(down.defaultPrevented,'Sending must preserve the focused editor on pointer down');
   const after=sendButton.getBoundingClientRect();assert(Math.abs(before.top-after.top)<1,'Send button must not move during the first tap');
   sendButton.click();await until(()=>sent.length===1);assert(sent[0].input==='测试发送','First tap should send the submitted text');
+  assert(sent[0].saveOriginal&&sent[0].kind==='idea','Send must retain the selected save option and kind');
+  await until(()=>document.querySelector('.turn .receipt')&&document.body.textContent.includes('模型未返回回复正文'));
   passed.push('first send tap keeps the target stable and submits once');
   document.getElementById('result').textContent=JSON.stringify({passed});
 }

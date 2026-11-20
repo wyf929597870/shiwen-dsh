@@ -226,6 +226,25 @@ internal class NodeConnection(private val store: NodeSettingsStore) {
         return JSONObject().put("revoked", true).put("nodeChanged", bound.nodeChanged)
     }
 
+    internal fun workspace(id: String, revision: String, libraryId: String, deviceId: String,
+        epoch: String, serverId: String, method: String, args: JSONObject): Any {
+        val writes = setOf("themeSave", "themeDelete", "themeMemberAdd", "themeMemberRemove")
+        require(method in writes || method in setOf("themeList", "themeRead", "contentSearch", "contentSearchStatus", "contentSearchEnable", "readMarkdown")) { "WORKSPACE_METHOD_DENIED" }
+        val writing = method in writes
+        fun verifyLibrary() {
+            val identity = mobileSync(id, "identity", JSONObject().put("protocolVersion", "1.0.0-draft.3")
+                .put("deviceId", deviceId), revision).getJSONObject("data")
+            check(identity.optString("libraryId") == libraryId && identity.optString("epoch") == epoch &&
+                identity.optString("serverId") == serverId) { "资料库身份已变化，请重新连接" }
+        }
+        verifyLibrary()
+        if (writing) args.put("expectedLibraryId", libraryId)
+        val result = managementRpc(id, method, args, writing || method == "contentSearchEnable", revision)
+        check(!result.nodeChanged) { "节点已更改，请重新读取" }
+        verifyLibrary()
+        return result.value
+    }
+
     private fun managementRpc(id: String, method: String, args: JSONObject, write: Boolean,
         expectedConfigRevision: String? = null): BoundNodeAgentResult {
         require(id.isNotBlank()) { "NODE_ID_REQUIRED" }

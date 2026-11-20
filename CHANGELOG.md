@@ -3,6 +3,145 @@
 0.1.4 是本仓库首次公开的 Linux 预览版；0.1.0–0.1.3 为本地开发与打包记录。
 0.1.4 is this repository's first public Linux preview; 0.1.0–0.1.3 are local development builds.
 
+## v0.1.38 - 2026-11-20 (Linux / Android · DSH plugin 0.2.0-dev.7)
+
+- 桌面和手机按记录、读书、收藏和创作浏览。全局搜索可打开命中原文，关联画布和手机文字列表可将选中片段整理为带来源的文章大纲。
+- 电脑支持本地语义搜索。手机可离线搜索原文、使用手机主题，连接同库电脑时可按意思搜索和读写电脑主题。勾选「发送时保存全文」会在调用模型前保存原文。
+- 本版提供 Linux x64 DEB、Android 9+ 签名 APK（versionCode 41）与 DSH 插件预览包。中英文安装说明已同步更新。Android 真机升级仍待验证。
+
+- Browse records, reading notes, collections and articles on desktop and Android. Open original passages from global search and turn selected passages into a linked outline.
+- Run semantic search locally on the computer. Android supports offline text search and phone topics, plus semantic search and shared topics through the connected computer. Chat can save the original message before calling the model.
+- Includes a Linux x64 DEB, a signed Android 9+ APK (version code 41) and a DSH plugin preview. Both installation guides have been updated. Android device upgrade testing is pending.
+
+## v0.1.37 - 2026-11-20 (Android)
+
+- 手机上点「展开相关内容」可逐层阅读文字列表。查看原文后返回会保留阅读位置，收起分支也会保留已勾选的大纲素材。
+- On Android, explore related entries in a collapsible text list. Returning from a source keeps your place, and collapsing a branch keeps its outline selections.
+
+## v0.1.36 - 2026-11-19 (Android)
+
+- 对话勾选「发送时保存全文」会先将本条原文写入手机资料库。模型返回空回复时，对话显示原因和已保存素材的入口。
+- Android chat now saves the checked original message before contacting the model and shows the saved record even when the model returns no reply text.
+
+## v0.1.35 - 2026-11-19
+
+- 桌面和 Android 创作页按引用顺序显示素材标题，点标题即可阅读原文。发布检查、来源记录等辅助信息默认收起。
+- Desktop and Android articles list referenced materials by title in citation order. Select a title to open the source. Secondary article details are collapsed by default.
+
+## v0.1.34 - 2026-11-19
+
+### 中文
+
+- Android 增加记录、读书、收藏、创作、全局搜索和主题入口。手机可离线查找原文、展开文字关联、选卡片生成文章大纲；已连接的同库电脑提供语义检索与共享主题。
+- 桌面端统一了页面标题、正文、列表和辅助文字的字号，以及常用按钮和筛选框的高度。书摘与感想使用相同的阅读字号。
+- 关联画布、主题弹窗和搜索选中状态沿用桌面配色，窄窗口下的画布操作可以换行。
+
+### English
+
+- Android adds separate record, reading, collection, writing, global search and topic views. Explore related text offline, generate outlines from selected cards, or use semantic search and shared topics through the library’s connected computer.
+- Aligned desktop type sizes and common controls across the workbench. Reading highlights and reflections now share the same body-text scale.
+- Canvas cards, theme popovers and search selections follow the desktop palette. Canvas actions wrap in narrow windows.
+
+## v0.1.33 - 2026-11-19
+
+### 中文
+
+- 桌面端分为记录、读书、收藏和创作，沿用原资料库的记录、主题和引用。全局搜索支持按原文或按意思查找，结果可打开对应分类的原文。
+- 只有划线的读书笔记直接展示摘录。记录、收藏和读书笔记都可从正文、选中文字或当前划线展开关联画布。
+
+### English
+
+- Browse records, reading notes, collections and writing in separate desktop views. Global text and semantic search open results in their corresponding view.
+- Highlight-only notes show their excerpt. Open the canvas from a record, a saved item, a reading highlight or selected text.
+
+## v0.1.32 - 2026-11-19
+
+### 中文
+
+- 想法画布支持逐张勾选、移除卡片和撤销移除。移除卡片会保留原文和下方已经展开的分支。
+- 点击「生成文章大纲」即可按分支层级将勾选内容整理为创作草稿，保留关联素材，支持预览与继续编辑。
+
+### English
+
+- Select individual canvas cards for an outline, or remove a card while keeping its source and expanded descendants. Removals can be undone.
+- Generate an article draft from the selected branches, preview its outline, and open it in Writing with the selected materials linked.
+
+## v0.1.31 - 2026-11-19
+
+### 中文
+
+- 桌面想法画布支持全屏探索。点击「退出全屏」即可回到窗口视图，保留已经展开的分支。
+
+### English
+
+- Explore the idea canvas in full screen and return to the window with your branches still open.
+
+## v0.1.30 - 2026-11-19
+
+### 中文
+
+- 电脑端素材页新增想法画布。选中一条想法即可按语义展开相近的想法与原文片段，每次最多五条，同一张画布内自动去重。
+- 点击卡片可阅读完整原文并定位命中片段，也可以沿着该片段继续展开分支。
+
+### English
+
+- Open an idea in the desktop canvas to discover up to five related ideas or passages per branch. Each record appears once on the canvas.
+- Open a card to read the full source with the matching passage highlighted, or expand the card to explore further.
+
+## v0.1.29 - 2026-11-18
+
+### 中文
+
+- 调整电脑端记录阅读与编辑字号：标题 28px、正文 17px（行高 1.8）、小标题 22px、日期来源 13px、列表标题 15px。
+- 缩小标题上方与段落留白，保持阅读、编辑切换时的排版一致；移动端和保存、草稿恢复逻辑不变。
+- 提供 Linux x64 DEB 安装包及 SHA-256 校验文件。
+
+### English
+
+- Reduce desktop record typography to a 28px title, 17px body with 1.8 line height, 22px section headings, 13px metadata and 15px list titles.
+- Tighten title and paragraph spacing while keeping reading and editing aligned. Mobile layouts and save/draft behavior are unchanged.
+- Includes a Linux x64 DEB and SHA-256 checksum.
+
+## v0.1.28 - 2026-11-18
+
+### 中文
+
+- 简化电脑端素材记录与编辑界面，使用平整列表和无框正文，将次要操作收进信息与更多入口，保持阅读和编辑布局稳定。
+- 显示草稿保留和恢复状态，支持 Ctrl / Cmd + S 保存；草稿读取失败可重试。
+- 防止保存或恢复期间切换记录清除草稿，处理迟到读取、保存成功后重读失败，以及远端清理失败导致旧草稿恢复的情况。
+- 保留现有存储、检索和 Android 实现。提供 Linux x64 DEB 安装包及 SHA-256 校验文件。
+
+### English
+
+- Simplify desktop material reading and editing with a flat list, a borderless document canvas and on-demand secondary actions; keep the layout stable between modes.
+- Show draft retention and recovery states, add Ctrl / Cmd + S, and allow retrying a failed draft load.
+- Protect drafts during save and restore transitions, ignore stale record reads, and handle post-save read failures and failed remote draft cleanup.
+- Preserve existing storage, search and Android implementations. Includes a Linux x64 DEB and SHA-256 checksum.
+
+## v0.1.27 - 2026-11-17
+
+### 中文
+
+- 新增 PC/Web 主题页，可收录日记、自由书写和读书笔记片段，保留出处、原文快照及定位状态，并返回原文上下文。
+- 素材可反向查看关联文章；新增统一关系浏览，支持只读预览、切换中心、前进后退和双向手动关联。
+- 通过本地语义检索加载“可能相关”，由用户确认后建立关系；继续保留精确搜索。
+- 主题与手动关联纳入 PC 完整备份，新增并发编辑、来源变化和资料库身份校验；暂不进入 Android 同步。
+- 修复关系区域组件标识冲突导致的重复渲染，并调整桌面素材编辑器高度。提供 Linux x64 DEB 安装包。
+
+### English
+
+- Add PC/Web themes for passages from journals, freewriting and reading notes, with source snapshots, location status and navigation to the original context.
+- Show articles linked to a material and browse relationships with previews, explicit center changes, history and bidirectional manual links.
+- Load possible matches through local semantic search and create relationships only after confirmation; retain exact search.
+- Include themes and manual links in full PC backups, with revision and source-library checks. These additions are not yet part of Android synchronization.
+- Fix duplicate relationship rendering caused by conflicting component keys and enlarge the desktop material editor. Includes a Linux x64 DEB.
+
+## v0.1.26 - 2026-11-17
+
+### 新功能
+
+- PC 与 Web 的素材、文章、读书笔记和写作素材支持本地语义检索与原文检索，按需下载模型并显示索引状态。
+
 ## v0.1.25 - 2026-11-16
 
 ### 中文

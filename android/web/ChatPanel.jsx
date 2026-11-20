@@ -306,7 +306,9 @@ function LocalChatPanel({ready, config, onRead, onDirect, onSending, onOpenSetti
     } catch (error) {
       if (activeIdRef.current === conversationId) {
         const code = String(error.message || error);
-        if (code.includes('PROFILE_CHANGED')) {
+        if (code.includes('ORIGINAL_SAVE_FAILED')) {
+          setMessage(t('原文保存失败，消息仍在输入框，可再次发送。','Could not save the original. Your message is still in the editor. Try sending again.'));
+        } else if (code.includes('PROFILE_CHANGED')) {
           setProfileIssue(t('服务端人设已更新。草稿仍在编辑框，请新建会话继续。','The server persona changed. Your draft remains in the editor; start a new conversation to continue.'));
           setMessage(t('人设版本发生变化，本轮没有继续执行。草稿已保留。','The persona revision changed, so this turn did not run. Your draft is preserved.'));
         } else if (code.includes('PROFILE_REFRESHING')) {
@@ -366,7 +368,8 @@ function LocalChatPanel({ready, config, onRead, onDirect, onSending, onOpenSetti
         <MessageBubble role="user" text={task.input} onDirect={onDirect}/>
         <div className="agent-message"><img className="chat-avatar" src="./shiwen-mark.png" alt=""/>{task.status!=='succeeded'&&<span className="task-status">{t(terminalLabels[task.status] || task.status)}</span>}
           {isRunning(task) && Number.isInteger(task.contextTurns) && <span className="task-context"> · {t(`本轮参考 ${task.contextTurns} 轮对话${task.omittedTurns ? `，另有 ${task.omittedTurns} 轮未纳入` : ''}`,`Context: ${task.contextTurns} conversation turns${task.omittedTurns ? `; ${task.omittedTurns} more omitted` : ''}`)}</span>}
-          {task.output && <MessageBubble role="assistant" text={task.output} onDirect={onDirect} embedded/>}{task.error && <button className="text" onClick={()=>setTaskError(task.error)}>{t('查看失败原因','View error')}</button>}
+          {(task.error==='MODEL_EMPTY_REPLY'||(task.status==='succeeded'&&!task.output?.trim()))&&<span className="task-status">{t('模型未返回回复正文。','The model returned no reply text.')}</span>}
+          {task.output && <MessageBubble role="assistant" text={task.output} onDirect={onDirect} embedded/>}{task.error && task.error!=='MODEL_EMPTY_REPLY' && <button className="text" onClick={()=>setTaskError(task.error)}>{t('查看失败原因','View error')}</button>}
           {task.recordId && <button className="receipt" onClick={() => onRead?.(task.recordId)}>✓ {t('原文已保存为素材 · 查看','Original saved as material · View')}</button>}
           {isRunning(task) && <button className="text" onClick={() => cancel(task)}>{t('取消任务')}</button>}
         </div>

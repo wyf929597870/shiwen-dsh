@@ -16,6 +16,7 @@ internal class LibraryClientArchive(context: Context) {
         val drafts = RecordEditorDraftStore(app)
         val result = try { JSONObject().put("version", 1).put("editorDrafts", drafts.archive(repo.libraryId)) }
             finally { drafts.close() }
+        result.put("workspaceThemes", JSONArray(repo.dao.workspaceThemes().map(::JSONObject)))
         val references = draftAttachmentReferences(result.getJSONArray("editorDrafts"))
         val store = LibraryAttachmentDraftStore(app, repo.libraryId)
         val staged = JSONArray()
@@ -44,7 +45,15 @@ internal class LibraryClientArchive(context: Context) {
         val store = RecordEditorDraftStore(app)
         try { store.restoreArchive(repo.libraryId, archive.getJSONArray("editorDrafts"), digest) }
         finally { store.close() }
-        repo.dao.putMeta(LibraryMeta("restored-editor-archive-digest", digest))
+        repo.db.runInTransaction {
+            archive.optJSONArray("workspaceThemes")?.let { themes ->
+                for (i in 0 until themes.length()) {
+                    val theme = themes.getJSONObject(i)
+                    repo.dao.putMeta(LibraryMeta("workspace-theme:" + theme.getString("id"), theme.toString()))
+                }
+            }
+            repo.dao.putMeta(LibraryMeta("restored-editor-archive-digest", digest))
+        }
     }
     fun restoreConversations(repo: LibraryRepository, store: AgentTaskStore) {
         val archive = restored(repo) ?: return
@@ -60,13 +69,29 @@ internal class LibraryClientArchive(context: Context) {
     companion object {
         fun validate(archive: JSONObject) {
             require(archive.optInt("version") == 1 && archive.toString().length <= 24 * 1024 * 1024) { "CLIENT_ARCHIVE_INVALID" }
-            require(archive.keys().asSequence().all { it in setOf("version", "editorDrafts", "agentArchive", "draftAttachments") }) { "CLIENT_ARCHIVE_UNEXPECTED_FIELD" }
+            require(archive.keys().asSequence().all { it in setOf("version", "editorDrafts", "agentArchive", "draftAttachments", "workspaceThemes") }) { "CLIENT_ARCHIVE_UNEXPECTED_FIELD" }
+            archive.optJSONArray("workspaceThemes")?.let { themes ->
+                val ids = mutableSetOf<String>()
+                for (i in 0 until themes.length()) {
+                    val theme = themes.getJSONObject(i)
+                    require(ids.add(UUID.fromString(theme.getString("id")).toString()) && theme.getInt("revision") > 0 &&
+                        theme.getString("title").length in 1..200 && theme.getString("summary").length <= 10000 &&
+                        theme.has("members") && theme.toString().toByteArray().size <= 2_000_000) { "INVALID_WORKSPACE_THEME" }
+                    for (j in 0 until theme.getJSONArray("members").length()) {
+                        val member = theme.getJSONArray("members").getJSONObject(j)
+                        require(member.getString("field") in setOf("excerpt","body","reflection") && member.getString("sourceRecordId").isNotBlank() &&
+                            member.getString("sourceKind").isNotBlank() && member.getString("id").isNotBlank() &&
+                            member.getInt("start") >= 0 && member.getInt("end") - member.getInt("start") == member.getString("quote").length)
+                        member.getBoolean("whole")
+                    }
+                }
+            }
             val drafts = archive.getJSONArray("editorDrafts")
             require(drafts.length() <= 1000) { "CLIENT_ARCHIVE_DRAFT_INVALID" }
             val slots = mutableSetOf<String>()
             for (i in 0 until drafts.length()) {
                 val row = drafts.getJSONObject(i); val slot = row.getString("slot")
-                require((slot in setOf("composer", "materials", "articles") || slot.matches(Regex("annotation:[0-9a-fA-F-]{36}"))) && slots.add(slot)) { "CLIENT_ARCHIVE_DRAFT_INVALID" }
+                require((slot in setOf("composer", "materials", "articles", "collections") || slot.matches(Regex("annotation:[0-9a-fA-F-]{36}"))) && slots.add(slot)) { "CLIENT_ARCHIVE_DRAFT_INVALID" }
                 require(row.getLong("localGeneration") in 0..9_007_199_254_740_991L && row.getLong("updatedAt") >= 0) { "CLIENT_ARCHIVE_DRAFT_INVALID" }
                 val id = row.optString("requestId").takeUnless { it.isBlank() || it == "null" }
                 if (id != null) UUID.fromString(id)

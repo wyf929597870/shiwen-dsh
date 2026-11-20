@@ -2,17 +2,14 @@ package io.github.wyf929597870.shiwen.agent
 
 import ai.koog.agents.core.tools.ToolRegistry
 import io.github.wyf929597870.shiwen.model.Canonical
-import io.github.wyf929597870.shiwen.probe.ProbeDraft
 import io.github.wyf929597870.shiwen.library.AgentLibraryAccess
 import io.github.wyf929597870.shiwen.library.LibraryRepository
 import org.json.JSONObject
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 /** Bound to one native repository. Suggestions require a separate explicit user decision. */
-internal fun localLibraryTools(repository: AgentLibraryAccess, approvedDraft: ProbeDraft? = null,
+internal fun localLibraryTools(repository: AgentLibraryAccess,
     taskId: String? = null, conversationId: String? = null): ToolRegistry = ToolRegistry {
     tool(LibraryTool("search_records", "在当前手机资料库按标题或正文检索，返回最多 20 条标题和日期。", listOf("query")) { args ->
         val query = args.getValue("query")
@@ -45,22 +42,13 @@ internal fun localLibraryTools(repository: AgentLibraryAccess, approvedDraft: Pr
                 "totalCharacters" to row.markdown.length,"nextOffset" to if(end<row.markdown.length) end else null,"libraryId" to repository.libraryId))
         }
     })
-    if (approvedDraft != null) tool(LibraryTool("save_approved_record",
-        "保存本轮由用户明确确认的原文，正文与类型不可改写。重复调用返回同一条记录。", emptyList()) {
-        withContext(Dispatchers.IO) {
-            currentCoroutineContext().ensureActive()
-            val row = repository.saveApprovedDraft(approvedDraft)
-            Canonical.encode(mapOf("status" to "applied", "recordId" to row.id,
-                "requestId" to approvedDraft.requestId, "libraryId" to repository.libraryId, "origin" to "personal"))
-        }
-    })
     if (repository is LibraryRepository && taskId != null && conversationId != null) {
         val actions = AgentRecordActions(repository)
         tool(LibraryTool("list_records_by_date", "按内容日期倒序分页列出本库资料，start/end为YYYY-MM-DD，cursor首段填0，之后填nextCursor。可连续读取超过200条的完整月份。",listOf("start","end","cursor")) { args ->
             withContext(Dispatchers.IO) { AgentLibraryQuery(repository).byDate(args.getValue("start"),args.getValue("end"),
                 args.getValue("cursor").toIntOrNull() ?: error("INVALID_DATE_CURSOR")).toString() }
         })
-        tool(LibraryTool("propose_save_record", "提出保存新记录建议。patch是JSON字符串，包含kind/title/markdown及可选contentDay/dateBasis/url/annotation/stage；读书笔记用kind=reading_note，title为书名、markdown只含感想；annotation为JSON字符串，结构是{schema:shiwen.reading-note.v1,chapter:章节,page:页码,excerpts:[{text:摘录,page:页码}]}，摘录不计感想字数，同书每次记录独立保存。生成正文标为AI。仅创建待确认建议，用户确认前不能声称已保存。",listOf("patch")) { args ->
+        tool(LibraryTool("propose_save_record", "提出保存新记录建议。patch是JSON字符串，包含kind/title/markdown及可选contentDay/dateBasis/url/annotation/stage；读书笔记用kind=reading_note，title为书名、markdown只含感想；annotation为JSON字符串，结构是{schema:shiwen.reading-note.v1,chapter:章节,page:页码,excerpts:[{text:摘录,page:页码}]}，摘录不计感想字数；每条划线作为一条独立记录保存，excerpts 仅有一条，想法可为空。生成正文标为AI。仅创建待确认建议，用户确认前不能声称已保存。",listOf("patch")) { args ->
             withContext(Dispatchers.IO) { actions.propose(taskId,conversationId,"create",null,JSONObject(args.getValue("patch"))).toString() }
         })
         tool(LibraryTool("propose_update_record", "提出单条记录的修改建议。patch是JSON字符串，仅含要修改的kind/title/markdown/origin/processing/contentDay/dateBasis/url/annotation/stage。读书笔记的annotation保存章节页码与摘录，修改时读取并保留未修改的内容，不把摘录混入markdown。可以更正已有资料的类型和来源；正文改写始终标为AI，须用户确认。",listOf("id","patch")) { args ->

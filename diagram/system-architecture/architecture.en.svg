@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1060" role="img" aria-labelledby="title desc">
+<title id="title">Shiwen system architecture</title>
+<desc id="desc">Desktop and browsers share a server library. Android persists its own local library and syncs with the service. Model calls and external Agent access are shown separately.</desc>
+<defs>
+<style>text{font-family:'Noto Sans CJK SC','Noto Sans',sans-serif;fill:#e2e8f0} .muted{fill:#94a3b8} .small{font-size:16px} .body{font-size:18px} .name{font-size:21px;font-weight:600} .group{font-size:23px;font-weight:600} .kicker{font-size:15px;letter-spacing:2px;fill:#8edbc1}</style>
+<pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0V32" fill="none" stroke="#1e293b" stroke-width="0.4"/></pattern>
+<marker id="a-cyan" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9" fill="none" stroke="#22d3ee" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="a-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9" fill="none" stroke="#34d399" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="a-purple" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9" fill="none" stroke="#a78bfa" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="a-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9" fill="none" stroke="#fbbf24" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="a-slate" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9" fill="none" stroke="#94a3b8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1440" height="1060" fill="#0f172a"/>
+<rect width="1440" height="1060" fill="url(#grid)"/>
+<rect x="40" y="170" width="270" height="550" rx="16" fill="#111d2e" stroke="#334155" stroke-width="1.4"/>
+<rect x="60" y="192" width="4" height="24" rx="2" fill="#22d3ee"/>
+<text x="76" y="214" class="group" text-anchor="start">Desktop &amp; Web</text>
+<text x="64" y="238" class="small" text-anchor="start">One server-side library</text>
+<rect x="430" y="170" width="580" height="550" rx="16" fill="#111d2e" stroke="#334155" stroke-width="1.4"/>
+<rect x="450" y="192" width="4" height="24" rx="2" fill="#34d399"/>
+<text x="466" y="214" class="group" text-anchor="start">Shiwen service</text>
+<text x="454" y="238" class="small" text-anchor="start">On the library computer · Node.js + DSH</text>
+<rect x="1130" y="170" width="270" height="550" rx="16" fill="#111d2e" stroke="#334155" stroke-width="1.4"/>
+<rect x="1150" y="192" width="4" height="24" rx="2" fill="#22d3ee"/>
+<text x="1166" y="214" class="group" text-anchor="start">Android client</text>
+<text x="1154" y="238" class="small" text-anchor="start">Local library · Offline edits</text>
+<path d="M310 300H430" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linejoin="round" marker-end="url(#a-cyan)"/>
+<text x="370" y="282" class="small" text-anchor="middle" style="fill:#22d3ee">Access / RPC</text>
+<path d="M1130 300H1010" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linejoin="round" marker-end="url(#a-cyan)" marker-start="url(#a-cyan)"/>
+<text x="1070" y="274" class="small" text-anchor="middle" style="fill:#22d3ee">Sync</text>
+<text x="1070" y="329" class="small" text-anchor="middle" style="fill:#94a3b8">Remote chat</text>
+<path d="M720 340V366H577V396" fill="none" stroke="#34d399" stroke-width="2" stroke-linejoin="round" marker-end="url(#a-green)"/>
+<path d="M720 366H863V396" fill="none" stroke="#34d399" stroke-width="2" stroke-linejoin="round" marker-end="url(#a-green)"/>
+<path d="M700 451H740" fill="none" stroke="#34d399" stroke-width="2" stroke-linejoin="round" marker-end="url(#a-green)"/>
+<text x="720" y="437" class="small" text-anchor="middle" style="fill:#34d399">Tools</text>
+<path d="M577 506V570" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linejoin="round" marker-end="url(#a-purple)"/>
+<path d="M863 506V570" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linejoin="round" marker-end="url(#a-purple)"/>
+<path d="M1265 340V396" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linejoin="round" marker-end="url(#a-cyan)"/>
+<path d="M1265 506V570" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linejoin="round" marker-end="url(#a-purple)"/>
+<rect x="60" y="256" width="230" height="84" rx="12" fill="#0f172a"/>
+<rect x="60" y="256" width="230" height="84" rx="12" fill="#12303e" stroke="#22d3ee" stroke-width="1.4"/>
+<text x="175.0" y="288" class="name" text-anchor="middle">Electron / Browser</text>
+<text x="175.0" y="316" class="small" text-anchor="middle" style="fill:#afbdd0">Shared React workspace</text>
+<rect x="454" y="256" width="532" height="84" rx="12" fill="#0f172a"/>
+<rect x="454" y="256" width="532" height="84" rx="12" fill="#13342f" stroke="#34d399" stroke-width="1.4"/>
+<text x="720.0" y="288" class="name" text-anchor="middle">Authentication &amp; API entry points</text>
+<text x="720.0" y="316" class="small" text-anchor="middle" style="fill:#afbdd0">Password / device sessions · Workspace RPC · Mobile APIs</text>
+<rect x="454" y="396" width="246" height="110" rx="12" fill="#0f172a"/>
+<rect x="454" y="396" width="246" height="110" rx="12" fill="#13342f" stroke="#34d399" stroke-width="1.4"/>
+<text x="577.0" y="428" class="name" text-anchor="middle">DSH runtime</text>
+<text x="577.0" y="456" class="small" text-anchor="middle" style="fill:#afbdd0">Chat · Agents · Models</text>
+<text x="577.0" y="480" class="small" text-anchor="middle" style="fill:#afbdd0">Skills · Tool execution</text>
+<rect x="740" y="396" width="246" height="110" rx="12" fill="#0f172a"/>
+<rect x="740" y="396" width="246" height="110" rx="12" fill="#13342f" stroke="#34d399" stroke-width="1.4"/>
+<text x="863.0" y="428" class="name" text-anchor="middle">Shiwen library</text>
+<text x="863.0" y="456" class="small" text-anchor="middle" style="fill:#afbdd0">Notes · Writing · Review</text>
+<text x="863.0" y="480" class="small" text-anchor="middle" style="fill:#afbdd0">Versions · Sources · Sync</text>
+<rect x="454" y="570" width="246" height="100" rx="12" fill="#0f172a"/>
+<rect x="454" y="570" width="246" height="100" rx="12" fill="#272442" stroke="#a78bfa" stroke-width="1.4"/>
+<text x="577.0" y="602" class="name" text-anchor="middle">DSH data</text>
+<text x="577.0" y="630" class="small" text-anchor="middle" style="fill:#afbdd0">Sessions · Config · Skills</text>
+<rect x="740" y="570" width="246" height="100" rx="12" fill="#0f172a"/>
+<rect x="740" y="570" width="246" height="100" rx="12" fill="#272442" stroke="#a78bfa" stroke-width="1.4"/>
+<text x="863.0" y="602" class="name" text-anchor="middle">Server library</text>
+<text x="863.0" y="630" class="small" text-anchor="middle" style="fill:#afbdd0">SQLite + attachments</text>
+<rect x="1150" y="256" width="230" height="84" rx="12" fill="#0f172a"/>
+<rect x="1150" y="256" width="230" height="84" rx="12" fill="#12303e" stroke="#22d3ee" stroke-width="1.4"/>
+<text x="1265.0" y="288" class="name" text-anchor="middle">React + Capacitor</text>
+<text x="1265.0" y="316" class="small" text-anchor="middle" style="fill:#afbdd0">Phone interface</text>
+<rect x="1150" y="396" width="230" height="110" rx="12" fill="#0f172a"/>
+<rect x="1150" y="396" width="230" height="110" rx="12" fill="#13342f" stroke="#34d399" stroke-width="1.4"/>
+<text x="1265.0" y="428" class="name" text-anchor="middle">Kotlin native layer</text>
+<text x="1265.0" y="456" class="small" text-anchor="middle" style="fill:#afbdd0">Phone agent · Native APIs</text>
+<text x="1265.0" y="480" class="small" text-anchor="middle" style="fill:#afbdd0">Sync queue · WorkManager</text>
+<rect x="1150" y="570" width="230" height="100" rx="12" fill="#0f172a"/>
+<rect x="1150" y="570" width="230" height="100" rx="12" fill="#272442" stroke="#a78bfa" stroke-width="1.4"/>
+<text x="1265.0" y="602" class="name" text-anchor="middle">Phone library</text>
+<text x="1265.0" y="630" class="small" text-anchor="middle" style="fill:#afbdd0">Room / SQLite</text>
+<text x="1265.0" y="654" class="small" text-anchor="middle" style="fill:#afbdd0">Local attachments</text>
+<text x="64" y="424" class="name" text-anchor="start">Desktop client</text>
+<text x="64" y="460" class="small" text-anchor="start">Connection, window &amp; tray</text>
+<text x="64" y="492" class="small" text-anchor="start">Browsers need no installer</text>
+<text x="64" y="584" class="body" text-anchor="start" style="fill:#a78bfa">Data stays on the server</text>
+<text x="64" y="616" class="small" text-anchor="start">Service can outlive the UI</text>
+<text x="720" y="701" class="small" text-anchor="middle">Host state and library data remain separate.</text>
+<rect x="40" y="786" width="1360" height="218" rx="16" fill="#111d2e" stroke="#334155" stroke-width="1.4"/>
+<text x="64" y="833" class="name" text-anchor="start">Model calls</text>
+<path d="M580 829H680" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linejoin="round" marker-end="url(#a-amber)"/>
+<path d="M470 945H550" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linejoin="round" marker-end="url(#a-slate)"/>
+<path d="M870 945H950" fill="none" stroke="#34d399" stroke-width="2" stroke-linejoin="round" marker-end="url(#a-green)"/>
+<rect x="250" y="800" width="330" height="62" rx="12" fill="#0f172a"/>
+<rect x="250" y="800" width="330" height="62" rx="12" fill="#13342f" stroke="#34d399" stroke-width="1.4"/>
+<text x="415.0" y="832" class="name" text-anchor="middle">DSH agent / Phone agent</text>
+<rect x="680" y="800" width="370" height="62" rx="12" fill="#0f172a"/>
+<rect x="680" y="800" width="370" height="62" rx="12" fill="#3a3024" stroke="#fbbf24" stroke-width="1.4"/>
+<text x="865.0" y="832" class="name" text-anchor="middle">User-configured models</text>
+<text x="1090" y="822" class="small" text-anchor="start">Relevant request context</text>
+<text x="1090" y="848" class="small" text-anchor="start">Local storage ≠ offline AI</text>
+<text x="64" y="949" class="name" text-anchor="start">External access</text>
+<rect x="250" y="914" width="220" height="62" rx="12" fill="#0f172a"/>
+<rect x="250" y="914" width="220" height="62" rx="12" fill="#1d293c" stroke="#94a3b8" stroke-width="1.4"/>
+<text x="360.0" y="946" class="name" text-anchor="middle">Same-host agents</text>
+<rect x="550" y="914" width="320" height="62" rx="12" fill="#0f172a"/>
+<rect x="550" y="914" width="320" height="62" rx="12" fill="#1d293c" stroke="#94a3b8" stroke-width="1.4"/>
+<text x="710.0" y="946" class="name" text-anchor="middle">MCP / HTTP / CLI</text>
+<rect x="950" y="914" width="310" height="62" rx="12" fill="#0f172a"/>
+<rect x="950" y="914" width="310" height="62" rx="12" fill="#13342f" stroke="#34d399" stroke-width="1.4"/>
+<text x="1105.0" y="946" class="name" text-anchor="middle">Shiwen library tools</text>
+<text x="710" y="901" class="small" text-anchor="middle">Loopback only · Scoped credentials</text>
+<text x="40" y="46" class="kicker" text-anchor="start">SHIWEN  /  SYSTEM ARCHITECTURE</text>
+<rect x="1040" y="34" width="12" height="12" rx="3" fill="#22d3ee"/>
+<text x="1062" y="46" class="small" text-anchor="start">UI</text>
+<rect x="1160" y="34" width="12" height="12" rx="3" fill="#34d399"/>
+<text x="1182" y="46" class="small" text-anchor="start">Services</text>
+<rect x="1300" y="34" width="12" height="12" rx="3" fill="#a78bfa"/>
+<text x="1322" y="46" class="small" text-anchor="start">Storage</text>
+<text x="40" y="94" class="group" text-anchor="start">Shiwen: apps, services and data</text>
+<text x="40" y="130" class="body" text-anchor="start" style="fill:#94a3b8">01  RUNTIME &amp; STORAGE BOUNDARIES</text>
+<text x="40" y="761" class="body" text-anchor="start" style="fill:#94a3b8">02  AI &amp; EXTERNAL AGENT ACCESS</text>
+<text x="40" y="1034" class="small" text-anchor="start">Stock DSH supplies plugin authentication. Android sync uses a coordinating service, not peer-to-peer replication.</text>
+</svg>

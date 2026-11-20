@@ -8,7 +8,7 @@ import {syncCompletionMessage} from './sync-summary.mjs';
 import './settings-translations.mjs';
 import './settings-redesign.css';
 
-const syncText = (value,t) => ({synced:t('人设已同步','Persona synced'), cached:t('仅有上次缓存','Last verified snapshot cached'), 'not-synced':t('尚未同步','Not synced')}[value] || value || t('尚无同步记录','No sync record yet'));
+const syncText = (value,t) => ({synced:t('最近同步成功','Last sync succeeded'), cached:t('仅有上次缓存','Last verified snapshot cached'), 'not-synced':t('尚未同步','Not synced')}[value] || value || t('尚无同步记录','No sync record yet'));
 const syncProgressText = (value,t) => ({queued:t('排队中','Queued'),running:t('同步中','Syncing'),completed:t('已完成','Completed'),failed:t('失败','Failed'),cancelled:t('已取消','Cancelled'),paused:t('已暂停','Paused'),error:t('出错','Error'),initializing:t('初始化中','Initializing'),idle:t('空闲','Idle')}[value]||value||t('状态未知','Unknown status'));
 const displayDate = value => { if (!value || value === 'null') return ''; const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString(); };
 const syncPhaseText = (value,t) => ({identity:t('核对服务身份','Checking server identity'),bootstrap:t('读取资料库','Reading library'),push:t('上传本机更改','Uploading local changes'),receipts:t('核对写入回执','Checking write receipts'),pull:t('接收更新','Receiving updates'),attachments:t('传输附件','Transferring attachments'),ack:t('确认同步进度','Confirming sync progress'),finalize:t('完成收尾','Finalizing')}[value]||value||'');
@@ -118,6 +118,15 @@ export function SettingsPanel({ready, libraryId, libraries=[], libraryContext, c
     const snapshot = await call('nodeSelect', {id});
     setNodes(snapshot.items || []); setDiscovered(snapshot.discovered||[]); setActiveId(snapshot.activeId ?? null);
   });
+  const refreshPersona = id => run(async () => {
+    try {
+      const snapshot=await call('nodeProfileRefresh',{id});
+      setNodes(snapshot.items||[]);setActiveId(snapshot.activeId??null);
+      const node=(snapshot.items||[]).find(item=>item.id===id);
+      if(node?.profileSyncStatus==='synced')setSuccess(t('人格和已确认记忆同步成功。','Persona and confirmed memories synced.'));
+      else setMessage(t('未能确认人格同步结果，请查看状态后重试。','Could not confirm the persona sync result. Check the status and retry.'));
+    } catch(error) { await refreshNodes(); throw error; }
+  });
   const checkNode = id => run(async () => {
     try {
       const snapshot = await call('nodeCheck', {id});
@@ -169,10 +178,10 @@ export function SettingsPanel({ready, libraryId, libraries=[], libraryContext, c
     {settingsPage==='services'&&<section className="server-settings" aria-label={t('服务节点','Server nodes')}>
       {nodes.length > 0 ? <div className="node-list">{nodes.map(node => <article className="node-card" key={node.id}>
         <div className="settings-heading"><div><h3>{node.name}</h3><p className="secondary node-url">{node.baseUrl}</p></div>{node.refreshing && <span className="state-pill is-refreshing">{t('人设同步中','Syncing profile')}</span>}{!node.refreshing && activeId === node.id && <span className="state-pill is-ready">{t('当前节点','Active node')}</span>}</div>
-        <dl className="settings-details server-status"><div><dt>{t('连接状态','Connection')}</dt><dd>{nodeStatus(node,t)}</dd></div><div><dt>{t('认证状态','Authentication')}</dt><dd>{node.authenticated ? t('上次核验已通过','Last check passed') : t('尚未核验通过','Not verified')}</dd></div><div><dt>{t('人设同步','Profile sync')}</dt><dd>{node.refreshing ? t('正在更新助手配置','Updating agent profile') : syncText(node.profileSyncStatus,t)}</dd></div>{Number.isInteger(node.profileMemoryCount) && <div><dt>{t('记忆条目','Memory items')}</dt><dd>{node.profileMemoryCount} {t('条','items')}</dd></div>}</dl>
+        <dl className="settings-details server-status"><div><dt>{t('连接状态','Connection')}</dt><dd>{nodeStatus(node,t)}</dd></div><div><dt>{t('认证状态','Authentication')}</dt><dd>{node.authenticated ? t('上次核验已通过','Last check passed') : t('尚未核验通过','Not verified')}</dd></div><div><dt>{t('人设同步','Profile sync')}</dt><dd>{node.refreshing ? t('正在更新助手配置','Updating agent profile') : syncText(node.profileSyncStatus,t)}</dd></div>{node.profileUpdatedAt&&<div><dt>{t('上次成功同步','Last successful sync')}</dt><dd>{displayDate(node.profileUpdatedAt)}</dd></div>}{Number.isInteger(node.profileMemoryCount) && <div><dt>{t('记忆条目','Memory items')}</dt><dd>{node.profileMemoryCount} {t('条','items')}</dd></div>}</dl>
         {!node.fingerprint&&<p className="secondary">{t('此节点使用旧连接。扫描服务电脑的配对码后，可自动发现与切换地址。','Pair with the server to enable discovery and address switching.')}</p>}
         {node.endpoints?.length>1&&<details><summary>{t('备用地址','Backup addresses')} · {node.endpoints.length-1}</summary>{node.endpoints.filter(url=>url!==node.baseUrl).map(url=><p className="node-url" key={url}>{url}</p>)}</details>}
-        <div className="node-actions server-actions"><button className="chip" disabled={!ready||busy} onClick={()=>scanNode(node.id)}>{t(node.fingerprint?'重新配对':'扫码升级连接',node.fingerprint?'Pair again':'Pair secure connection')}</button>
+        <div className="node-actions server-actions"><button className="chip" disabled={!ready||busy||node.refreshing} onClick={()=>refreshPersona(node.id)}>{t('同步人格与记忆','Sync persona and memories')}</button><button className="chip" disabled={!ready||busy} onClick={()=>scanNode(node.id)}>{t(node.fingerprint?'重新配对':'扫码升级连接',node.fingerprint?'Pair again':'Pair secure connection')}</button>
         <button className="chip" disabled={!ready || busy} onClick={() => checkNode(node.id)}>{t('检查连接','Check connection')}</button><button className="chip" disabled={!ready || busy} onClick={() => configureNode(node.id)}>{t('编辑登录','Edit sign-in')}</button>{activeId !== node.id && <button className="chip" disabled={!ready || busy} onClick={() => selectNode(node.id)}>{t('设为当前','Set active')}</button>}<button className="chip danger" disabled={!ready || busy} onClick={() => removeNode(node.id)}>{t('移除此节点','Remove this server')}</button></div>
         {nodeSync?.nodeId===node.id && <div className="sync-progress" role="status"><strong>{t('资料库同步','Library sync')} · {syncProgressText(nodeSync.state,t)}</strong>{nodeSync.phase&&<span>{syncPhaseText(nodeSync.phase,t)}</span>}{nodeSync.completed!=null&&<span>{nodeSync.total!=null?`${nodeSync.completed} / ${nodeSync.total}`:nodeSync.completed}</span>}{nodeSync.error&&<p>{nodeSync.error}</p>}{nodeSync.message&&<p>{nodeSync.message}</p>}</div>}
       </article>)}</div> : <p className="empty-state">{t('还没有服务节点。添加并连接节点后，才能管理该节点的拾文助手与全局记忆。','No server is connected. Add one to manage its Shiwen agent and global memory.')}</p>}

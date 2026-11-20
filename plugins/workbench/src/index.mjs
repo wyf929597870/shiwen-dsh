@@ -12,9 +12,9 @@ import {createManagementAdapter} from '../../mobile/src/management-adapter.mjs';
 import {createRemoteSessionsAdapter} from '../../mobile/src/remote-sessions-adapter.mjs';
 import {createMobileSyncAdapter} from '../../mobile/src/sync-adapter.mjs';
 export const inject=['connection','shiwenLibrary','sessionQuery','shiwenExternal'];
-const ownerMethods=new Set(['readingNoteList','readingNoteSave','removedRecords','mobileAgentProfile','agentState','agentDocumentSave','memorySave','memoryDelete','memoryDecide',
+const ownerMethods=new Set(['contentSearch','contentSearchStatus','contentSearchEnable','contentSearchRebuild','relatedArticles','recordNeighborhood','recordRelationAdd','recordRelationRemove','themeContext','themeList','themeRead','themeSave','themeDelete','themeMemberAdd','themeMemberRemove','recordThemes','readingNoteList','readingNoteSave','removedRecords','mobileAgentProfile','agentState','agentDocumentSave','memorySave','memoryDelete','memoryDecide',
   'externalStatus','externalClientCreate','externalClientRevoke','mobileManagement','mobileSync','mobileSessions',
-  'readImage','stageImage','discardStagedImages','workbenchDraft','originalVersionInfo','annotationList','annotationRead','annotationCreate','annotationUpdate','annotationDelete','annotationRestore','reviewPreview','correctRecordOrigin','exportDocumentBundle']);
+  'readImage','stageImage','discardStagedImages','workbenchSaveReceipt','workbenchDraft','originalVersionInfo','annotationList','annotationRead','annotationCreate','annotationUpdate','annotationDelete','annotationRestore','reviewPreview','correctRecordOrigin','exportDocumentBundle']);
 export function apply(ctx){
   const management=createManagementAdapter(ctx);
   const mobileSessions=createRemoteSessionsAdapter({ctx,library:ctx.shiwenLibrary});
@@ -34,7 +34,15 @@ export function apply(ctx){
       }
       const library=ctx.shiwenLibrary;
       let result;
-      if(method==='mobileManagement'){
+      if(method==='contentSearch'){
+        result=await library.contentSearch.search(args);
+      }else if(method==='contentSearchStatus'){
+        result=library.contentSearch.status();
+      }else if(method==='contentSearchEnable'){
+        void library.contentSearch.enable().catch(()=>{});result=library.contentSearch.status();
+      }else if(method==='contentSearchRebuild'){
+        result=await library.contentSearch.rebuild();
+      }else if(method==='mobileManagement'){
         if(typeof args?.action!=='string')throw Object.assign(new Error('Management action is required'),{code:'INVALID_REQUEST'});
         result=await management.execute(args.action,args.args??{},request.signal);
       }else if(method==='mobileSync'){
@@ -83,8 +91,15 @@ export function apply(ctx){
       }else if(method==='annotationRead'){
         const row=library.annotationRead(args);result={...row,markdown:markdownSource(row.doc)};
       }else if(method==='readMarkdown'){
-        const row=library.get(args.id);if(!row||row.deleted)throw new Error('记录不存在');
-        result={...row,markdown:markdownSource(row.doc),dshSources:library.dshSources({id:row.id})};
+        const row=library.get(args.id);if(!row||row.deleted)throw Object.assign(new Error('记录不存在'),{code:'RECORD_NOT_FOUND'});
+        const admission=ctx.connection.admit?.(request);
+        const sourceLibraryId=ctx.connection.browserPeer&&admission&&!('rejection' in admission)&&admission.peer===ctx.connection.browserPeer?library.themeContext().libraryId:undefined;
+        result={...row,markdown:markdownSource(row.doc),dshSources:library.dshSources({id:row.id}),...(sourceLibraryId?{sourceLibraryId}:{})};
+      }else if(method==='readingNoteSave'){
+        result=library.readingNoteSave(args,{allOrigins:true});
+      }else if(method==='readingNoteList'){
+        const notes=library.readingNoteList({allOrigins:true}),sourceLibraryId=library.themeContext().libraryId;
+        result={...notes,records:notes.records.map(row=>({...row,sourceLibraryId}))};
       }else if(method==='readImage'){
         const row=library.get(args.id);if(!row||row.deleted)throw new Error('记录不存在');
         const image=library.attachment({id:args.attachmentId});
@@ -99,10 +114,11 @@ export function apply(ctx){
         result=library.discardWorkbenchImages({ids:args.ids});
       }else if(method==='workbenchDraft'){
         result=library.workbenchDraft(args);
-      }else if(method==='saveMarkdown'){
+      }else if(method==='saveMarkdown'||method==='workbenchSaveReceipt'){
+        if(args.expectedLibraryId!==undefined&&args.expectedLibraryId!==library.themeContext().libraryId)throw Error('资料库已切换，请重新打开画布');
         const requestPayload={id:args.id,revision:args.revision,kind:args.kind,title:args.title,body:args.body,stage:args.stage,sourceIds:args.sourceIds,imageIds:args.imageIds};
         const replay=args.requestId?library.workbenchImageReceipt({requestId:args.requestId,requestPayload}):null;
-        if(replay)result=replay;
+        if(replay||method==='workbenchSaveReceipt')result=replay;
         else{
           const row=args.id?library.get(args.id):null;
           if(args.id&&(!row||row.deleted))throw new Error('记录不存在');
@@ -113,7 +129,8 @@ export function apply(ctx){
           result=args.requestId||args.imageIds?.length?library.saveWorkbenchMarkdown(input,args.imageIds??[],args.requestId,requestPayload):library.save(input);
         }
       }else{
-        if(!['readingNoteList','readingNoteSave','snapshot','review','draft','editingDraft','versions','restoreVersion','remove','restoreRemoved','removedRecords','updateRecord','importDate','recordDate','searchRecords','agentState','agentDocumentSave','memorySave','memoryDelete','memoryDecide','originalVersionInfo','annotationList','annotationCreate','annotationUpdate','annotationDelete','annotationRestore','reviewPreview','correctRecordOrigin'].includes(method))throw new Error('未知操作');
+        if(!['relatedArticles','recordNeighborhood','recordRelationAdd','recordRelationRemove','themeContext','themeList','themeRead','themeSave','themeDelete','themeMemberAdd','themeMemberRemove','recordThemes','readingNoteList','readingNoteSave','snapshot','review','draft','editingDraft','versions','restoreVersion','remove','restoreRemoved','removedRecords','updateRecord','importDate','recordDate','searchRecords','agentState','agentDocumentSave','memorySave','memoryDelete','memoryDecide','originalVersionInfo','annotationList','annotationCreate','annotationUpdate','annotationDelete','annotationRestore','reviewPreview','correctRecordOrigin'].includes(method))throw new Error('未知操作');
+        if(['themeSave','themeDelete','themeMemberAdd','themeMemberRemove','recordRelationAdd','recordRelationRemove'].includes(method)&&(!args?.expectedLibraryId||args.expectedLibraryId!==library.themeContext().libraryId))throw new Error('资料库已切换，请重新打开主题');
         result=library[method](args);
       }
       return Response.json({result},{headers:{'Cache-Control':'no-store'}});

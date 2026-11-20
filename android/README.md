@@ -1,16 +1,16 @@
 # 拾文 Android
 
-拾文 Android 是独立的本地资料库客户端。界面使用 React + Capacitor，资料、草稿、任务与同步状态保存在 Kotlin/Room 中，手机不需要运行 Node 服务。当前处于完整功能整合验收阶段；已执行结果与剩余验收项见 [验证记录](../docs/android/validation-2026-11-07.md)。
+拾文 Android 是独立的本地资料库客户端。界面使用 React + Capacitor，资料、草稿、任务与同步状态保存在 Kotlin/Room 中，手机不需要运行 Node 服务。早期真机验收范围见 [验证记录](../docs/android/validation-2026-11-07.md)。
 
-下载 [Android 0.1.2 正式签名 APK](https://github.com/wyf929597870/shiwen-dsh/releases/download/android-v0.1.2/shiwen-android-0.1.2.apk)，无需自行构建。最低 Android 9，应用 ID 为 `io.github.wyf929597870.shiwen`。升级直接覆盖安装，避免卸载造成未同步资料丢失。
+下载 [Android 0.1.38 正式签名 APK](https://github.com/wyf929597870/shiwen-dsh/releases/download/android-v0.1.38/shiwen-android-0.1.38.apk)，无需自行构建。最低 Android 9，应用 ID 为 `io.github.wyf929597870.shiwen`。升级直接覆盖安装，避免卸载造成未同步资料丢失。
 
-图片同步需使用更新后的服务端，例如 Linux 0.1.9、Windows 0.1.9 预览版或插件 0.2.0-dev.4；旧服务遇到新图片时会提示升级。手机和服务电脑需网络互通，离线修改保留在手机。
+需要与电脑同步时，请配套升级拾文服务，例如 Linux 0.1.38。电脑和手机需要网络互通，离线修改会保存在手机。
 
 ## 日常使用
 
 本节描述当前源码；已发布 APK 的具体功能以对应版本说明为准。
 
-底部提供 **对话、素材、创作、回顾、设置**。没有电脑和服务器也可以记录、搜索、编辑和整理文章。资料不会按“最近 30 天”清理；回顾的 1/7/14/30 天和自然月只影响统计范围。
+底部导航提供对话、资料库、模型和设置。进入「资料库」后可以切换到记录、读书、收藏、创作、主题、回顾或全局搜索。手机可以离线查原文、展开相关文字、选择片段生成文章大纲。连接同库电脑后，还可按意思搜索并使用电脑主题。手机主题保存在当前手机资料库。
 
 - **手机 AI**：在设置中填写兼容 OpenAI Chat Completions 的 HTTPS 服务地址、模型和 Key。模型设置留在原生层，使用 Android Keystore 保护，不返回网页、不参加资料同步。保存配置不调用模型；明确发送才发起请求。
 - **远端 DSH**：选择已登录节点后使用该服务上的会话、Agent、工作区、Skills 与工具，审批、问题和取消均对应真实服务待办。手机不会把远端命令或 MCP 凭据当本机权限执行。
@@ -34,7 +34,7 @@
 - Markdown 导出与系统分享通过 Android 文件选择器/FileProvider 进行，不把任意手机路径开放给网页。单独导出 Markdown 不包含图片；需要完整图文时选择“导出 Markdown 与图片”。
 - 完整备份包含正文、版本、来源、关联、附件、草稿、回执与未同步分支，可选择包含本机 AI 会话，可使用密码加密。它不包含节点登录会话和模型 Key。
 - 恢复原库保留 libraryId，不覆盖已存在的同库；导入为新库生成新的 libraryId，两库以后独立。恢复后的 AI 会话只读归档，中断任务不自动重发。
-- 当前源码的 Markdown 导入上限为单文件 16 MiB、正文 100 万字符；完整备份使用流式文件处理，归档及解压数据上限 1 GiB，快照 JSON 上限 32 MiB。单张插图上限 8 MiB；图片选择一次最多 10 张、总计 32 MiB。备份需要足够的临时空间；超限或校验失败会明确报错，不把缺正文或附件的结果标为完整备份。旧版加密备份按旧版 64 MiB 上限读取。
+- 当前源码的 Markdown 导入上限为单文件 16 MiB、正文 100 万字符；完整备份使用流式文件处理，归档及解压后的数据各限 1 GiB，实际可恢复规模还受设备内存限制。单张插图上限 8 MiB；图片选择一次最多 10 张、总计 32 MiB。备份需要足够的临时空间；超限或校验失败会明确报错，不把缺正文或附件的结果标为完整备份。旧版加密备份按旧版 64 MiB 上限读取。
 - 清理功能只移除过期临时文件，不删除库内正文、历史或附件。异常中断留下的备份、恢复及导出临时文件在启动时按期限清理。卸载前应导出所需资料；调试包与正式包的数据目录互相隔离。
 
 ## 构建和安装
@@ -47,15 +47,12 @@
 npm ci
 npm --prefix android ci
 npm run android:doctor
-npm --prefix android run check:ui
-npm --prefix android run sync
-cd android/native
-./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest
+npm --prefix android run android:debug
 ```
 
 设置 `ANDROID_HOME` 或在未跟踪的 `android/native/local.properties` 中填写 `sdk.dir`。`sync` 将当前本地网页装入 APK，配置不使用远端 `server.url`。
 
-产物为 `android/native/app/build/outputs/apk/debug/app-debug.apk`。在已经使用调试包的手机上用 `adb install -r` 覆盖更新，保持原应用 ID 与签名，不要先卸载。正式签名、CI 和升级说明见 [构建与签名](../docs/android/build-and-signing.md)。
+产物为 `debug/android/shiwen-android-0.1.38-debug.apk`。在已经使用调试包的手机上用 `adb install -r` 覆盖更新，保持原应用 ID 与签名，不要先卸载。正式签名、CI 和升级说明见 [构建与签名](../docs/android/build-and-signing.md)。
 
 ## 验证
 

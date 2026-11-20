@@ -7,7 +7,7 @@ export function readingSourceCards(records){
   const metadata=decodeReadingNote(record.annotation);
   if(!metadata)return [{...record,kind:'reading_note',cardId:`${record.id}:unknown`,metadata:null,excerpt:null}];
   const excerpts=metadata.excerpts.length?metadata.excerpts:[null];
-  return excerpts.map((excerpt,index)=>({...record,kind:'reading_note',cardId:`${record.id}:${index}`,metadata,excerpt,sharedReflection:metadata.excerpts.length>1}));
+  return excerpts.map((excerpt,index)=>({...record,kind:'reading_note',cardId:`${record.id}:${metadata.excerpts.length?index:'thought'}`,metadata,excerpt,sharedReflection:metadata.excerpts.length>1}));
  });
 }
 export function materialTypes(records){

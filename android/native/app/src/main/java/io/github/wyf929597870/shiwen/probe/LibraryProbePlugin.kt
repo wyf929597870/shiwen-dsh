@@ -576,13 +576,37 @@ class LibraryProbePlugin : Plugin() {
         JSObject(io.github.wyf929597870.shiwen.library.LibraryReview(repository)
             .preview(call.getString("period") ?: "7", call.getString("month")).toString())
     }
+    @PluginMethod fun workspaceSearch(call: PluginCall) = run(call, network = true) {
+        JSObject(io.github.wyf929597870.shiwen.library.WorkspaceSearch(repository).search(call.data).toString())
+    }
+    @PluginMethod fun workspaceThemes(call: PluginCall) = run(call) {
+        val themes = io.github.wyf929597870.shiwen.library.WorkspaceThemes(repository)
+        JSObject().put("result", themes.perform(call.data))
+    }
+    @PluginMethod fun workspaceRemote(call: PluginCall) = run(call, network = true) {
+        val row = repository.registryItem()
+        val binding = repository.dao.meta("nodeBinding")?.let(::JSONObject) ?: error("请先连接此资料库的电脑")
+        check(row.role != "standalone") { "独立资料库使用本机搜索和主题" }
+        val method = call.getString("method") ?: error("缺少操作")
+        val args = call.getObject("args") ?: JSObject()
+        val value = NodeConnection(nodeSettings).workspace(binding.getString("nodeId"),
+            binding.getString("configRevision"), repository.libraryId, repository.deviceId,
+            checkNotNull(row.epoch), checkNotNull(row.serverId), method, args)
+        JSObject().put("result", value)
+    }
     @PluginMethod fun recordList(call: PluginCall) = run(call) {
         val offset = call.getString("cursor")?.toIntOrNull() ?: call.getInt("offset") ?: 0
         require(offset >= 0)
         val rows = repository.list(call.getString("query") ?: "", call.getString("kind"), call.getBoolean("deleted") == true,
-            call.getInt("limit") ?: 30, offset, call.getString("excludeKind"))
+            call.getInt("limit") ?: 30, offset, call.getString("excludeKind"), call.getString("section"))
         JSObject().put("items", JSArray(rows.map { json(it, false) }))
             .put("nextCursor", if (rows.size == (call.getInt("limit") ?: 30)) (offset + rows.size).toString() else JSONObject.NULL)
+    }
+    @PluginMethod fun recordReferenceTitles(call: PluginCall) = run(call) {
+        val ids = call.getArray("ids") ?: error("SOURCE_IDS_REQUIRED")
+        require(ids.length() <= 500) { "TOO_MANY_SOURCES" }
+        val rows = repository.dao.referenceTitles((0 until ids.length()).map(ids::getString))
+        JSObject().put("items", JSArray(rows.map { JSObject().put("id",it.id).put("title",it.title).put("deleted",it.deleted) }))
     }
     @PluginMethod fun recordRead(call: PluginCall) = run(call) { json(repository.read(call.getString("id") ?: ""), true) }
     @PluginMethod fun recordCreate(call: PluginCall) = run(call) {
@@ -725,6 +749,11 @@ class LibraryProbePlugin : Plugin() {
     }
     @PluginMethod fun nodeRemove(call: PluginCall) = run(call) {
         nodeSettings.remove(call.getString("id") ?: ""); JSObject(nodeSettings.list().toString())
+    }
+    @PluginMethod fun nodeProfileRefresh(call: PluginCall) = run(call, network = true) {
+        val nodeId = call.getString("id") ?: error("NODE_ID_REQUIRED")
+        NodeConnection(nodeSettings).refresh(nodeId)
+        JSObject(nodeSettings.list().toString())
     }
     @PluginMethod fun nodeCheck(call: PluginCall) = run(call, network = true) {
         val nodeId = call.getString("id") ?: error("NODE_ID_REQUIRED")

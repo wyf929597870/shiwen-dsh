@@ -162,3 +162,7 @@ html[data-theme=dark] .chat-execution .agent-composer .composer-input-row textar
 .composer-save-option,.remote-composer-options{display:flex;align-items:center;gap:10px;margin-top:8px;color:var(--muted);font-size:13px}.composer-save-option label,.remote-composer-options label{display:flex;align-items:center;gap:6px}.composer-kind-button{padding:2px 5px}.remote-composer-options select{border:1px solid var(--line);border-radius:8px;padding:4px}.remote-composer-options details>div{display:flex;flex-wrap:wrap;gap:6px}
 
 .composer-expand-button{padding:2px 5px;margin-left:auto;white-space:nowrap}
+
+/* Explicit foregrounds keep typed text visible while the theme is loading too. */
+.chat-execution .agent-composer .composer-input-row textarea{color:#20282d;caret-color:#20282d}
+html[data-theme=dark] .chat-execution .agent-composer .composer-input-row textarea{color:#eef2ef;caret-color:#eef2ef}

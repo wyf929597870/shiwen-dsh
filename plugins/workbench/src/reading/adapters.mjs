@@ -1,17 +1,17 @@
 import {validateReadingNote} from '../../../library/legacy/reading-note.mjs';
 export function desktopReadingNotes(rpc){
- return {list:()=>rpc('readingNoteList'),save:pending=>rpc('readingNoteSave',{...pending.input,requestId:pending.requestId}),remove:pending=>rpc('remove',{id:pending.id,revision:pending.revision,requestId:pending.requestId})};
+ return {searchRpc:rpc,list:()=>rpc('readingNoteList'),save:pending=>rpc('readingNoteSave',{...pending.input,requestId:pending.requestId}),remove:pending=>rpc('remove',{id:pending.id,revision:pending.revision,requestId:pending.requestId})};
 }
 // Cache only complete records, scoped to the bridge and library for this session.
 const mobileCaches=new WeakMap();
-export function mobileReadingNotes(request,libraryId){
+export function mobileReadingNotes(request,libraryId,{allOrigins=false}={}){
  let libraries=mobileCaches.get(request);if(!libraries){libraries=new Map();mobileCaches.set(request,libraries);}
  let cache=libraries.get(libraryId);if(!cache){cache=new Map();libraries.set(libraryId,cache);}
  const check=signal=>{if(signal?.aborted)throw Object.assign(new Error('读取已取消'),{name:'AbortError'});};
  return {
   async list({onProgress,signal}={}){
    const records=[];let cursor=null;const seen=new Set();
-   do{check(signal);const page=await request('recordList',{libraryId,kind:'reading_note',cursor,limit:100});check(signal);records.push(...page.items.filter(r=>['personal','external'].includes(r.origin)&&!r.deleted));cursor=page.nextCursor??null;if(cursor&&seen.has(cursor))throw Error('笔记列表分页未前进，请重试');seen.add(cursor);}while(cursor);
+   do{check(signal);const page=await request('recordList',{libraryId,kind:'reading_note',cursor,limit:100});check(signal);records.push(...page.items.filter(r=>(allOrigins||['personal','external'].includes(r.origin))&&!r.deleted));cursor=page.nextCursor??null;if(cursor&&seen.has(cursor))throw Error('笔记列表分页未前进，请重试');seen.add(cursor);}while(cursor);
    const full=new Map(),missing=[];
    for(const row of records){const cached=cache.get(row.id);if(row.revision!=null&&cached?.revision===row.revision&&cached.updatedAt===row.updatedAt)full.set(row.id,{...cached,...row});else missing.push(row);}
    let loaded=full.size;

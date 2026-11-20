@@ -7,7 +7,7 @@ import {join,resolve} from 'node:path';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 
-for(const fixture of ['sync-conflict-browser.jsx','sync-refresh-browser.jsx','sync-auto-list-browser.jsx'])test('conflict UI safely handles '+fixture,{skip:!process.env.SHIWEN_TEST_CHROME},async()=>{
+for(const fixture of ['sync-conflict-browser.jsx','sync-refresh-browser.jsx','sync-auto-list-browser.jsx','persona-sync-browser.jsx'])test('conflict UI safely handles '+fixture,{skip:!process.env.SHIWEN_TEST_CHROME},async()=>{
   const dir=await mkdtemp(join(tmpdir(),'shiwen-conflict-ui-'));
   const entry=resolve('tests/support',fixture);
   try{

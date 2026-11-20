@@ -3,6 +3,7 @@ import {homedir} from 'node:os';
 import Schema from '@deepseek-ai/schemastery';
 import {createStore} from '../legacy/store.mjs';
 import {acquireOwnership} from './ownership.mjs';
+import {createContentSearch} from './search/service.mjs';
 export const Config=Schema.object({dataDir:Schema.string().description('资料库目录；留空时使用当前 DSH profile 的拾文目录。')});
 export function libraryPaths(ctx,config={},env=process.env){
   const profile=ctx.get?.('profileContext');
@@ -16,6 +17,9 @@ export function apply(ctx,config={}){
   let store;
   try{store=createStore(join(paths.library,'library.sqlite'));}catch(error){release();throw error;}
   store.paths=paths;
-  ctx.effect(()=>()=>{try{store.close();}finally{release();}});
+  let search;
+  try{search=createContentSearch({library:store});}catch(error){store.close();release();throw error;}
+  store.contentSearch=search;
+  ctx.effect(()=>()=>{void search.close();try{store.close();}finally{release();}});
   ctx.provide('shiwenLibrary',store);
 }

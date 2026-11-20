@@ -83,12 +83,12 @@ class LibraryRepository internal constructor(
     fun registryItem(): LibraryRegistryRow = registryRow
     internal fun updateRegistry(row: LibraryRegistryRow) { check(row.libraryId == libraryId); registryRow = row }
 
-    fun list(query: String = "", kind: String? = null, deleted: Boolean = false, limit: Int = 30, offset: Int = 0, excludeKind: String? = null): List<LibraryRecord> {
+    fun list(query: String = "", kind: String? = null, deleted: Boolean = false, limit: Int = 30, offset: Int = 0, excludeKind: String? = null, section: String? = null): List<LibraryRecord> {
         require(query.length <= 200 && limit in 1..100 && offset >= 0)
         require(kind == null || kind in KINDS) { "INVALID_RECORD_KIND" }
         require(excludeKind == null || excludeKind in KINDS) { "INVALID_RECORD_KIND" }
         consolidateStandaloneJournals()
-        return dao.records(query, kind, deleted, limit, offset, excludeKind)
+        return dao.records(query, kind, deleted, limit, offset, excludeKind, section)
     }
 
     private fun consolidateStandaloneJournals() {

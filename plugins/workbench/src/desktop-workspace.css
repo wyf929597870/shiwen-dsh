@@ -1,0 +1,167 @@
+/* Shared desktop workbench scale. The compact phone views have their own controls. */
+@media (min-width: 761px) {
+  .sw-view, .rn-page {
+    --sw-title-size: 28px;
+    --sw-heading-size: 22px;
+    --sw-body-size: 17px;
+    --sw-item-size: 15px;
+    --sw-ui-size: 14px;
+    --sw-caption-size: 13px;
+    --sw-control-height: 36px;
+    --sw-radius: 7px;
+    --sw-surface: var(--dsw-alias-bg-layer-1);
+    --sw-text: var(--dsw-alias-label-primary);
+    --sw-border: var(--dsw-alias-border-l2);
+    font-size: var(--sw-ui-size);
+    line-height: 1.5;
+  }
+
+  .sw-view > .sw-head h1, .rn-page .rn-heading h1, .sw-idea-canvas .sw-canvas-surface > header h2 {
+    margin: 0;
+    font-size: var(--sw-heading-size);
+    font-weight: 650;
+    letter-spacing: -.02em;
+    line-height: 1.35;
+  }
+  .sw-library-view .sw-detail > h2, .sw-library-view.sw-writing-mode .sw-editor-title input,
+  .sw-record-workspace.sw-editing .sw-editor-title input, .sw-canvas-reader article > h2 {
+    font-size: var(--sw-title-size);
+    line-height: 1.35;
+  }
+  .sw-library-view .sw-reading-record > .sw-markdown, .sw-library-view .sw-markdown,
+  .sw-library-view.sw-writing-mode .sw-editor-body textarea, .sw-canvas-reader .sw-markdown,
+  .rn-page .rn-detail-excerpt, .rn-page .rn-detail-thought, .rn-page .rn-editor textarea {
+    font-size: var(--sw-body-size);
+    line-height: 1.8;
+  }
+  .sw-library-view .sw-markdown h2, .rn-page .rn-detail-thought h2 {
+    font-size: var(--sw-heading-size);
+    line-height: 1.45;
+  }
+  .rn-page .rn-detail-excerpt { margin: 28px 0 16px; padding-inline-start: 18px; }
+  .rn-page .rn-detail-thought, .rn-page .rn-detail-nav { margin-top: 32px; }
+  .rn-page .rn-detail-thought h2 { margin-bottom: 12px; }
+  .sw-library-view .sw-row strong, .rn-page .rn-list-item > span, .sw-search-result strong,
+  .sw-theme-list-item strong, .sw-canvas-content strong { font-size: var(--sw-item-size); }
+  .sw-library-view .sw-row small, .sw-list-status .sw-count, .rn-list-item small,
+  .rn-detail-top p, .rn-detail-meta, .sw-theme-list-item small, .sw-search-result small,
+  .sw-canvas-actions > span, .sw-canvas-card small, .sw-search-options {
+    font-size: var(--sw-caption-size);
+    color: var(--dsw-alias-label-secondary);
+  }
+
+  /* Apply toolbar geometry only to actions. List rows, menu items and card bodies keep their own hit areas. */
+  .sw-library-view .sw-head-actions > button, .sw-library-view .sw-detail-head > div > button,
+  .sw-view .sw-head > button, .sw-theme-actions > button, .sw-theme-member > button,
+  :is(.sw-view, .rn-page) .sw-theme-add > button,
+  .sw-search-options button, .sw-review .sw-period button, .sw-review-tabs button,
+  .rn-page .rn-heading .rn-new, .rn-page .rn-detail-actions > button, .rn-page .rn-more-actions summary,
+  .rn-page .rn-save-row button, .rn-page .rn-detail-nav button,
+  :is(.sw-view, .rn-page) .sw-canvas-actions button, .sw-canvas-reader > header > button {
+    min-height: var(--sw-control-height);
+    padding: 7px 12px;
+    border-radius: var(--sw-radius);
+    font-family: inherit;
+    font-size: var(--sw-ui-size);
+    line-height: 20px;
+    white-space: nowrap;
+  }
+  .sw-view .sw-primary, .rn-page :is(.rn-heading .rn-new, .rn-edit-note, .rn-primary, .sw-primary) {
+    background: var(--dsw-alias-state-business-primary) !important;
+    color: var(--dsw-alias-label-primary-foreground) !important;
+    font-weight: 600;
+  }
+  :is(.sw-view, .rn-page) :is(.sw-primary, .rn-primary, .rn-new, .rn-edit-note):enabled:hover {
+    background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 89%, var(--sw-text)) !important;
+  }
+  .sw-view .sw-search-options button, .rn-page .sw-search-options button,
+  :is(.sw-view, .rn-page) .sw-canvas-actions button:not(.sw-primary),
+  .sw-canvas-reader > header > button, :is(.sw-view, .rn-page) .sw-theme-add > button {
+    border: 1px solid var(--sw-border);
+    background: var(--sw-surface);
+    color: var(--sw-text);
+  }
+  :is(.sw-view, .rn-page) .sw-search-options button[aria-pressed=true],
+  .sw-view .sw-theme-list-item[aria-current=true] {
+    background: var(--dsw-specific-sidebar-nav-item-active);
+    color: var(--sw-text);
+    box-shadow: inset 3px 0 var(--dsw-alias-state-business-primary);
+  }
+  :is(.sw-view, .rn-page) :is(button, summary, input, select, textarea):focus-visible {
+    outline: 2px solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+    outline-offset: 2px;
+  }
+  .sw-view .sw-toolbar input, .sw-library-view .sw-toolbar input, .sw-library-view .sw-filter select,
+  .rn-page :is(.rn-book-select, .rn-chapter-filter, .rn-sort) select, .rn-page .rn-search input,
+  .sw-themes .sw-detail > label > input {
+    height: var(--sw-control-height);
+    min-height: var(--sw-control-height);
+    padding-block: 6px;
+    border-radius: var(--sw-radius);
+    font-size: var(--sw-ui-size);
+    line-height: 20px;
+  }
+  .sw-library-view .sw-detail-head > div { align-items: center; }
+  .sw-record-workspace :is(.sw-list-menu, .sw-record-menu) > summary {
+    min-height: var(--sw-control-height);
+    padding-block: 7px;
+    font-size: 18px;
+    line-height: 22px;
+  }
+  .sw-record-workspace .sw-search-line, .rn-page .rn-search { background: var(--sw-surface); }
+  .sw-view .sw-search-options [role=group], .rn-page .sw-search-options [role=group],
+  .rn-page .rn-detail-top, .rn-detail-actions, .sw-canvas-surface > header,
+  .sw-canvas-reader > header, .sw-canvas-actions { flex-wrap: wrap; }
+  .rn-detail-actions { flex: 0 1 auto; align-items: center; gap: 4px; }
+  .rn-detail-top { gap: 8px 16px; }
+  .rn-detail-top p { flex: 1 1 180px; overflow-wrap: anywhere; }
+  .rn-page .rn-sidebar { padding-right: 16px; }
+  .rn-page .rn-layout { grid-template-columns: clamp(240px, 28%, 340px) minmax(0, 1fr); }
+  .rn-page .rn-main { padding-inline: clamp(20px, 3vw, 44px); }
+
+  .sw-themes, .sw-global-search { padding: 28px clamp(20px, 2.1vw, 32px); }
+  :is(.sw-themes, .sw-global-search) > .sw-head {
+    padding-bottom: 18px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid var(--sw-border);
+  }
+  .sw-theme-list-item { align-items: baseline; gap: 12px; }
+  .sw-theme-list-item strong { overflow-wrap: anywhere; }
+  .sw-theme-list-item small { flex: none; }
+  .sw-theme-actions { display: flex; align-items: center; gap: 8px; margin-bottom: 24px; }
+  .sw-themes .sw-detail > label { font-size: var(--sw-caption-size); color: var(--dsw-alias-label-secondary); }
+  .sw-themes .sw-detail textarea { font-size: var(--sw-ui-size); line-height: 1.65; }
+  .sw-global-search > :is(.sw-toolbar, .sw-search-options, .sw-search-results) { max-width: 820px; }
+  .sw-search-result small, .sw-canvas-card small { opacity: 1; }
+  .sw-global-search > .sw-toolbar { border: 0; padding-bottom: 6px; }
+  .sw-global-search .sw-search-result { gap: 4px; }
+  .sw-global-search .sw-search-result span { font-size: var(--sw-ui-size); line-height: 1.65; }
+
+  .sw-idea-canvas, .sw-canvas-reader {
+    --canvas-paper: var(--sw-surface);
+    --canvas-line: var(--sw-border);
+    --canvas-ink: var(--sw-text);
+    font-family: inherit;
+  }
+  .sw-canvas-viewport { background-color: var(--dsw-alias-bg-base); }
+  .sw-canvas-seed { background: var(--dsw-alias-state-business-tertiary); }
+  .sw-canvas-card:has(input:checked) {
+    border-color: var(--dsw-alias-state-business-primary);
+    box-shadow: 0 0 0 1px var(--dsw-alias-state-business-primary);
+  }
+  .sw-idea-canvas .sw-canvas-card-tools input { accent-color: var(--dsw-alias-state-business-primary); }
+  .sw-canvas-actions { gap: 6px; }
+  .sw-canvas-card footer button, .sw-canvas-card-tools button {
+    padding: 4px;
+    font-size: var(--sw-caption-size);
+    line-height: 20px;
+  }
+}
+
+.sw-article-references { margin:24px 0; }
+.sw-article-references h3 { margin:0 0 6px; font-size:15px; }
+.sw-article-references ul { list-style:none; padding:0; margin:0; }
+.sw-article-references li { overflow-wrap:anywhere; }
+.sw-view .sw-article-references button { text-align:start; padding:5px 0; text-decoration:underline; text-underline-offset:3px; }
+.sw-article-tools { margin-top:24px; border-top:1px solid var(--dsw-alias-border-l2); padding-block:12px; }
+.sw-article-tools > summary { cursor:pointer; font-size:13px; color:var(--dsw-alias-label-secondary); }

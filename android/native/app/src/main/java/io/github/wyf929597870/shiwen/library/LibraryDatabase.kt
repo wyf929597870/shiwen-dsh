@@ -98,10 +98,21 @@ data class LibraryMeta(@PrimaryKey val key: String, val value: String)
 data class LibraryDraft(@PrimaryKey val slot: String, val requestId: String, val title: String,
     val markdown: String, val kind: String, val generation: Long, val updatedAt: String)
 
+data class ReferenceTitle(val id: String, val title: String, val deleted: Boolean)
+
 @Dao
 interface LibraryDao {
-    @Query("SELECT * FROM records WHERE kind!='ai_annotation' AND (:includeDeleted=1 OR deleted=0) AND (:query='' OR instr(title,:query)>0 OR instr(markdown,:query)>0) AND (:kind IS NULL OR kind=:kind) AND (:excludeKind IS NULL OR kind!=:excludeKind) ORDER BY CASE WHEN contentDay IS NULL THEN 1 ELSE 0 END, contentDay DESC, createdAt DESC, id DESC LIMIT :limit OFFSET :offset")
-    fun records(query: String, kind: String?, includeDeleted: Boolean, limit: Int, offset: Int, excludeKind: String? = null): List<LibraryRecord>
+    @Query("SELECT id, title, deleted FROM records WHERE id IN (:ids)")
+    fun referenceTitles(ids: List<String>): List<ReferenceTitle>
+
+    @Query("SELECT * FROM records WHERE kind!='ai_annotation' AND (:includeDeleted=1 OR deleted=0) AND (:query='' OR instr(title,:query)>0 OR instr(markdown,:query)>0) AND (:kind IS NULL OR kind=:kind) AND (:excludeKind IS NULL OR kind!=:excludeKind) AND (:section IS NULL OR (:section='library' AND kind IN ('journal','idea','freewrite')) OR (:section='collections' AND kind IN ('reference','web','ai'))) ORDER BY CASE WHEN contentDay IS NULL THEN 1 ELSE 0 END, contentDay DESC, createdAt DESC, id DESC LIMIT :limit OFFSET :offset")
+    fun records(query: String, kind: String?, includeDeleted: Boolean, limit: Int, offset: Int, excludeKind: String? = null, section: String? = null): List<LibraryRecord>
+    @Query("SELECT * FROM records WHERE id>:after AND deleted=0 AND kind!='ai_annotation' ORDER BY id LIMIT 8")
+    fun workspaceBatch(after: String): List<LibraryRecord>
+    @Query("SELECT value FROM library_meta WHERE `key` LIKE 'workspace-theme:%' ORDER BY `key`")
+    fun workspaceThemes(): List<String>
+    @Query("DELETE FROM library_meta WHERE `key`=:key")
+    fun removeWorkspaceMeta(key: String)
     @Query("SELECT * FROM records WHERE id=:id") fun record(id: String): LibraryRecord?
     @Query("SELECT * FROM records WHERE kind='journal' AND deleted=0 AND contentDay=:day ORDER BY createdAt,id LIMIT 1")
     fun journalForDay(day: String): LibraryRecord?

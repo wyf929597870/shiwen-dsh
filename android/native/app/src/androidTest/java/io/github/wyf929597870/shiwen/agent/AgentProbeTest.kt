@@ -33,6 +33,11 @@ class AgentProbeTest {
             context.deleteSharedPreferences("$namespace-installation")
         }
     }
+    private fun saveTool(repo: ProbeRepository, draft: ProbeDraft) = ai.koog.agents.core.tools.ToolRegistry {
+        tool(LibraryTool("save_approved_record", "Fixture write", emptyList()) {
+            "applied:" + repo.saveApprovedDraft(draft).id
+        })
+    }
     private fun draft() = ProbeDraft(slot = "agent", requestId = UUID.randomUUID().toString(),
         title = "散步日记", markdown = "今天散步看到了🌱。\n# 原文不改写", kind = "journal", generation = 1)
     private fun tool(name: String, args: String = "{}", id: String = UUID.randomUUID().toString()) =
@@ -73,7 +78,7 @@ class AgentProbeTest {
                 }
             }
             assertEquals("已保存", NativeAgentProbe().run("请保存我的日记", executor, model,
-                localLibraryTools(repo, draft)) { fragments += it })
+                saveTool(repo, draft)) { fragments += it })
             assertEquals("已保存", fragments.joinToString(""))
             assertTrue(executor.closed)
             assertEquals(1, repo.db.dao().records(0, 30).size)
@@ -118,7 +123,7 @@ class AgentProbeTest {
             val executor = Script { _, _, _ -> tool("save_approved_record").toStreamFrames()
                 .filterNot { it is StreamFrame.End }.asFlow() }
             assertTrue(runCatching {
-                NativeAgentProbe().run("保存", executor, model, localLibraryTools(repo, request))
+                NativeAgentProbe().run("保存", executor, model, saveTool(repo, request))
             }.isFailure)
             assertEquals(1, executor.calls); assertTrue(executor.closed)
             assertNull(repo.db.dao().receipt(request.requestId))
@@ -138,7 +143,7 @@ class AgentProbeTest {
                 } finally { streamClosed = true }
             } }
             val job = launch {
-                NativeAgentProbe().run("保存", executor, model, localLibraryTools(repo, request))
+                NativeAgentProbe().run("保存", executor, model, saveTool(repo, request))
             }
             withTimeout(10_000) { started.await() }
             withTimeout(10_000) { job.cancelAndJoin() }

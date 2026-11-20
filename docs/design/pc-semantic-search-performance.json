@@ -1,0 +1,34 @@
+{
+  "kind": "isolated-sqlite-library-service-real-onnx",
+  "timestamp": "2026-11-17T02:25:43.256Z",
+  "hardware": {
+    "cpu": "12th Gen Intel(R) Core(TM) i7-1260P",
+    "logicalCpus": 16,
+    "totalMemoryBytes": 33265516544,
+    "freeMemoryBytesAtEnd": 12871385088,
+    "platform": "linux",
+    "release": "7.0.0-14-generic",
+    "arch": "x64",
+    "node": "v24.16.0"
+  },
+  "modelVersion": "bge-small-zh-v1.5:7999e1d3359715c523056ef9478215996d62a620:onnx-75c43b069aac4d136ba6bc1122f995fedcfd2781:tokenizers-js-0.1.3:cls:l2:v1",
+  "onnxThreads": 2,
+  "records": 5000,
+  "chunks": 10000,
+  "populateMs": 4522.36,
+  "coldModelMs": 864.77,
+  "indexMs": 57047.15,
+  "firstQueryMs": 471.39,
+  "warmQueryMs": {
+    "count": 30,
+    "p50": 148.17,
+    "p95": 198.24,
+    "max": 215.93
+  },
+  "peakProcessRssBytes": 776364032,
+  "notes": [
+    "Synthetic content in an isolated real SQLite library; actual content service and ONNX CPU inference, without HTTP transport.",
+    "Cold model means worker/model initialization with already cached files, not OS page-cache cold.",
+    "Peak RSS includes worker threads; package size and HTTP transport are not measured."
+  ]
+}

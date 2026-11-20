@@ -32,15 +32,14 @@ class PhoneAgentTest {
         val configs = ModelConfigStore(context, "$namespace-config")
         val store = AgentTaskStore(context, repo.libraryId, "$namespace-tasks")
         var starts = 0
+        var emptyReply = false
         val service = PhoneAgent(context, repo, configs, store, executorFactory = {
             starts++
             object : PromptExecutor() {
-                var count = 0
                 override fun executeStreaming(prompt: Prompt, model: LLModel, tools: List<ToolDescriptor>) = flow {
-                    val response = if (count++ == 0) {
-                        assertTrue(tools.any { it.name == "save_approved_record" })
-                        Message.Assistant(MessagePart.Tool.Call("call-1", "save_approved_record", "{}"), ResponseMetaInfo.Empty)
-                    } else Message.Assistant("原文已保存", ResponseMetaInfo.Empty)
+                    assertFalse(tools.any { it.name == "save_approved_record" })
+                    assertEquals(if (emptyReply) 2 else 1, repo.db.dao().records(0, 30).size)
+                    val response = Message.Assistant(if (emptyReply) "" else "我读到了你的日记。", ResponseMetaInfo.Empty)
                     emitAll(response.toStreamFrames().asFlow())
                 }
                 override suspend fun execute(prompt: Prompt, model: LLModel, tools: List<ToolDescriptor>): Message.Assistant = error("unused")
@@ -67,6 +66,7 @@ class PhoneAgentTest {
             service.send(id, input, true, "journal", config.revision, conversationId)
             withTimeout(10_000) { while (service.status(id, conversationId).getString("status") != "succeeded") delay(10) }
             val result = service.status(id, conversationId)
+            assertEquals("我读到了你的日记。", result.getString("output"))
             val recordId = checkNotNull(result.getString("recordId"))
             assertEquals(input, repo.db.dao().record(recordId)?.markdown)
             assertFalse(result.toString().contains("only-a-test-secret"))
@@ -85,13 +85,23 @@ class PhoneAgentTest {
             service.saveDraft(id, input, true, "journal", 1, conversationId)
             assertTrue(service.readDraft(conversationId).isNull("draft"))
             assertTrue(runCatching { service.send(id, "改写请求", true, "journal", config.revision, conversationId) }.isFailure)
+            emptyReply = true
+            val secondId = UUID.randomUUID().toString()
+            val saved = service.send(secondId, "回信可以稍后再看", true, "idea", config.revision, otherConversationId)
+            val savedId = checkNotNull(saved.getString("recordId"))
+            assertEquals("回信可以稍后再看", repo.readForAgent(savedId)?.markdown)
+            withTimeout(10_000) { while (service.status(secondId, otherConversationId).getString("status") != "failed") delay(10) }
+            val emptyResult = service.send(secondId, "回信可以稍后再看", true, "idea", config.revision, otherConversationId)
+            assertEquals("MODEL_EMPTY_REPLY", emptyResult.getString("error"))
+            assertEquals(savedId, emptyResult.getString("recordId"))
+            assertEquals(2, repo.db.dao().records(0, 30).size)
             val changed = configs.save("测试供应商", config.baseUrl, config.model, "")
             assertTrue(runCatching {
                 val otherConversation = UUID.randomUUID().toString()
                 service.createConversation(otherConversation)
                 service.send(UUID.randomUUID().toString(), input, false, "idea", config.revision, otherConversation)
             }.isFailure)
-            assertNotEquals(config.revision, changed.revision); assertEquals(1, starts)
+            assertNotEquals(config.revision, changed.revision); assertEquals(2, starts)
             assertEquals(recordId, service.recent(conversationId).getJSONArray("items").getJSONObject(0).getString("recordId"))
             assertTrue(runCatching { service.status(id, otherConversationId) }.isFailure)
             assertTrue(runCatching { service.acknowledge(id, 1, otherConversationId) }.isFailure)

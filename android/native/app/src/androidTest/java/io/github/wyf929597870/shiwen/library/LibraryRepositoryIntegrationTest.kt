@@ -39,6 +39,33 @@ class LibraryRepositoryIntegrationTest {
         .put("contentDay", "2024-03-01").put("dateBasis", "用户确认")
         .put("sources", JSONArray().put(JSONObject().put("text", markdown).put("origin", origin)))
 
+    @Test fun workspaceFindsHighlightOnlyNotesAndPreservesPhoneTopics() = withRepository { repo ->
+        val quote = "每周回顾日记，找出重复出现的想法。"
+        val note = repo.create(UUID.randomUUID().toString(), input("").put("kind","reading_note")
+            .put("annotation",JSONObject().put("schema","shiwen.reading-note.v2").put("noteType","excerpt")
+                .put("excerpts",JSONArray().put(JSONObject().put("text",quote))).toString()),1)
+        val idea = repo.create(UUID.randomUUID().toString(),input("每周回顾日记会发现新的线索").put("kind","idea"),1)
+        assertEquals(listOf(idea.id), repo.list(section="library").map { it.id })
+        val search = WorkspaceSearch(repo)
+        val hit = search.search(JSONObject().put("query","重复出现")).getJSONArray("items").getJSONObject(0)
+        assertEquals(note.id,hit.getString("recordId"))
+        assertEquals("excerpt",hit.getJSONObject("match").getString("field"))
+        assertEquals(2,search.search(JSONObject().put("query",quote).put("related",true)).getInt("total"))
+        val themes = WorkspaceThemes(repo)
+        fun rpc(method: String, args: JSONObject) = themes.perform(JSONObject().put("method",method)
+            .put("args",args.put("expectedLibraryId",repo.libraryId))) as JSONObject
+        val theme = rpc("themeSave",JSONObject().put("title","摘录").put("summary",""))
+        val added = rpc("themeMemberAdd",JSONObject().put("themeId",theme.getString("id")).put("revision",1)
+            .put("sourceRecordId",note.id).put("sourceRevision",note.revision).put("field","excerpt").put("excerptIndex",0))
+        assertEquals(quote,added.getJSONArray("members").getJSONObject(0).getString("quote"))
+        repo.remove(note.id,note.revision,UUID.randomUUID().toString())
+        assertEquals(0,search.search(JSONObject().put("query","重复出现")).getInt("total"))
+        val archived = LibraryClientArchive(ApplicationProvider.getApplicationContext<Context>()).capture(repo,false)
+        assertEquals(theme.getString("id"),archived.getJSONArray("workspaceThemes").getJSONObject(0).getString("id"))
+        val missing = rpc("themeRead",JSONObject().put("id",theme.getString("id"))).getJSONArray("members").getJSONObject(0)
+        assertEquals("deleted",missing.getJSONObject("location").getString("status"))
+    }
+
     @Test fun annotationsKeepVersionAndSurviveParentDeletionWithoutEnteringOrdinaryLists() = withRepository("coordinated") { repo ->
         val original = repo.create(UUID.randomUUID().toString(), input("原文"), 1)
         val info = repo.originalVersionInfo(original.id)

@@ -1,0 +1,26 @@
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {RelatedArticles,requestArticle,requestRecord} from '../../plugins/workbench/src/RelatedArticles.jsx';
+import {apply} from '../../plugins/workbench/src/client.jsx';
+const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const record={id:'article-1',title:'目标文章',kind:'article',markdown:'正文',stage:'draft',revision:1,sourceIds:[]};
+let confirms=0,allow=false,selected='',articlePage,libraryPage;
+window.confirm=()=>{confirms++;return allow;};
+window.fetch=async(_url,options)=>{const {method,args}=JSON.parse(options.body);let result;if(method==='snapshot')result={records:[record]};else if(method==='workbenchDraft')result=args.value===undefined&&args.slot==='articles'?{revision:1,value:{id:'article-1',revision:1,title:'未保存标题',body:'未保存内容',kind:'article',stage:'draft',sources:[],draftRevision:1}}:null;else if(method==='themeContext')result={libraryId:'fixture'};else if(method==='recordNeighborhood')result={sourceLibraryId:'fixture',record:{id:'source',title:'素材标题',kind:'journal'},themes:[],sources:[],articles:[],related:[]};else if(method==='readMarkdown')result=args.id==='source'?{id:'source',title:'素材标题',kind:'journal',markdown:'开头中间结尾',revision:2,sourceIds:[],sourceLibraryId:'fixture'}:record;else if(method==='contentSearchStatus')result={state:'ready'};else result=[];return {ok:true,json:async()=>({result})};};
+const locale={subscribe:()=>()=>{},getSnapshot:()=>({active:'zh'})};
+const layout={selectPanel:key=>{selected=key;root.render(React.createElement(key==='shiwen-library'?libraryPage:articlePage));}};
+const ctx={locale,layout,uiWorkspace:{},effect:()=>{},slots:{inject:(_name,fn)=>fn(),register:(spec,component)=>{if(spec.key==='shiwen-articles')articlePage=component;if(spec.key==='shiwen-library')libraryPage=component;}}};
+apply(ctx);
+let calls=[];const pending={};const rpc=(method,{id})=>{calls.push(id);return new Promise((resolve,reject)=>{pending[id]={resolve,reject};});};
+const root=createRoot(document.getElementById('root'));const t=a=>a;
+(async()=>{try{
+ root.render(<RelatedArticles id="a" rpc={rpc} t={t} onOpen={id=>requestArticle(id,layout)}/>);await wait(50);
+ root.render(<RelatedArticles id="b" rpc={rpc} t={t} onOpen={id=>requestArticle(id,layout)}/>);await wait(50);
+ pending.a.resolve([{id:'old',title:'过期文章'}]);pending.b.resolve([{id:'article-1',title:'目标文章',stage:'draft'}]);await wait(50);
+ if(document.body.textContent.includes('过期文章')||!document.body.textContent.includes('目标文章'))throw Error('stale response or missing article');
+ [...document.querySelectorAll('button')].find(b=>b.textContent==='目标文章').click();await wait(250);
+ if(selected!=='shiwen-articles'||confirms!==1||!([...document.querySelectorAll('input')].some(el=>el.value==='未保存标题')))throw Error('destination draft was not protected');
+ allow=true;requestArticle('article-1',layout);await wait(250);
+ if(confirms!==2||!document.body.textContent.includes('目标文章'))throw Error('confirmed article did not open');
+ requestRecord('source',layout,'library',{libraryId:'fixture',match:{field:'body',text:'中间',anchor:{start:2,end:4}}});await wait(250);if(![...document.querySelectorAll('.sw-match-context mark')].some(el=>el.textContent==='中间'))throw Error('source passage not located');requestRecord('source',layout,'library',{libraryId:'fixture',match:{field:'body',text:'过期',anchor:{start:2,end:4}}});await wait(250);if(document.querySelector('.sw-match-context mark')||!document.body.textContent.includes('无法定位片段'))throw Error('stale passage: '+Boolean(document.querySelector('.sw-match-context mark'))+' / '+document.body.textContent.slice(-500));document.querySelector('.sw-relations summary').click();await wait(300);if(document.querySelectorAll('.sw-relations').length!==1||!document.body.textContent.includes('当前中心：素材标题'))throw Error('relationship details multiplied or did not open');document.getElementById('result').textContent=JSON.stringify({passed:true});
+ }catch(error){document.getElementById('result').textContent=JSON.stringify({passed:false,error:error.message});}})();

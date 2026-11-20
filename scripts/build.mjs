@@ -17,6 +17,7 @@ for(const name of ['library','agent-tools','theme','workbench','personal-context
     const code=result.outputFiles[0].text;
     await writeFile(resolve(out,'lib/client.js'),`window.__ModuleLoader__.load({id:${JSON.stringify(manifest.name)},factory:(require)=>{var module={exports:{}};var exports=module.exports;\n${code}\nreturn module.exports;}});\n`);
   }
+  if(name==='library')await copyFile(resolve(dir,'src/search/search-model-worker.mjs'),resolve(out,'lib/search-model-worker.mjs'));
   if(name==='theme')await copyFile(resolve(root,'assets/shiwen-mark.png'),resolve(out,'lib/shiwen-mark.png'));
 }
 console.log('Built Shiwen DSH plugins.');

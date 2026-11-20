@@ -8,11 +8,39 @@
 
 中文 | [English](README.en.md)
 
-[为什么做](#为什么做拾文) · [能做什么](#能做什么) · [开始使用](#开始使用) · [数据与隐私](#数据与隐私) · [参与开发](#参与开发)
+[为什么做](#为什么做拾文) · [能做什么](#能做什么) · [界面预览](#界面预览) · [项目架构](#项目架构) · [开始使用](#开始使用) · [数据与隐私](#数据与隐私) · [参与开发](#参与开发)
 
-可下载 **[Android 0.1.8 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.8)**、**[Linux 0.1.15 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.15)**、**[Windows 0.1.9 预览版](https://github.com/wyf929597870/shiwen-dsh/releases/tag/windows-v0.1.9)**，以及 [DSH 插件 0.2.0-dev.5](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.5)。项目采用 [MIT](LICENSE) 许可证。Android 0.1.8 需配套升级服务端，本轮真机覆盖安装尚未验收；Windows 旧版已验证虚拟机安装与服务启停，新版完整图形界面仍待验收。macOS 未提供本项目安装包。
+可下载 **[Android 0.1.38 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.38)**、**[Linux 0.1.38 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.38)**、**[Windows 0.1.9 预览版](https://github.com/wyf929597870/shiwen-dsh/releases/tag/windows-v0.1.9)**，以及 [DSH 插件 0.2.0-dev.7](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.7)。项目采用 [MIT](LICENSE) 许可证。Android 使用电脑主题和语义检索时，请同步升级电脑服务。本版 Android 真机覆盖升级尚待验证；Windows 旧版已验证虚拟机安装与服务启停，新版完整图形界面仍待验收。macOS 未提供本项目安装包。
 
-**当前源码：** Linux 0.1.17 / Android 0.1.10 / DSH 插件 0.2.0-dev.6。手机对话页的会话下拉改为底部列表：本地会话可删除，服务器会话可归档与恢复，并支持查看已归档；对话输入框可收起，收起后消息区占满。服务端 `mobileSessions` 同步支持归档动作，MCP、Agent 工具及配套 Skill 已更新。请配套升级服务端与 Android，并停止旧服务后重新启动；详见 [更新记录](CHANGELOG.md)。
+桌面和手机工作台按「记录」「读书」「收藏」「创作」浏览内容。全局搜索可打开命中的原文，关联内容可生成带来源的文章大纲。升级电脑端前请退出客户端、停止旧服务，安装后重新启动。[更新记录](CHANGELOG.md)
+
+## 界面预览
+
+以下截图于 2026-11-14 使用本机已安装的 **拾文 0.1.17** 截取：通过浏览器访问安装包提供的完整工作台，包含真实 DSH 导航与拾文页面，连接实际服务和独立临时资料库。图中文字为截图专用示例，不包含个人记录。这里展示的是桌面 / Web 工作台，不是 Electron 窗口或 Android 真机截图。[截图来源与复现方法](docs/screenshots/README.md)
+
+### 工作台首页
+
+从首页开始对话，查看今日积累、最近记录和正在创作的文章。
+
+![拾文 0.1.17 完整工作台首页：实际导航、今日积累与最近记录](docs/screenshots/desktop-home.jpg)
+
+### 素材与记录
+
+搜索和筛选资料，在列表旁阅读正文，或继续编辑、讨论和添加 AI 标注。
+
+![拾文 0.1.17 素材页面：素材列表与日记正文](docs/screenshots/desktop-materials.jpg)
+
+### 读书笔记
+
+按书目整理阅读感想，每条划线单独成条，可补充章节、页码与原文摘录；摘录和个人感想分别统计。
+
+![拾文 0.1.17 完整工作台中的读书笔记编辑页](docs/screenshots/desktop-reading.jpg)
+
+### 回顾与积累
+
+按时间范围查看个人原文、收集素材和文章进展，通过每日趋势回看记录与日目标。
+
+![拾文 0.1.17 回顾页面：个人原文字数、每日趋势与文章进展](docs/screenshots/desktop-review.jpg)
 
 ## 为什么做拾文
 
@@ -35,21 +63,24 @@
 | 想做的事 | 拾文提供的能力 |
 | --- | --- |
 | 随手留下记录 | 保存日记、想法、自由书写和参考资料，支持 Markdown 编辑、可读预览和库内图片 |
+| 留下阅读收获 | 按书目保存读书笔记，每条划线单独记录个人感想和原文摘录，并在回顾中查看积累 |
 | 和 AI 一起思考 | 使用 DSH 原生对话；从资料详情进入讨论，讨论中的 AI 内容也可保存为素材 |
 | 整理已有资料 | 按类型筛选、搜索正文；Agent 可修改类型、作者来源、日期和内容，以及删除、恢复资料 |
 | 回顾一段时间 | 按内容日期查看个人原文字数、趋势与明细，包含 MCP 归档原文；实际编辑增减单独显示 |
 | 从素材写成文章 | 创建文章、关联素材，获得发布前检查提示 |
+| 围绕主题积累 | 将日记、自由书写和读书笔记中的片段收进主题，保留原文快照与出处；从素材查看关联文章 |
+| 沿关系继续阅读 | 展开关联内容，按主题、文章素材与手动关联浏览；阅读不改变浏览中心，可主动切换中心并前进、后退 |
 | 接入其他 Agent | 通过 MCP、HTTP API、CLI 和配套 Skill 保存、查询和管理资料 |
 
-当前源码中，素材和创作列表只展示标题与日期，搜索、筛选位于列表顶部；可以收起列表，让正文占满内容区。
+在电脑上可按原文搜索，也可按需下载模型，在运行资料库的电脑上按意思搜索。打开想法画布可展开相关片段，勾选卡片后生成文章大纲。手机支持离线原文搜索、逐层展开相关文字、返回原阅读位置和生成大纲；按意思搜索需要连接同库电脑。
 
-列表和查询按内容日期倒序，同日按创建时间倒序，未知日期放在最后。个人书写、外部资料和 AI 内容分别标记；由 Agent 代存，不会因此一律变成 AI 创作。
+记录列表按内容日期倒序，同日按创建时间倒序，未知日期放在最后。个人书写、外部资料和 AI 内容分别标记；由 Agent 代存，不会因此一律变成 AI 创作。
 
 内置的“皮皮”是一个可编辑的助理角色，你可以修改身份与交流方式。Agent 提出的长期记忆须经确认后才使用。
 
 ## 可以怎样使用
 
-你可以直接在素材页记录，也可以在配置好模型后，让 Agent 帮忙。例如：
+你可以直接在「记录」页写作，也可以在配置好模型后，让 Agent 帮忙。例如：
 
 > “把我刚才这段原话存成今天的日记，标记为自己书写。”
 
@@ -59,11 +90,46 @@
 
 这些是使用方式示例，实际结果取决于资料、模型和工具配置。发布前检查提供提示，事实、引用和私人信息仍需人工核对。
 
+## 项目架构
+
+拾文由 **DSH 宿主、拾文业务插件、桌面客户端和 Android 客户端**组成。桌面端与浏览器访问服务端的同一份资料库；Android 则拥有自己的完整本地资料库，通过移动接口与协调服务交换变更。
+
+![拾文系统架构：桌面与 Web、独立服务、Android 本地资料库及 AI 接入](diagram/system-architecture/architecture.zh.svg)
+
+上半部分按运行位置区分客户端、服务端与存储；下半部分单独展示模型调用和外部 Agent 接入。青色表示界面，绿色表示服务，紫色表示存储。
+
+[SVG](diagram/system-architecture/architecture.zh.svg) · [PNG @2x](diagram/system-architecture/architecture.zh@2x.png)
+
+### 模块与职责
+
+| 模块 / 目录 | 职责 |
+| --- | --- |
+| `desktop/` | Electron 客户端、连接设置、托盘与服务生命周期交互 |
+| `scripts/server*.mjs`、`integration/` | 独立服务启动与管理、访问密码及设备认证 |
+| `plugins/workbench/` | 素材、读书笔记、创作、回顾、设置与外部接入界面 |
+| `plugins/library/` | SQLite 资料库、版本与来源、附件、统计、导入导出及同步存储 |
+| `plugins/agent-tools/`、`plugins/external/` | 宿主 Agent 工具与外部 MCP / HTTP / CLI 接口 |
+| `plugins/mobile/` | 移动同步、人设、远端会话与管理适配层 |
+| `plugins/personal-context/`、`plugins/theme/` | 可选助理人设、长期记忆上下文与主题 |
+| `android/web/`、`android/bridge/` | Android React 界面与 Capacitor 桥接契约 |
+| `android/native/` | Kotlin / Room 持久化、手机 Agent、后台同步、备份与系统文件入口 |
+| `contracts/`、`tests/` | 跨端协议、测试数据与自动化验证 |
+| `bundle/`、`skills/`、`patches/` | DSH 插件组合包、Agent 使用指南与固定上游补丁 |
+
+### 数据如何流动
+
+- **桌面 / Web：** 界面通过 DSH RPC 调用拾文业务层，资料写入服务电脑上的 SQLite 与附件目录；客户端退出后，独立服务可以继续运行。
+- **Android：** 编辑先保存到手机本地事务，再通过同步队列与所选协调服务交换变更；冲突保留双方内容并等待处理。手机不是桌面网页的离线缓存，当前也不是任意设备之间的点对点同步。
+- **AI 与外部 Agent：** DSH 提供宿主会话与模型执行，手机 AI 使用手机单独配置的模型；资料操作经过相应工具入口。外部 Agent 接入按凭据授权，接口仅监听服务电脑回环地址。
+- **独立插件：** 安装到原生 DSH 时复用宿主认证和 profile；只有拾文独立服务提供图中的访问密码认证层。不同 profile 默认使用独立资料库。
+
+更多细节：[独立服务](docs/server.md) · [Web 插件](docs/web-plugin.md) · [Android 架构](docs/android/architecture.md) · [外部接入](docs/external-access.md) · [开发与构建](docs/development.md)
+
 ## 开始使用
 
 ### Web 插件预览版
 
-已有 **DSH 0.2.2-alpha.3 / Node.js >=24.9** 的用户，可直接下载 **[拾文插件包（.tgz）](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.2.0-dev.5/dsh-shiwen-0.2.0-dev.5.tgz)**，无需克隆源码。安装命令、校验文件和已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.5)。
+已有 **DSH 0.2.2-alpha.3 / Node.js >=24.9** 的用户，可直接下载 **[拾文插件包（.tgz）](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.2.0-dev.7/dsh-shiwen-0.2.0-dev.7.tgz)**，无需克隆源码。安装命令、校验文件和已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.7)。
 
 直接在本仓库运行，不需要 Electron 或 DSH 上游源码：
 
@@ -101,10 +167,10 @@ Linux 安装包同时包含客户端、独立服务与 Node 运行环境，无�
 ```bash
 npm run package:linux
 # 退出客户端并停止旧服务后安装
-sudo apt install ./release/linux/shiwen-dsh_0.1.15_amd64.deb
+sudo apt install ./release/linux/shiwen-dsh_*_amd64.deb
 ```
 
-源码启动的服务可在同一数据根目录下执行 `npm run server:stop` 停止；安装包也提供无需系统 Node 的管理命令，见 [独立服务说明](docs/server.md)。升级后重新启动本机服务。无需自行构建时，可直接下载下方的 v0.1.15 安装包。
+源码启动的服务可在同一数据根目录下执行 `npm run server:stop` 停止；安装包也提供无需系统 Node 的管理命令，见 [独立服务说明](docs/server.md)。升级后重新启动本机服务。无需自行构建时，可直接下载下方的 v0.1.38 安装包。
 
 ### 只运行独立服务，让浏览器访问
 
@@ -123,23 +189,23 @@ npm run server:url
 
 ### 已发布的 Linux 桌面版
 
-下载 **[Linux x64 安装包（.deb）](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.15/shiwen-dsh_0.1.15_amd64.deb)**。这是预览版，适合愿意反馈问题的用户；Windows 安装包见下方。校验文件与已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.15)。
+下载 **[Linux x64 安装包（.deb）](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.38/shiwen-dsh_0.1.38_amd64.deb)**。这是预览版，适合愿意反馈问题的用户；Windows 安装包见下方。校验文件与已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.38)。
 
 完整退出拾文并停止仍在运行的独立服务，再在下载目录安装或升级：
 
 ```bash
-sudo apt install ./shiwen-dsh_0.1.15_amd64.deb
+sudo apt install ./shiwen-dsh_0.1.38_amd64.deb
 ```
 
 从应用菜单打开「拾文」，或运行 `shiwen-dsh`。安装包包含 Electron、Node、DSH 和拾文插件，无需另外安装 Node 或保留源码目录。当前桌面验证环境为 Ubuntu 26.04 x64，其他发行版仍需验证。
 
-先在素材页新建一条记录即可开始使用。使用 AI 对话前，需要完成 DSH 的模型与凭据配置；安装包不附带模型服务账号或 API Key。
+先在「记录」页新建一条记录即可开始使用。使用 AI 对话前，需要完成 DSH 的模型与凭据配置；安装包不附带模型服务账号或 API Key。
 
 ### Android 正式签名安装包
 
-下载 [Android 0.1.2 APK](https://github.com/wyf929597870/shiwen-dsh/releases/download/android-v0.1.2/shiwen-android-0.1.2.apk)，支持 Android 9 及以上。升级直接覆盖安装，保留现有资料与配置；不要先卸载有未同步资料的应用。该 APK 使用发布签名，不是 `.probe` 调试应用；两个应用的数据目录不同。
+下载 [Android 0.1.38 APK](https://github.com/wyf929597870/shiwen-dsh/releases/download/android-v0.1.38/shiwen-android-0.1.38.apk)，支持 Android 9 及以上。升级直接覆盖安装，保留现有资料与配置；不要先卸载有未同步资料的应用。该 APK 使用发布签名，不是 `.probe` 调试应用；两个应用的数据目录不同。
 
-手机拥有完整本地资料库，断网可以记录和编辑。设置中添加服务地址、访问密码，为节点命名；连接电脑所在局域网后，可手动同步或启用自动同步。手机模型与密钥单独配置，不随资料同步。支持范围、校验文件和已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.2) 与 [Android 使用说明](android/README.md)。
+手机拥有完整本地资料库，断网可以记录和编辑。设置中添加服务地址、访问密码，为节点命名；连接电脑所在局域网后，可手动同步或启用自动同步。手机模型与密钥单独配置，不随资料同步。支持范围、校验文件和已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.38) 与 [Android 使用说明](android/README.md)。
 
 ### Windows x64 预览安装包
 
@@ -149,15 +215,17 @@ sudo apt install ./shiwen-dsh_0.1.15_amd64.deb
 
 ### Web 与桌面共用资料
 
-v0.1.9 的桌面客户端、电脑浏览器和手机浏览器连接**同一个独立服务、同一份资料与会话**。在“外部接入 → 浏览器访问”查看或复制服务地址，以访问密码登录即可，无需重新导入资料。退出本机客户端时选择保留服务，浏览器仍可继续使用；服务电脑需要保持开机且网络可达。
+桌面客户端、电脑浏览器和手机浏览器连接**同一个独立服务、同一份资料与会话**。在“外部接入 → 浏览器访问”查看或复制服务地址，以访问密码登录即可，无需重新导入资料。退出本机客户端时选择保留服务，浏览器仍可继续使用；服务电脑需要保持开机且网络可达。
 
-切换页面或点击“刷新”读取另一端保存的记录，重新打开记录读取正文。未保存草稿保留在各自窗口；同时编辑同一条记录时，旧版本保存会被拒绝。Android 原生客户端另有独立本地资料库和协调服务同步实现；它不是把桌面/Web 自动变成离线副本，也不表示所有平台可点对点同步。Android 尚未发布 APK，当前代码和验收边界见 [交付状态](docs/android/delivery-board.md)。
+切换页面或点击“刷新”读取另一端保存的记录，重新打开记录读取正文。未保存草稿保留在各自窗口；同时编辑同一条记录时，旧版本保存会被拒绝。Android 原生客户端另有独立本地资料库和协调服务同步实现；它不是把桌面/Web 自动变成离线副本，也不表示所有平台可点对点同步。Android 已提供签名 APK，当前代码和验收边界见 [交付状态](docs/android/delivery-board.md)。
+
+当前源码的主题、片段和手动关联由同一服务上的 PC/Web 共用，并包含在 PC 完整资料库备份中。片段保存独立身份、原文快照和定位信息；原文修改、删除或来源资料库变化时，会显示定位状态并保留快照。“关联文章”表示文章选用了这条素材，并不等于正文中存在可定位的引用。“可能相关”由本地语义检索提供，需主动加载并确认建立关联，不会自动写入关系。Android 的「电脑主题」需要连接同库电脑，直接读写服务上的主题。「手机主题」保存在当前手机库。恢复电脑主题与手动关联时请使用电脑完整备份。
 
 已发布的 v0.1.5 桌面版仍使用旧方式：从“外部接入 → 浏览器访问”复制完整登录链接，仅供本机浏览器访问，且需要保持桌面程序运行。独立安装到原生 DSH 的 Web 插件继续使用宿主认证；`npm run start:web` 创建的 `shiwen-web` profile 也不会自动接入现有桌面资料库。见 [Web 插件说明](docs/web-plugin.md)。
 
 ### 已有旧版资料
 
-当前源码和 v0.1.9 打开「设置 → 拾文资料 → 导入旧版资料」，填写运行服务的电脑上的旧拾文数据库文件路径，预览后导入；已发布的 v0.1.5 入口仍在「素材」。目标资料库必须为空；源库只读，历史消息保留为归档，不转换成 DSH 原生会话。
+打开「设置 → 拾文资料 → 导入旧版资料」，填写运行服务的电脑上的旧拾文数据库文件路径，预览后导入；已发布的 v0.1.5 入口仍在「素材」。目标资料库必须为空；源库只读，历史消息保留为归档，不转换成 DSH 原生会话。
 
 本仓库只维护基于 DSH 的拾文，旧版独立客户端不再在这里更新。
 
@@ -178,7 +246,7 @@ Linux 本机桌面与独立服务共用的数据根目录是 `${XDG_DATA_HOME:-~
 | `library/` | 拾文资料数据库，包含记录、正文和来源信息 |
 | `dsh/` | DSH 会话、配置与技能 |
 | `desktop/` | 桌面连接偏好与客户端会话数据 |
-| `server/` | v0.1.9 独立服务状态、日志与密码认证数据库 |
+| `server/` | 独立服务状态、日志与密码认证数据库 |
 | `workspaces/` | 工作文件 |
 
 远端连接时，资料仍留在服务电脑上。访问密码以随机盐和 scrypt 派生结果保存，设备凭据只在服务端保存摘要；本机管理链接和设备凭据都应作为私密信息保管。
@@ -195,10 +263,10 @@ Markdown 内容存放在本地资料数据库中，并非每条记录都是独�
 | --- | --- |
 | 已完成本机验收 | Linux 桌面启动、本机服务启动与复用、资料读写/筛选/排序、删除恢复、重启持久化、外部 MCP/HTTP/CLI；密码登录、设备撤销与实时连接断开；浏览器窄屏与中英文登录页面 |
 | 仍需验证 | 更多机器上的系统安装/升级、Windows 完整界面与 macOS、真实模型端到端流程，以及不同模型供应商和外部 Agent 配置 |
-| 桌面尚待完成 | 自动更新、关闭窗口最小化到托盘的可配置行为、文章导出与版本界面 |
-| Android 已发布 | 完整本地资料库、对话/手机 Agent、多节点资料同步、文件备份与 DSH 管理页；现用设备覆盖升级、素材保存与同步已验收，其他系统与后台场景仍需验证。范围见 [Android 交付状态](docs/android/delivery-board.md) |
+| 桌面尚待完成 | 自动更新、文章导出与版本界面 |
+| Android 已发布 | 完整本地资料库、对话/手机 Agent、多节点资料同步、文件备份与 DSH 管理页；旧版曾在真机验证覆盖升级、素材保存与同步，其他系统与后台场景仍需验证。范围见 [Android 交付状态](docs/android/delivery-board.md) |
 
-现在可构建并通过 DSH CLI 安装独立组合包，已有 Linux 桌面版继续共用业务模块。组合包通过 [GitHub Release](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.5) 提供，尚未发布 npm；`dsh-plugin` 话题也不代表官方收录。详见 [插件架构与发布状态](docs/plugin-status.md)。
+现在可构建并通过 DSH CLI 安装独立组合包，已有 Linux 桌面版继续共用业务模块。组合包通过 [GitHub Release](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.7) 提供，尚未发布 npm；`dsh-plugin` 话题也不代表官方收录。详见 [插件架构与发布状态](docs/plugin-status.md)。
 
 ## 参与开发
 

@@ -11,6 +11,7 @@ import './reading-notes-preview.css';
 const rpc=async(method,args={})=>{const response=await fetch('/rpc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({method,args})});const value=await response.json();if(!response.ok)throw Error(value.error);return value.result;};
 const api=desktopReadingNotes(rpc),md=new MarkdownIt({html:false});
 async function start(){
+ if(new URLSearchParams(location.search).has('light'))document.documentElement.dataset.previewTheme='light';
  if(new URLSearchParams(location.search).has('design')){
   const data=await api.list(),key=`shiwen-reading-notes:${location.origin}:${data.scope}`;
   if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify({dirty:true,form:{book:'写作这回事',day:'2026-11-10',chapter:'',page:'',excerpts:[],reflection:'这几天读《写作这回事》，最有启发的是关于具体场景的写法。好的场景不是交代发生了什么，而是通过可感的细节，让读者自然进入情境，看到人物在其中的动作、反应和选择。\n\n我也意识到，日常生活中有很多值得留意的细节：比如街上人说话的语气、店里的光线与气味、一件小事带来的情绪变化。平时多观察并做简短记录，写作时就能更快调动出具体而真实的画面。\n\n对我来说，写作不必追求宏大的主题，从身边的场景和细节出发，就足以写出有层次、有温度的内容。'}}));

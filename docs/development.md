@@ -40,7 +40,7 @@ The setup command clones and patches only when necessary. It refuses to overwrit
 
 ## 3. 桌面构建前置条件 / Desktop prerequisites
 
-目前仅支持 Linux x64 构建脚本。完整桌面链路还要求：
+本节介绍 Linux x64 构建，Windows x64 的要求见下文。完整桌面链路还要求：
 
 1. 上游依赖已用固定 pnpm 版本安装：在 `upstream/dsh/` 执行 `pnpm install --frozen-lockfile`。
 2. 满足上游原生构建工具要求（参见固定 checkout 的 `docs/development.md`、`native/system/README.md`）。
@@ -56,7 +56,7 @@ Desktop prerequisites include upstream pnpm dependencies and native build tools,
 
 v0.1.6 使用 `desktop/entry.mjs` 作为独立 Electron 客户端，不再由窗口内嵌启动 DSH Desktop Host。`npm start` 首次准备隔离的服务构建；修改插件后执行 `npm run server:prepare` 并重启服务。服务运行时可启动/退出客户端。安装包将 `scripts/server-worker.mjs`、插件和 Node 一起装入资源目录。打包使用暂存插件输出，不覆盖开发预览的构建。
 
-验证：`npm test`、`node scripts/check-server.mjs`、`node scripts/check-password-auth.mjs`、`node scripts/check-desktop-service.mjs`；包体验证传入 `release/linux-unpacked`。客户端流程检查使用临时资料，不调用模型。旧 `check-linux` / `check-shared-host` 针对 v0.1.5 的原生 Host，不作为 v0.1.6 客户端验收脚本。
+验证：`npm test`、`node scripts/check-server.mjs`、`node scripts/check-password-auth.mjs`、`node scripts/check-desktop-service.mjs`；包体验证传入 `debug/linux/linux-unpacked`。客户端流程检查使用临时资料，不调用模型。旧 `check-linux` / `check-shared-host` 针对 v0.1.5 的原生 Host，不作为 v0.1.6 客户端验收脚本。
 
 在上述前置条件满足后，从拾文根目录运行：
 
@@ -69,10 +69,11 @@ npm start
 npm run package:linux
 node scripts/check-server.mjs
 node scripts/check-password-auth.mjs
-node scripts/check-desktop-service.mjs release/linux-unpacked
+npm run package:linux -- --dir
+node scripts/check-desktop-service.mjs debug/linux/linux-unpacked
 ```
 
-产物是 `release/shiwen-dsh_<version>_amd64.deb` 与 `release/linux-unpacked/`。验收脚本使用临时资料目录；GUI 检查需要可用的桌面会话和本机回环连接。安装包应作为 Release 附件分发，不提交到 Git。
+产物是 `release/linux/shiwen-dsh_<version>_amd64.deb` 与 `debug/linux/linux-unpacked/`。验收脚本使用临时资料目录；GUI 检查需要可用的桌面会话和本机回环连接。安装包应作为 Release 附件分发，不提交到 Git。
 
 `npm run desktop:install` 是可选操作，会注册依赖当前源码位置的开发菜单入口；不是安装包步骤。托盘是否显示取决于桌面环境。
 

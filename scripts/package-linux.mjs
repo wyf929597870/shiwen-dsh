@@ -90,7 +90,7 @@ SHIWEN_SERVICE_RESOURCES="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 export SHIWEN_SERVICE_RESOURCES
 exec "$SHIWEN_SERVICE_RESOURCES/../runtime/primary-runtime/dependencies/node/bin/node" "$SHIWEN_SERVICE_RESOURCES/scripts/server.mjs" "$@"
 `,{mode:0o755});
-await collect(['diff','js-yaml','markdown-it','@modelcontextprotocol/server','zod','selfsigned','bonjour-service','qrcode'],join(root,'package.json'),join(shiwen,'node_modules'));
+await collect(['diff','js-yaml','markdown-it','@modelcontextprotocol/server','zod','selfsigned','bonjour-service','qrcode','onnxruntime-node','@huggingface/tokenizers'],join(root,'package.json'),join(shiwen,'node_modules'));
 // hicolor themes discover standard size directories; the design source is 1254px.
 const icons=join(stage,'icons');await mkdir(icons,{recursive:true});
 const sharp=createRequire(join(desktop,'package.json'))('sharp');
@@ -119,6 +119,14 @@ const artifacts=await build({targets:Platform.LINUX.createTarget(process.argv.in
   await verifyDesktopRuntime(join(resources,'dsh'),descriptor.release.version,{platform:'linux',arch:'x64'});
  }
 }});
+if(!unpacked){
+ for(const artifact of artifacts){
+  const actual=execFileSync('dpkg-deb',['--field',artifact,'Version'],{encoding:'utf8'}).trim();
+  if(actual!==product.version||!artifact.endsWith(`_${product.version}_amd64.deb`))throw Error('Linux package version mismatch');
+  const contents=execFileSync('dpkg-deb',['--contents',artifact],{encoding:'utf8',maxBuffer:64*1024*1024});
+  for(const required of ['search-model-worker.mjs','onnxruntime_binding.node','@huggingface/tokenizers/dist/tokenizers.mjs'])if(!contents.includes(required))throw Error('Linux package missing '+required);
+ }
+}
 console.log('Linux artifacts:',await output.publish(unpacked?[join(outputDirectory,'linux-unpacked')]:artifacts,{unpacked}));
 await rm(stage,{recursive:true,force:true});
 }finally{await output.dispose();}

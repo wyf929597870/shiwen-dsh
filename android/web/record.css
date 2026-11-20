@@ -76,6 +76,10 @@ html[data-theme=light] .markdown-view th{background:#edf1f2}
 .markdown-view .md-network-image{max-width:100%;white-space:normal;overflow-wrap:anywhere;color:inherit;background:transparent;border:1px solid var(--line);border-radius:6px;padding:6px 9px;cursor:pointer}
 .md-image-viewer{width:min(96vw,1000px);max-width:96vw;max-height:96vh;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--surface,#fff);color:inherit}.md-image-viewer::backdrop{background:#000c}.md-image-viewer img{display:block;max-width:100%;max-height:80vh;margin:auto;object-fit:contain}.md-image-viewer button{display:block;margin:0 0 8px auto;padding:6px 12px}
 .markdown-view .md-attachment-pending,.markdown-view .md-image-missing{display:inline-block;padding:2px 7px;border:1px solid var(--line);border-radius:6px;color:var(--muted);overflow-wrap:anywhere}.markdown-view .md-attachment-image{display:block;max-width:100%;max-height:70vh;margin:10px auto;object-fit:contain;border-radius:8px}
+/* The shell supplies 16px; add 8px on each side of long-form reading content. */
+.record-detail.record-reading>:not(.record-detail-head){width:calc(100% - 16px);max-width:720px;margin-inline:auto}
+.record-reading>.markdown-view{line-height:1.95}
+.record-reading>.markdown-view p{margin-bottom:1.25em}
 .sync-section>summary{cursor:pointer;font-weight:600;min-height:28px}
 .sync-section[open]>summary{margin-bottom:12px}
 .conflict-list-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0}

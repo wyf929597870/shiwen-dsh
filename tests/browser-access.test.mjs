@@ -30,6 +30,40 @@ test('workbench image save retry survives a later edit',async t=>{
  const requestPayload={id:args.id,revision:args.revision,kind:args.kind,title:args.title,body:args.body,stage:args.stage,sourceIds:args.sourceIds,imageIds:args.imageIds};
  assert.equal(restored.workbenchImageReceipt({requestId:args.requestId,requestPayload}).id,first.result.id);
 });
+test('plain-text create replays one committed record across restart and identifies a deleted draft source',async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'shiwen-text-replay-'));
+ const path=join(dir,'library.sqlite');
+ const browserPeer={},ctx=context();
+ let route;
+ ctx.shiwenLibrary=createStore(path);
+ t.after(()=>{ctx.shiwenLibrary.close();rmSync(dir,{recursive:true,force:true});});
+ ctx.effect=fn=>fn();
+ ctx.connection={browserPeer,admit:()=>({peer:browserPeer}),fetch:{register:value=>{route=value;return()=>{};}}};
+ workbench(ctx);
+ async function invoke(method,args){
+  const response=await route.fetch(new Request('http://localhost/api/shiwen',{method:'POST',body:JSON.stringify({method,args})}));
+  return {status:response.status,...await response.json()};
+ }
+ const args={kind:'freewrite',title:'同一个草稿',body:'一次保存',stage:'draft',requestId:'plain-create-1'};
+ assert.equal((await invoke('workbenchSaveReceipt',args)).result,null);
+ const first=await invoke('saveMarkdown',args);
+ assert.equal(first.status,200,first.error);
+ ctx.shiwenLibrary.close();ctx.shiwenLibrary=createStore(path);
+ assert.deepEqual(await invoke('workbenchSaveReceipt',args),first);
+ const replay=await invoke('saveMarkdown',args);
+ assert.deepEqual(replay,first);
+ assert.equal((await invoke('snapshot',{})).result.records.length,1);
+ assert.equal(ctx.shiwenLibrary.versions({id:first.result.id}).length,1);
+ const changed=await invoke('saveMarkdown',{...args,body:'另一份内容'});
+ assert.equal(changed.status,400);
+ const next=await invoke('saveMarkdown',{...args,requestId:'plain-create-2'});
+ assert.equal(next.status,200);assert.notEqual(next.result.id,first.result.id);
+ ctx.shiwenLibrary.remove({id:first.result.id,revision:first.result.revision});
+ const missing=await invoke('readMarkdown',{id:first.result.id});
+ assert.equal(missing.code,'RECORD_NOT_FOUND');
+ assert.equal((await invoke('saveMarkdown',args)).result.id,first.result.id);
+ assert.equal((await invoke('snapshot',{})).result.records.length,1);
+});
 test('浏览器入口复用 Host 地址；只有显式请求登录地址时返回凭据',()=>{
  const ctx=context(),status=browserAccess(ctx);
  assert.equal(status.url,'http://127.0.0.1:12345/');

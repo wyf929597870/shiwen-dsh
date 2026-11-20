@@ -67,6 +67,12 @@ internal class NativeAgentTasks private constructor(private val repository: Agen
                 conversationId = conversationId, modelRevision = modelConfigRevision,
                 contextSnapshot = frozen.encode(), contextTurns = frozen.includedTurns, omittedTurns = frozen.omittedTurns,
                 updatedAt = now)
+            // Commit the checked original before acknowledging the turn. A lost acknowledgement
+            // reuses the same library receipt, including when a journal entry was appended.
+            if (approvedDraft != null) {
+                try { repository.saveApprovedDraft(approvedDraft) }
+                catch (failure: Exception) { throw IllegalStateException("ORIGINAL_SAVE_FAILED", failure) }
+            }
             val (admitted, created) = store.admit(task)
             if (!created) return@withLock admitted
             val job = scope.launch(start = CoroutineStart.LAZY) {
@@ -74,9 +80,9 @@ internal class NativeAgentTasks private constructor(private val repository: Agen
                     check(store.dao.start(requestId, now()) == 1)
                     var streamedUnits = 0
                     val result = NativeAgentProbe().run(input, executorFactory(), model,
-                        localLibraryTools(repository, approvedDraft, requestId, conversationId),
+                        localLibraryTools(repository, requestId, conversationId),
                         conversationContext = FrozenConversationContext.decode(admitted.contextSnapshot),
-                        systemContext = systemContext) { fragment ->
+                        systemContext = systemContext, originalSaved = approvedDraft != null) { fragment ->
                         streamedUnits += fragment.length
                         check(streamedUnits <= 128_000) { "TURN_OUTPUT_TOO_LARGE" }
                         store.dao.append(requestId, fragment, now())
@@ -87,9 +93,10 @@ internal class NativeAgentTasks private constructor(private val repository: Agen
                 } catch (cancelled: CancellationException) {
                     store.dao.finish(requestId, "cancelled", null, now())
                     throw cancelled
-                } catch (_: Exception) {
+                } catch (failure: Exception) {
                     // Transport exception messages may contain secrets; do not persist them.
-                    store.dao.finish(requestId, "failed", "AGENT_RUN_FAILED", now())
+                    val emptyReply = generateSequence<Throwable>(failure) { it.cause }.any { it is EmptyModelReply }
+                    store.dao.finish(requestId, "failed", if (emptyReply) "MODEL_EMPTY_REPLY" else "AGENT_RUN_FAILED", now())
                 } finally { withContext(NonCancellable) { mutex.withLock { jobs.remove(requestId) } } }
             }
             jobs[requestId] = job

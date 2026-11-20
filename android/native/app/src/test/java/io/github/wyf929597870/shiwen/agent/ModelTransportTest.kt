@@ -1,13 +1,17 @@
 package io.github.wyf929597870.shiwen.agent
 
-import ai.koog.agents.core.agent.AIAgent
+import ai.koog.agents.core.tools.ToolDescriptor
 import ai.koog.agents.core.tools.ToolRegistry
+import ai.koog.prompt.dsl.ModerationResult
+import ai.koog.prompt.executor.model.PromptExecutor
+import ai.koog.prompt.llm.LLModel
+import ai.koog.prompt.message.Message
+import kotlinx.coroutines.flow.filterNot
 import ai.koog.prompt.Prompt
 import ai.koog.prompt.streaming.StreamFrame
 import ai.koog.prompt.executor.clients.openai.base.models.OpenAIStreamChoice
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNamingStrategy
-import ai.koog.serialization.typeToken
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.toList
 import okhttp3.mockwebserver.MockResponse
@@ -91,6 +95,34 @@ class ModelTransportTest {
         val first = server.takeRequest(); val second = server.takeRequest()
         assertTrue(first.body.readUtf8().contains("save_note"))
         assertTrue(second.body.readUtf8().contains("receipt:applied"))
+    } }
+
+    @Test fun finalAnswerRetainsDeltasWithoutATextCompleteFrame() { runBlocking {
+        val expected = "先停下来，再看一眼。"
+        server.enqueue(sse(textChunk("先停下来，") + textChunk("再看一眼。", "stop") + done()))
+        val transport = newExecutor()
+        val deltasOnly = object : PromptExecutor() {
+            override fun executeStreaming(prompt: Prompt, model: LLModel, tools: List<ToolDescriptor>) =
+                transport.executeStreaming(prompt, model, tools).filterNot { it is StreamFrame.TextComplete }
+            override suspend fun execute(prompt: Prompt, model: LLModel, tools: List<ToolDescriptor>): Message.Assistant = error("unused")
+            override suspend fun moderate(prompt: Prompt, model: LLModel): ModerationResult = error("unused")
+            override fun close() = transport.close()
+        }
+        val shown = StringBuilder()
+        val reply = NativeAgentProbe().run("请回复", deltasOnly, ModelTransport.model(config), ToolRegistry {}) { shown.append(it) }
+        assertEquals(expected, shown.toString())
+        assertEquals(expected, reply)
+        assertEquals(1, server.requestCount)
+    } }
+
+    @Test fun emptyFinalReplyIsReportedAfterACompleteStream() { runBlocking {
+        server.enqueue(sse(chunk("{\"content\":null}", "stop") + done()))
+        val result = runCatching {
+            NativeAgentProbe().run("说说这段原文", newExecutor(), ModelTransport.model(config), ToolRegistry {})
+        }
+        assertTrue("Expected an explicit empty reply error, got ${result.getOrNull()}",
+            generateSequence(result.exceptionOrNull()) { it.cause }.any { it.message == "MODEL_EMPTY_REPLY" })
+        assertEquals(1, server.requestCount)
     } }
 
     @Test fun streamWithoutDoneFailsBeforeToolDispatchAndIsNotRetried() { runBlocking {

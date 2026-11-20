@@ -26,7 +26,11 @@ if(!app.requestSingleInstanceLock()){app.quit();}else{
   wc.setWindowOpenHandler(({url})=>{if(/^https?:\/\//.test(url))void shell.openExternal(url);return {action:'deny'};});
   wc.on('will-attach-webview',event=>event.preventDefault());
   for(const event of ['will-navigate','will-redirect'])wc.on(event,(e,url)=>{if(new URL(url).origin!==origin)e.preventDefault();});
-  wc.session.setPermissionRequestHandler((_wc,permission,callback)=>callback(permission==='clipboard-sanitized-write'));
+  wc.session.setPermissionRequestHandler((requester,permission,callback,details)=>{
+   const canvasFullscreen=permission==='fullscreen'&&requester===window?.webContents&&details.isMainFrame
+    &&URL.canParse(details.requestingUrl)&&new URL(details.requestingUrl).origin===connected?.origin;
+   callback(permission==='clipboard-sanitized-write'||canvasFullscreen);
+  });
  }
  function showAccess(){
   if(!window||!connected)return;

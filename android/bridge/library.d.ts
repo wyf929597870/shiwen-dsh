@@ -20,7 +20,11 @@ export interface Methods {
   annotationDelete: {args:{id:string;revision:number;requestId:string};result:MobileRecord};
   annotationRestore: {args:{id:string;revision:number;requestId:string};result:MobileRecord};
   reviewPreview: {args:{period:'1'|'7'|'14'|'30'|'month';month?:string};result:{personalOriginalCharacters:number;observedEdits:{added:number;removed:number;net:number};start:string;end:string;records:Array<{id:string;title:string;kind:MobileRecordKind;contentDay:string;characters:number;goalMarkdown?:string}>;daily:Array<{day:string;personalOriginalCharacters:number;personalOriginalRecords:number}>}};
-  recordList: {args:{libraryId:string; query?:string; kind?:MobileRecordKind; excludeKind?:MobileRecordKind; cursor?:string|null; limit?:number; deleted?:boolean}; result:RecordPage};
+  workspaceSearch: {args:{libraryId:string;query:string;related?:boolean;offset?:number;limit?:number};result:{libraryScope:string;total:number;items:object[];nextOffset:number|null}};
+  workspaceThemes: {args:{libraryId:string;method:string;args:Record<string,unknown>};result:{result:unknown}};
+  workspaceRemote: {args:{libraryId:string;method:string;args:Record<string,unknown>};result:{result:unknown}};
+  recordList: {args:{libraryId:string; query?:string; section?:'library'|'collections'; kind?:MobileRecordKind; excludeKind?:MobileRecordKind; cursor?:string|null; limit?:number; deleted?:boolean}; result:RecordPage};
+  recordReferenceTitles: {args:{libraryId:string;ids:string[]};result:{items:{id:string;title:string;deleted:boolean}[]}};
   recordRead: {args:{libraryId:string; id:string}; result:MobileRecord};
   recordCreate: {args:{libraryId:string; requestId:string; localGeneration:number; record:MobileRecordInput; stagedAttachmentIds?:string[]}; result:RecordMutationResult};
   recordUpdate: {args:{libraryId:string; id:string; expectedRevision:number; requestId:string; localGeneration:number; patch:Partial<MobileRecordInput>; stagedAttachmentIds?:string[]; draftSlot?:string}; result:RecordMutationResult};
@@ -29,10 +33,10 @@ export interface Methods {
   recordDelete: {args:{libraryId:string; id:string; expectedRevision:number; requestId:string}; result:RecordMutationResult};
   recordRestore: {args:{libraryId:string; id:string; expectedRevision:number; requestId:string}; result:RecordMutationResult};
   recordVersions: {args:{libraryId:string; id:string; cursor?:string|null; limit?:number}; result:RecordVersionPage};
-  recordDraftRead: {args:{libraryId:string;slot:'composer'|'materials'|'articles'|`annotation:${string}`};result:{draft:null|RecordEditorDraft;nextGeneration:number}};
+  recordDraftRead: {args:{libraryId:string;slot:'composer'|'materials'|'articles'|'collections'|`annotation:${string}`};result:{draft:null|RecordEditorDraft;nextGeneration:number}};
   legacyAnnotationDrafts: {args:{libraryId:string};result:{recordIds:string[]}};
-  recordDraftSave: {args:{libraryId:string;slot:'composer'|'materials'|'articles';requestId:string;localGeneration:number;content:Record<string,unknown>;pendingMutation?:PendingRecordMutation|null};result:{saved:true}};
-  recordDraftAcknowledge: {args:{libraryId:string;slot:'composer'|'materials'|'articles';requestId:string;localGeneration:number};result:{cleared:boolean}};
+  recordDraftSave: {args:{libraryId:string;slot:'composer'|'materials'|'articles'|'collections';requestId:string;localGeneration:number;content:Record<string,unknown>;pendingMutation?:PendingRecordMutation|null};result:{saved:true}};
+  recordDraftAcknowledge: {args:{libraryId:string;slot:'composer'|'materials'|'articles'|'collections';requestId:string;localGeneration:number};result:{cleared:boolean}};
   projectList: {args:{libraryId:string; query?:string; stage?:ArticleStage; cursor?:string|null; limit?:number}; result:RecordPage};
   projectCreate: {args:{libraryId:string; requestId:string; localGeneration:number; record:MobileRecordInput & {kind:'article'}}; result:RecordMutationResult};
   projectUpdate: {args:{libraryId:string; id:string; expectedRevision:number; requestId:string; localGeneration:number; patch:Partial<MobileRecordInput>}; result:RecordMutationResult};
@@ -59,7 +63,7 @@ export interface Methods {
   agentDeleteConversation: {args:{id:string}; result:AgentConversationSnapshot};
   agentRecent: {args:{conversationId:string; offset?:number}; result:{items:AgentTask[]; nextOffset?:number|null}};
   agentStatus: {args:{conversationId:string; id:string}; result:AgentTask|{status:'unknown'}};
-  agentSend: {args:{conversationId:string; id:string; input:string; saveOriginal:boolean; kind:'journal'|'idea'|'freewrite'; localGeneration:number; revision:string}; result:AgentTask};
+  agentSend: {args:{conversationId:string; id:string; input:string; saveOriginal:boolean; kind:'journal'|'idea'|'freewrite'|'reading_note'|'web'|'ai'|'reference'; localGeneration:number; revision:string}; result:AgentTask};
   agentReadDraft: {args:{conversationId:string}; result:{draft?:AgentDraft|null}};
   agentSaveDraft: {args:AgentDraft; result:{saved:true}};
   agentAcknowledge: {args:{conversationId:string; id:string; localGeneration:number}; result:{saved:true}};
@@ -67,6 +71,7 @@ export interface Methods {
   nodeList: {args:Record<string,never>; result:NodeSnapshot};
   configureNode: {args:{id?:string}; result:{closed:true;connected?:boolean;sync?:{libraryId:string;operationId:string;state:string;integrity?:string};syncError?:string}};
   nodeSelect: {args:{id:string}; result:NodeSnapshot};
+  nodeProfileRefresh: {args:{id:string}; result:NodeSnapshot};
   nodeCheck: {args:{id:string}; result:NodeSnapshot&{connected?:boolean;sync?:{libraryId:string;operationId:string;state:string;integrity?:string};syncError?:string}};
   nodeRemove: {args:{id:string}; result:NodeSnapshot};
   nodeAgentState: {args:{id:string}; result:NodeAgentState};
@@ -108,7 +113,7 @@ export interface Methods {
   readDraft: {args:Record<string,never>; result:{draft?:Draft|null}};
 }
 export const isNative: boolean;
-export interface AgentDraft {conversationId:string; id:string; input:string; saveOriginal:boolean; kind:'journal'|'idea'|'freewrite'; localGeneration:number}
+export interface AgentDraft {conversationId:string; id:string; input:string; saveOriginal:boolean; kind:'journal'|'idea'|'freewrite'|'reading_note'|'web'|'ai'|'reference'; localGeneration:number}
 export interface ServiceNode {id:string; name:string; baseUrl:string; allowPrivateHttp:boolean; authenticated:boolean; configRevision:number; refreshing?:boolean; lastCheckedAt?:string|null; profileSyncStatus?:'synced'|'cached'|'not-synced'|string|null; profileRevision?:string|null; profileUpdatedAt?:string|null; profileMemoryCount?:number|null}
 export interface NodeSnapshot {items:ServiceNode[]; activeId:string|null}
 export interface AgentProfileDocument {body:string; revision:number}
