@@ -3,6 +3,10 @@
 0.1.4 是本仓库首次公开的 Linux 预览版；0.1.0–0.1.3 为本地开发与打包记录。
 0.1.4 is this repository's first public Linux preview; 0.1.0–0.1.3 are local development builds.
 
+## v0.1.58 - 2026-11-27 (Linux、Android)
+
+- 两端正式安装包收录同一份 `shiwen-library` skill，新增待探索问题的提交、出处核对、回应关联和首页排期说明。外部 MCP 客户端可以按这些说明把候选放入原始池，并读回问题和引用的记录。
+
 ## v0.1.57 - 2026-11-26 (Linux、Android)
 
 - 新增待探索池。查看每个问题的出处和原句，收下、改问法、合并或略过，也可以从外部 MCP 提交带来源的候选。

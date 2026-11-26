@@ -6,6 +6,9 @@ await mkdir(resolve(root, 'dist'), {recursive: true});
 await build({entryPoints: [resolve(root, 'web/main.jsx')], bundle: true, format: 'esm', nodePaths: [resolve(root, 'node_modules')],
   outfile: resolve(root, 'dist/app.js'), loader:{'.webp':'file'},assetNames:'assets/[name]',target: 'chrome100', minify: true, jsx: 'automatic'});
 await copyFile(resolve(root, '../assets/shiwen-mark.png'), resolve(root, 'dist/shiwen-mark.png'));
+const skillDirectory = resolve(root, 'dist/skills/shiwen-library');
+await mkdir(skillDirectory, {recursive: true});
+await copyFile(resolve(root, '../skills/shiwen-library/SKILL.md'), resolve(skillDirectory, 'SKILL.md'));
 await writeFile(resolve(root, 'dist/index.html'), `<!doctype html><html lang="zh-CN"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">

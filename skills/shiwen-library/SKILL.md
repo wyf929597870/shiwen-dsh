@@ -1,6 +1,6 @@
 ---
 name: shiwen-library
-description: Save diaries, reading notes, ideas, web articles and other materials into Shiwen, or review records for recurring questions and organize source passages into themes when the user asks. Use Shiwen MCP tools or its CLI; do not access its database directly.
+description: Save diaries, reading notes, ideas, web articles and other materials into Shiwen, or use its 待探索 pool to submit sourced questions, review candidates, link responses and arrange home recommendations. Also use it to organize source passages into themes when requested. Use Shiwen MCP tools or its CLI; do not access its database directly.
 ---
 
 # Shiwen library
@@ -56,4 +56,12 @@ Current external tools additionally include `shiwen_image_begin`, `shiwen_image_
 
 用户要找过去的经验、相关书摘或写作选题时，先读 `shiwen_recommendation_settings` 取得 libraryId，再用 `shiwen_assist_analyze` 及 `shiwen_assist_result`。经验、阅读和写作场景名分别为 experience、reading、writing。区分检索命中与模型判断，引用用户所选的原句和出处。用户询问已有推荐时，用 `shiwen_recommendation_list` 和 `shiwen_recommendation_read`，单纯浏览只需 read。
 
-保存决定、收录主题、创建文章分别走 `shiwen_assist_save_decision`、`shiwen_assist_add_to_theme`、`shiwen_assist_create_draft`。使用本次读取的版本、资料库和独立 requestId；原样重试复用 requestId。用户确认自己的表述和日期后再保存决定。续写优先读卡上的已有文章；用户明确要求另起一稿时使用 another。稍后看、略过、纠正关联及撤销均使用 `shiwen_recommendation_feedback`，从反馈历史选择具体 feedbackId。已删除或失效的引文须重新定位。完整参数和跨端回执参见项目文档 `docs/external-access.md`。
+保存决定、收录主题、创建文章分别走 `shiwen_assist_save_decision`、`shiwen_assist_add_to_theme`、`shiwen_assist_create_draft`。使用本次读取的版本、资料库和独立 requestId；原样重试复用 requestId。用户确认自己的表述和日期后再保存决定。续写优先读卡上的已有文章；用户明确要求另起一稿时使用 another。对旧推荐卡执行稍后看、略过、纠正关联及撤销时使用 `shiwen_recommendation_feedback`，从反馈历史选择具体 feedbackId。已删除或失效的引文须重新定位。完整参数和跨端回执参见项目文档 `docs/external-access.md`。
+
+## 待探索与首页排期
+
+- 用户问入口时，桌面在「记录」列表的搜索框上方点「待探索」，安卓从「首页」或「资料库 → 记录」进入。原始池显示待筛选的问题，探索池显示已收下的问题。
+- 浏览时先从 `shiwen_recommendation_settings` 取得当前 libraryId，作为 `expectedLibraryId` 传给 `shiwen_exploration_list`。原始池用 `view=raw`，已收下用 `view=accepted`；单篇可加 `recordId`。用 `shiwen_exploration_read` 核对问题、版本、有效出处和已有回应。
+- 用户要把问题放入待探索时，用 `shiwen_exploration_suggest`。每个建议带稳定的 `externalItemId`、`type`（`explore` 或 `follow_up`）、问法 `text` 和 `sources`。每个出处带实际读到的 `recordId` 和 `revision`；引用原句再附逐字 `quote` 和可确认的字段，书摘与个人感想分别用 `excerpt` 和 `reflection`。只能确定整篇时就提交整篇。随新材料保存可在 `shiwen_save` 或 `shiwen_collect` 附 `suggestions`。逐项核对回执，遇到 `source_changed` 只重读并修正过期项，`needs_review` 留待核对。
+- 用户明确要求收下、改写或略过时，用 `shiwen_exploration_review` 携带当前 `expectedRevision`。固定到今天或本周用 `shiwen_exploration_place`，从详情的 `placements.day` 或 `placements.week` 取对应的 `periodKey`（返回字段 `key`）和 `expectedPlacementRevision`（返回字段 `revision`）。收下和固定分别代表两次不同的用户选择。
+- 用户要接着写或关联已有后续时，用 `shiwen_exploration_respond`。新写回应保留用户原文，首次生成 `responseRecordId`，重试沿用该 ID、`requestId` 和相同参数。已有回应传原记录的 ID 和 `sourceRevision`。浏览首页沿用 `shiwen_recommendation_list` 的 `daily`、`week` 视图。
