@@ -40,7 +40,7 @@ async function main(){
    const definition=definitions[tool.name];if(!definition)continue;
    server.registerTool(tool.name,{description:tool.description,inputSchema:definition.schema,annotations:tool.annotations},async(args,context)=>{
     try{const {result}=await request('/v1/tools/call',{name:tool.name,arguments:args},{signal:context.signal});return {content:[{type:'text',text:JSON.stringify(result)}],structuredContent:result};}
-    catch(error){return {isError:true,content:[{type:'text',text:String(error.message)}]};}
+    catch(error){return {isError:true,...(error.code?{structuredContent:{code:error.code,message:String(error.message),currentRevision:error.currentRevision}}:{}),content:[{type:'text',text:String(error.message)}]};}
    });
   }
   return server;

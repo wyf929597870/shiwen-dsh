@@ -1,0 +1,60 @@
+:root {
+  --ws-title: 23px; --ws-heading: 19px; --ws-body: 15px; --ws-row: 14px;
+  --ws-control: 14px; --ws-meta: 12px;
+  --phone-veil: rgb(10 15 23 / .68);
+  --phone-chrome: rgb(33 36 42 / .86);
+  --phone-scene: linear-gradient(rgb(4 13 26 / var(--phone-shade,.25)),rgb(4 13 26 / var(--phone-shade,.25))),var(--phone-photo,url('../../assets/night-meadow.webp'));
+}
+html[data-theme=dark] {
+  --mint:#9bdcff; --line:#454750; --muted:#c6cdd4; --ws-paper:#242529;
+  --ws-ink:#eff2f6; --ws-wash:#283b4b; --surface:#242529;
+  background:#191a1e; color:#eff2f6;
+}
+html[data-theme=light] {
+  --muted:#38464f; --mint:#084d3f;
+  --phone-veil: rgb(248 250 249 / .72);
+  --phone-chrome: rgb(247 250 249 / .88);
+}
+#root,.phone-wallpaper-preview {
+  background-color:var(--phone-chrome);
+  background-image:linear-gradient(var(--phone-veil),var(--phone-veil)),var(--phone-scene);
+  background-size:cover;
+  background-position:center;
+  background-repeat:no-repeat;
+}
+html[data-theme] .app, .app .chat-execution, .app .chat-execution .conversation {
+  background:transparent;
+}
+html[data-theme] .app > :is(.shell-header,nav) { background:var(--phone-chrome); }
+html[data-theme=dark] .record-detail-head { background:#27282d; }
+html[data-theme=dark] :is(.agent-composer,.session-sheet,.library-sheet,.record-search,.settings-card) { background:#242529; }
+html[data-theme=dark] .app > nav button[aria-current],html[data-theme=dark] .sheet-library[aria-current],
+html[data-theme=dark] .chat-mode-switch button[aria-pressed=true] { background:var(--ws-wash);color:var(--mint); }
+.app > nav button { font-size:12px; gap:3px; min-height:48px; border-radius:6px; }
+.app > nav button svg { display:block; width:20px; height:20px; }
+.app .chat-icon-action,.app .record-filter-toggle { display:inline-grid; place-items:center; padding:0; min-height:44px; min-width:44px; }
+.app .record-list-only .record-list { gap:4px; }
+.app .record-list-only .record-list-row { border:1px solid var(--line); border-radius:5px; min-height:48px; padding:9px 12px; }
+.chat-panel .phone-welcome-scene { display:flex; flex-direction:column; align-items:stretch; margin:8px 0; }
+.phone-welcome-scene .chat-welcome { margin:auto 0; padding:18px; text-align:center; color:inherit; }
+.phone-welcome-scene .chat-welcome h1 { font-size:23px; }
+.phone-welcome-scene .chat-welcome .secondary { color:inherit; font-size:14px; line-height:1.65; }
+html[data-theme] .record-layout.record-detail-open .record-detail.record-reading,
+html[data-theme] .app .reading { background:transparent; }
+.app .reading .markdown-view { font-size:var(--ws-body); line-height:1.8; }
+.phone-wallpaper { border-top:1px solid var(--line);margin-top:16px;padding-top:16px; }
+.phone-wallpaper h2 { margin:0 0 10px;font-size:17px; }
+.phone-wallpaper-preview { height:108px;border-radius:6px; }
+.phone-wallpaper-actions { display:flex; flex-wrap:wrap;gap:8px; margin:8px 0; }
+.phone-wallpaper-actions button { min-height:44px; }
+.phone-wallpaper label { display:block; font-size:14px; }
+.phone-wallpaper label output { float:right; font-variant-numeric:tabular-nums; }
+.phone-wallpaper input[type=range] { width:100%; min-height:44px; padding:0; accent-color:var(--mint); }
+.phone-wallpaper input[hidden] { display:none; }
+
+.app > nav { grid-template-columns:repeat(5,minmax(0,1fr)); }
+.phone-recommendations { --dsw-font-family:inherit; --sw-scene:none; }
+.phone-recommendations .sw-rec-grid { gap:8px; }
+.phone-recommendations .sw-rec-card { min-width:0; white-space:normal; }
+.phone-recommendations .sw-rec-actions button,.sw-rec-paper button { min-height:40px; }
+html[data-theme=light] .phone-recommendations .sw-recs > header { color:var(--ws-ink); }

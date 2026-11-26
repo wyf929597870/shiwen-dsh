@@ -22,6 +22,8 @@ class LibraryMigrationTest {
     @Test fun alreadyInstalledVersionThreeReceivesNewFieldsWithoutDataLoss() = migrate(3, false)
     @Test fun alreadyInstalledVersionFourReceivesBranchAttachmentsWithoutDataLoss() = migrate(4, false)
 
+    @Test fun versionSevenAddsExplorationAndSeedsDiscoveryWithoutLosingRecords() = migrate(7, false)
+
     private fun migrate(version: Int, earlyVersionOne: Boolean) {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val libraryId = UUID.randomUUID().toString(); val deviceId = UUID.randomUUID().toString()
@@ -58,8 +60,8 @@ class LibraryMigrationTest {
                 }
                 insert("records", mapOf("id" to recordId,"title" to "迁移测试","kind" to "journal","markdown" to "当前正文","origin" to "personal","processing" to "original","sourceIdsJson" to "[]","sourcesJson" to "[{\"text\":\"当前正文\",\"origin\":\"personal\"}]","attachmentDescriptorsJson" to "[]","versionId" to secondVersion,"revision" to 2,"syncState" to "local-only"))
                 insert("versions", mapOf("id" to firstVersion,"recordId" to recordId,"revision" to 1,"markdown" to "先前正文","docJson" to JSONObject().put("sources",source).toString(),"sourcesJson" to source.toString(),"parentVersionIdsJson" to "[]"))
-                insert("versions", mapOf("id" to secondVersion,"recordId" to recordId,"revision" to 2,"markdown" to "当前正文","sourcesJson" to "[]","parentVersionIdsJson" to "[]"))
-                insert("activities", mapOf("activityId" to "historic-activity","recordId" to recordId,"originDeviceId" to "null","afterSegmentsJson" to source.toString(),"action" to "write","authorship" to "personal"))
+                insert("versions", mapOf("id" to secondVersion,"recordId" to recordId,"revision" to 2,"markdown" to "当前正文","sourcesJson" to if(version>=7) JSONArray().put(JSONObject().put("text","当前正文").put("origin","personal")).toString() else "[]","parentVersionIdsJson" to "[]"))
+                insert("activities", mapOf("activityId" to "historic-activity","recordId" to recordId,"originDeviceId" to if(version>=7)null else "null","afterSegmentsJson" to source.toString(),"action" to "write","authorship" to "personal"))
                 insert("drafts", mapOf("slot" to "composer","requestId" to "draft-fixture","markdown" to "未保存草稿","generation" to 7))
                 insert("receipts", mapOf("requestId" to "receipt-fixture","recordId" to recordId,"status" to "applied"))
                 old.version = version
@@ -68,6 +70,7 @@ class LibraryMigrationTest {
             registry.dao().insert(row)
             val repo=LibraryRepository(context,libraryId,deviceId,row.name,registry,row);repository=repo
             assertEquals("当前正文",repo.read(recordId).markdown)
+            assertTrue(repo.dao.discoveryCut()>0); assertTrue(repo.dao.explorationList("standalone","exploration_questions").isEmpty())
             val history=repo.dao.versions(recordId);assertEquals(2,history.size)
             for(item in history){val segments=JSONArray(item.sourcesJson);assertEquals(item.markdown,(0 until segments.length()).joinToString(""){segments.getJSONObject(it).getString("text")})}
             if(!earlyVersionOne)assertEquals("voice:synthetic",JSONArray(history.first { it.id==firstVersion }.sourcesJson).getJSONObject(0).getString("sourceRef"))

@@ -1,13 +1,13 @@
 /* Shared desktop workbench scale. The compact phone views have their own controls. */
 @media (min-width: 761px) {
   .sw-view, .rn-page {
-    --sw-title-size: 28px;
-    --sw-heading-size: 22px;
-    --sw-body-size: 17px;
-    --sw-item-size: 15px;
-    --sw-ui-size: 14px;
-    --sw-caption-size: 13px;
-    --sw-control-height: 36px;
+    --sw-title-size: 23px;
+    --sw-heading-size: 18px;
+    --sw-body-size: 15px;
+    --sw-item-size: 13px;
+    --sw-ui-size: 13px;
+    --sw-caption-size: 12px;
+    --sw-control-height: 32px;
     --sw-radius: 7px;
     --sw-surface: var(--dsw-alias-bg-layer-1);
     --sw-text: var(--dsw-alias-label-primary);
@@ -102,11 +102,25 @@
     line-height: 20px;
   }
   .sw-library-view .sw-detail-head > div { align-items: center; }
-  .sw-record-workspace :is(.sw-list-menu, .sw-record-menu) > summary {
-    min-height: var(--sw-control-height);
-    padding-block: 7px;
-    font-size: 18px;
-    line-height: 22px;
+  .sw-record-workspace .sw-overflow-menu { position: relative; }
+  .sw-overflow-menu > summary {
+    display: inline-grid; place-items: center; width: 28px; height: 28px;
+    border-radius: 4px; list-style: none; cursor: pointer;
+    color: var(--dsw-alias-label-secondary); vertical-align: middle;
+  }
+  .sw-overflow-menu > summary::-webkit-details-marker { display: none; }
+  .sw-overflow-menu[open] > summary, .sw-overflow-menu > summary:hover {
+    background: var(--dsw-alias-bg-layer-2); color: var(--sw-text);
+  }
+  .sw-overflow-menu > div {
+    position: absolute; inset: calc(100% + 3px) 0 auto auto; z-index: 5;
+    display: grid; min-width: 116px; padding: 4px;
+    background: var(--sw-surface); border: 1px solid var(--sw-border);
+    border-radius: 6px; box-shadow: 0 4px 12px #0003;
+  }
+  .sw-record-workspace .sw-overflow-menu button {
+    min-height: 28px; padding: 4px 9px; border-radius: 3px;
+    font: inherit; font-size: 13px; line-height: 20px; text-align: start; white-space: nowrap;
   }
   .sw-record-workspace .sw-search-line, .rn-page .rn-search { background: var(--sw-surface); }
   .sw-view .sw-search-options [role=group], .rn-page .sw-search-options [role=group],
@@ -124,6 +138,24 @@
     padding-bottom: 18px;
     margin-bottom: 18px;
     border-bottom: 1px solid var(--sw-border);
+  }
+  .sw-themes:not([data-single-pane]) {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .sw-themes:not([data-single-pane]) > .sw-columns {
+    flex: 1 1 0;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .sw-themes:not([data-single-pane]) > .sw-columns > :is(.sw-list, .sw-detail) {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-gutter: stable;
+    scrollbar-color: var(--sw-border) transparent;
   }
   .sw-theme-list-item { align-items: baseline; gap: 12px; }
   .sw-theme-list-item strong { overflow-wrap: anywhere; }

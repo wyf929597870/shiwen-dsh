@@ -77,7 +77,7 @@ class LibraryRepository internal constructor(
     val executor: ExecutorService = Executors.newSingleThreadExecutor()
     val db: LibraryDatabase = Room.databaseBuilder(app, LibraryDatabase::class.java,
         registryRow.dbFile).addMigrations(LIBRARY_MIGRATION_1_2, LIBRARY_MIGRATION_2_3, LIBRARY_MIGRATION_3_4,
-            LIBRARY_MIGRATION_4_5, LIBRARY_MIGRATION_5_6, LIBRARY_MIGRATION_6_7).openHelperFactory(LargeRowOpenHelperFactory()).build()
+            LIBRARY_MIGRATION_4_5, LIBRARY_MIGRATION_5_6, LIBRARY_MIGRATION_6_7, LIBRARY_MIGRATION_7_8).addCallback(EXPLORATION_CHANGE_CALLBACK).openHelperFactory(LargeRowOpenHelperFactory()).build()
     val dao get() = db.dao()
     fun context() = LibraryContext(libraryId, registryRow.pageGeneration, registryRow.role, registryRow.integrity, deviceId)
     fun registryItem(): LibraryRegistryRow = registryRow
@@ -425,6 +425,15 @@ class LibraryRepository internal constructor(
         JSONObject().put("deleted", true))
 
     /** Adopt the coordinator's single diary while retaining unsent local work. */
+    internal fun confirmRecordAttachments(recordId: String, body: JSONObject) {
+        val descriptors = body.optJSONArray("attachmentDescriptors") ?: return
+        for (index in 0 until descriptors.length()) {
+            val descriptor = descriptors.getJSONObject(index)
+            dao.confirmAttachedBlob(recordId, descriptor.getString("id"), descriptor.getString("name"),
+                descriptor.getString("hash"), descriptor.getLong("byteLength"))
+        }
+    }
+
     internal fun acceptJournalAppend(sent: LibraryOutbox, receipt: JSONObject, remote: JSONObject, version: JSONObject) {
         val targetId = receipt.getString("recordId")
         val serverRevision = receipt.getLong("revision")
@@ -543,6 +552,7 @@ class LibraryRepository internal constructor(
                 if (descriptor.getString("id") !in owned) dao.putAttachment(LibraryAttachment(descriptor.getString("id"), targetId,
                     descriptor.getString("name"), remote.getString("updatedAt"), descriptor.getString("hash"), descriptor.getLong("byteLength"), null, false, true))
             }
+            confirmRecordAttachments(targetId, remote)
             dao.updateOutbox(sent.copy(recordId = targetId, state = "applied", lastError = null))
         }
     }
@@ -606,8 +616,24 @@ class LibraryRepository internal constructor(
             (knownHead == null || knownHead.revision <= expectedRevision)) { "CONFLICT_HEAD_CHANGED" }
         val conflictValue = JSONObject(conflict.remoteJson)
         val conflictRecord = conflictValue.optJSONObject("record") ?: conflictValue.optJSONObject("currentRecord") ?: conflictValue.takeIf { it.has("id") }
-        val remote = validateRecord(conflictRecord ?: knownHead?.takeIf { it.revision == expectedRevision }
-            ?.let { JSONObject(it.recordJson) } ?: error("SYNC_REMOTE_RECORD_MISSING"))
+        val rawRemote = conflictRecord ?: knownHead?.takeIf { it.revision == expectedRevision }
+            ?.let { JSONObject(it.recordJson) } ?: error("SYNC_REMOTE_RECORD_MISSING")
+        val hasSnapshotIdentity = rawRemote.optString("versionId").let { it.isNotBlank() && it != "null" } ||
+            conflictValue.optJSONObject("currentHead")?.optString("versionId")?.let { it.isNotBlank() && it != "null" } == true
+        if (!hasSnapshotIdentity && knownHead?.revision == expectedRevision) {
+            check(sameConflictSnapshot(rawRemote, JSONObject(knownHead.recordJson))) { "CONFLICT_HEAD_CHANGED" }
+        }
+        val remoteVersionId = rawRemote.optString("versionId").takeIf { it.isNotBlank() && it != "null" }
+            ?: conflictValue.optJSONObject("currentHead")?.optString("versionId")?.takeIf { it.isNotBlank() && it != "null" }
+            ?: knownHead?.takeIf { it.revision == expectedRevision }?.versionId ?: error("SYNC_REMOTE_VERSION_MISSING")
+        val remoteChangeId = rawRemote.optString("changeId").takeIf { it.isNotBlank() && it != "null" }
+            ?: conflictValue.optJSONObject("currentHead")?.optString("changeId")?.takeIf { it.isNotBlank() && it != "null" }
+            ?: knownHead?.takeIf { it.revision == expectedRevision }?.changeId ?: current.changeId
+        fun matchesRemoteHead(head: LibraryRemoteHead?): Boolean = head == null || head.revision < expectedRevision ||
+            (head.revision == expectedRevision && (head.versionId == null || head.versionId == remoteVersionId) &&
+                (head.changeId == null || head.changeId == remoteChangeId))
+        check(matchesRemoteHead(knownHead)) { "CONFLICT_HEAD_CHANGED" }
+        val remote = validateRecord(rawRemote)
         check(remote.optString("id") == current.id) { "SYNC_REMOTE_RECORD_INVALID" }
         if (current.kind == "ai_annotation" || remote.optString("kind") == "ai_annotation") {
             val localAnchor = current.annotationOfJson?.let(::JSONObject)
@@ -617,21 +643,6 @@ class LibraryRepository internal constructor(
                 "ANNOTATION_RELATION_CHANGED"
             }
         } else check(!remote.has("annotationOf") || remote.isNull("annotationOf")) { "ANNOTATION_RELATION_CHANGED" }
-        val hasSnapshotIdentity = remote.optString("versionId").let { it.isNotBlank() && it != "null" } ||
-            conflictValue.optJSONObject("currentHead")?.optString("versionId")?.let { it.isNotBlank() && it != "null" } == true
-        if (!hasSnapshotIdentity && knownHead?.revision == expectedRevision) {
-            check(sameConflictSnapshot(remote, JSONObject(knownHead.recordJson))) { "CONFLICT_HEAD_CHANGED" }
-        }
-        val remoteVersionId = remote.optString("versionId").takeIf { it.isNotBlank() && it != "null" }
-            ?: conflictValue.optJSONObject("currentHead")?.optString("versionId")?.takeIf { it.isNotBlank() && it != "null" }
-            ?: knownHead?.takeIf { it.revision == expectedRevision }?.versionId ?: error("SYNC_REMOTE_VERSION_MISSING")
-        val remoteChangeId = remote.optString("changeId").takeIf { it.isNotBlank() && it != "null" }
-            ?: conflictValue.optJSONObject("currentHead")?.optString("changeId")?.takeIf { it.isNotBlank() && it != "null" }
-            ?: knownHead?.takeIf { it.revision == expectedRevision }?.changeId ?: current.changeId
-        fun matchesRemoteHead(head: LibraryRemoteHead?): Boolean = head == null || head.revision < expectedRevision ||
-            (head.revision == expectedRevision && (head.versionId == null || head.versionId == remoteVersionId) &&
-                (head.changeId == null || head.changeId == remoteChangeId))
-        check(matchesRemoteHead(knownHead)) { "CONFLICT_HEAD_CHANGED" }
         val remoteVersion = remote.optJSONObject("currentVersion") ?: conflictValue.optJSONObject("currentVersion")
         val remoteDoc = remoteVersion?.optJSONObject("doc") ?: remoteVersion?.takeIf { it.has("provenance") }
         val remoteProvenance = remote.optJSONObject("provenance") ?: remoteDoc?.optJSONObject("provenance")
@@ -714,7 +725,7 @@ class LibraryRepository internal constructor(
                 old.origin == expectedOrigin && old.processing == expectedProcessing) { "REQUEST_REUSED" }
             for (field in listOf("contentDay", "dateBasis", "url", "annotation", "stage")) {
                 if (!metadata.has(field)) continue
-                val expected = nullable(metadata, field)
+                val expected = if (field=="dateBasis" && expectedKind=="journal") "日记内容日期" else nullable(metadata, field)
                 val actual = when (field) {
                     "contentDay" -> old.contentDay
                     "dateBasis" -> old.dateBasis
@@ -1497,7 +1508,7 @@ class LibraryManager(context: Context, private val namespace: String = "shiwen-l
         if (!app.getDatabasePath(dbFile).exists()) return false
         val database = Room.databaseBuilder(app, LibraryDatabase::class.java, dbFile)
             .addMigrations(LIBRARY_MIGRATION_1_2, LIBRARY_MIGRATION_2_3, LIBRARY_MIGRATION_3_4,
-                LIBRARY_MIGRATION_4_5, LIBRARY_MIGRATION_5_6, LIBRARY_MIGRATION_6_7).openHelperFactory(LargeRowOpenHelperFactory()).build()
+                LIBRARY_MIGRATION_4_5, LIBRARY_MIGRATION_5_6, LIBRARY_MIGRATION_6_7, LIBRARY_MIGRATION_7_8).addCallback(EXPLORATION_CHANGE_CALLBACK).openHelperFactory(LargeRowOpenHelperFactory()).build()
         return try {
             val encoded = database.dao().meta("restore-complete-v1") ?: return false
             val marker = JSONObject(encoded)

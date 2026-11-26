@@ -7,6 +7,7 @@ export const bootstrap=async()=>({libraryId,role:'standalone',integrity:'complet
 const make=(id,title,kind,markdown,extra={})=>({id,title,kind,markdown,revision:1,origin:'personal',contentDay:'2026-11-19',stage:'draft',sources:[],sourceIds:[],...extra});
 const rows=[make('idea','持续记录','idea','持续记录日常的细节'),make('web','记录的方法','web','用具体的观察练习持续记录'),
   make('book','写作与观察','reading_note','',{annotation:JSON.stringify({schema:'shiwen.reading-note.v2',noteType:'excerpt',chapter:'观察生活',excerpts:[{text:'写日记时，先把眼前的细节记下来。',page:'12'}]})})];
+const otherThemes=Array.from({length:35},(_,i)=>({id:'topic-'+i,title:'观察笔记 '+(i+1),summary:'示例说明',revision:1,memberCount:0,members:[]}));
 let savedTheme;
 export async function call(method,args={}){
  switch(method){
@@ -35,7 +36,8 @@ export async function call(method,args={}){
    const a=args.args;
    if(args.method==='themeSave')savedTheme={...a,id:'theme',revision:1,members:[],memberCount:0};
    if(args.method==='themeMemberAdd'){savedTheme.members.push({id:'link',sourceRecordId:a.sourceRecordId,sourceTitle:'写作与观察',sourceKind:'reading_note',field:a.field,quote:JSON.parse(rows[2].annotation).excerpts[0].text,location:{status:'current'}});savedTheme.memberCount++;savedTheme.revision++;}
-   return {result:args.method==='themeList'?(savedTheme?[savedTheme]:[]):savedTheme};
+   const topics=savedTheme?[...otherThemes,savedTheme]:otherThemes;
+   return {result:args.method==='themeList'?topics:args.method==='themeRead'?topics.find(row=>row.id===a.id):savedTheme};
  }
  default:return {items:[]};
  }
@@ -53,7 +55,25 @@ async function run(){
  await section('收藏');await wait(()=>el('.record-list-row')?.textContent.includes('记录的方法'));
  await section('主题');await click(()=>button('新建主题'));
  input(await wait(()=>el('[aria-label="主题标题"]')),'观察素材');await click(()=>button('保存主题'));
- await wait(()=>el('.sw-theme-list-item'));await section('全局搜索');
+ await wait(()=>savedTheme&&el('[aria-label="主题标题"]')?.value===savedTheme.title&&el('.sw-theme-actions .sw-danger')&&!el('.sw-theme-actions .sw-danger').disabled);
+ await click(()=>button('‹ 返回主题列表'));
+ const list=await wait(()=>el('.mw-themes .sw-list:not([hidden])'));
+ const chosen=[...list.querySelectorAll('button')].at(-3);
+ chosen.scrollIntoView({block:'center'});
+ const scroll=el('.app > main'),listTop=scroll.scrollTop;
+ if(listTop<=0)throw Error('Long themes list did not scroll');
+ chosen.click();
+ await wait(()=>el('[aria-label="主题标题"]')?.value===chosen.querySelector('strong').textContent);
+ if(list.getClientRects().length||scroll.scrollTop!==0||el('.mw-themes .sw-detail').getBoundingClientRect().top>=innerHeight)throw Error('Theme detail did not open at the top');
+ const confirm=window.confirm;window.confirm=()=>false;
+ input(el('[aria-label="主题标题"]'),'尚未保存');window.__shiwenBack();
+ await wait(()=>el('[aria-label="主题标题"]')?.value==='尚未保存');
+ await new Promise(resolve=>setTimeout(resolve,40));
+ if(!list.hidden)throw Error('Back discarded unconfirmed edits');
+ window.confirm=()=>true;window.__shiwenBack();
+ await wait(()=>!list.hidden&&scroll.scrollTop===listTop).catch(()=>{throw Error('List restoration: hidden='+list.hidden+', actual='+scroll.scrollTop+', expected='+listTop+', limit='+(scroll.scrollHeight-scroll.clientHeight));});
+ window.confirm=confirm;
+ await section('全局搜索');
  input(await wait(()=>el('.mw-search input')),'日记');await click(()=>el('.sw-search-result'));
  await wait(()=>el('.mw-source mark')?.textContent.includes('日记'));
  await click(()=>button('加入主题',el('.mw-source')));

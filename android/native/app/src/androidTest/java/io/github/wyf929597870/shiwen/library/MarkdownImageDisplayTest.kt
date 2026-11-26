@@ -49,18 +49,25 @@ class MarkdownImageDisplayTest {
                 error("WEBVIEW_CONDITION_TIMEOUT: $expression; details=" + evaluate("JSON.stringify([...document.querySelectorAll('.markdown-view')].map(x=>({images:[...x.querySelectorAll('img')].map(i=>({src:i.src.slice(0,80),complete:i.complete,width:i.naturalWidth})),end:x.innerHTML.slice(-600)})))"))
             }
             stage("navigation")
-            waitUntil("Boolean(document.querySelector('nav button:nth-child(2)') && !document.querySelector('.library-trigger')?.disabled)")
-            evaluate("document.querySelector('nav button:nth-child(2)').click(); true")
+            val libraryButton="[...document.querySelectorAll('nav button')].find(b=>['资料库','Library'].includes(b.textContent.trim()))"
+            waitUntil("Boolean($libraryButton && !document.querySelector('.library-trigger')?.disabled)")
+            evaluate("$libraryButton.click(); true")
+            val collections="[...document.querySelectorAll('.mw-sections button')].find(b=>['收藏','Collections'].includes(b.textContent.trim()))"
+            waitUntil("Boolean($collections)")
+            evaluate("$collections.click(); true")
             waitUntil("Boolean([...document.querySelectorAll('.record-list-row')].find(x=>x.textContent.includes('Image bridge fixture 2')))")
             evaluate("[...document.querySelectorAll('.record-list-row')].find(x=>x.textContent.includes('Image bridge fixture 2')).click(); true")
             stage("image")
-            waitUntil("Boolean(document.querySelector('.record-detail > .markdown-view img'))")
-            evaluate("document.querySelector('.record-detail > .markdown-view img').scrollIntoView(); true")
-            waitUntil("Boolean(document.querySelector('.record-detail > .markdown-view img')?.naturalWidth)")
-            evaluate("document.querySelector('.record-versions > summary').click(); true")
-            waitUntil("Boolean(document.querySelector('.version-row'))")
-            waitUntil("Boolean(document.querySelector('.record-detail > .markdown-view img')?.naturalWidth)")
-            assertEquals("true", evaluate("Boolean(document.querySelector('.record-detail > .markdown-view img')?.src.startsWith('data:image/png;base64,'))"))
+            waitUntil("Boolean(document.querySelector('.record-reading .markdown-view img'))")
+            evaluate("document.querySelector('.record-reading .markdown-view img').scrollIntoView(); true")
+            waitUntil("Boolean(document.querySelector('.record-reading .markdown-view img')?.naturalWidth)")
+            check(repo.versions(row.id).any {it.markdown==markdown})
+            val files="[...document.querySelectorAll('.record-reading details summary')].find(b=>/原件与附件|Original files/.test(b.textContent))"
+            waitUntil("Boolean($files)")
+            evaluate("$files.click(); true")
+            waitUntil("Boolean(document.querySelector('details[open] .attachment-row'))")
+            waitUntil("Boolean(document.querySelector('.record-reading .markdown-view img')?.naturalWidth)")
+            assertEquals("true", evaluate("Boolean(document.querySelector('.record-reading .markdown-view img')?.src.startsWith('data:image/png;base64,'))"))
         }
     }
 }

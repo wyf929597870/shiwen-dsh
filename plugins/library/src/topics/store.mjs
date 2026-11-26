@@ -45,10 +45,43 @@ export function createTopicStore({db,get,libraryId}){
  return {
   themeContext:()=>({libraryId:libraryId()}),
   themeList:()=>db.prepare('SELECT * FROM themes ORDER BY updated DESC,id DESC').all().map(summary),
+  themeListPage:({offset=0})=>{
+   const limit=20;
+   const rows=db.prepare('SELECT * FROM themes ORDER BY updated DESC,id DESC LIMIT ? OFFSET ?').all(limit+1,offset);
+   return {libraryId:libraryId(),items:rows.slice(0,limit).map(summary),nextOffset:rows.length>limit?offset+limit:null};
+  },
   themeRead:({id}={})=>read(id),
   themeSave:(args={})=>db.transaction(()=>{const title=text(args.title,200,'标题',true).trim(),description=text(args.summary??'',10000,'摘要');if(args.id===undefined){if(db.prepare('SELECT COUNT(*) n FROM themes').get().n>=10000)throw Error('主题数量已达上限');const id=randomUUID(),at=now();db.prepare('INSERT INTO themes VALUES(?,?,?,?,?,?)').run(id,title,description,1,at,at);return summary(theme(id));}checked(args.id,args.revision);db.prepare('UPDATE themes SET title=?,summary=?,revision=revision+1,updated=? WHERE id=?').run(title,description,now(),args.id);return summary(theme(args.id));})(),
   themeDelete:({id,revision}={})=>db.transaction(()=>{checked(id,revision);db.prepare('DELETE FROM themes WHERE id=?').run(id);return {id};})(),
-  themeMemberAdd:(args={})=>db.transaction(()=>{checked(args.themeId,args.revision);if(db.prepare('SELECT COUNT(*) n FROM theme_members WHERE theme_id=?').get(args.themeId).n>=10000)throw Error('主题成员数量已达上限');ident(args.sourceRecordId);const row=get(args.sourceRecordId);if(!row||row.deleted||row.kind==='ai_annotation')throw Error('来源不存在');if(row.revision!==rev(args.sourceRevision))throw Error('来源已更新，请重新读取');if(!fields.includes(args.field))throw Error('来源字段无效');const all=texts(row,args.field),index=args.field==='excerpt'?args.excerptIndex:0;if(!Number.isSafeInteger(index)||index<0||index>=all.length||(args.field!=='excerpt'&&args.excerptIndex!=null))throw Error('来源摘录无效');const value=all[index],whole=args.quote===undefined&&args.start===undefined&&args.end===undefined;let start=0,end=value.length,quote=value;if(!whole){quote=text(args.quote,1000000,'片段',true);start=args.start;end=args.end;if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<=start||end>value.length||value.slice(start,end)!==quote)throw Error('片段与当前原文不一致，请重新选择');}text(quote,1000000,'片段');const id=randomUUID();db.prepare('INSERT INTO theme_members VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id,args.themeId,row.id,libraryId(),row.title,row.kind,args.field,args.field==='excerpt'?index:null,whole?1:0,quote,value.slice(Math.max(0,start-64),start),value.slice(end,end+64),start,end,row.revision,now(),0);bump(args.themeId);return read(args.themeId);})(),
+  themeMemberAdd:(args={}, {receiptOnly=false}={})=>db.transaction(()=>{
+   checked(args.themeId,args.revision);
+   if(db.prepare('SELECT COUNT(*) n FROM theme_members WHERE theme_id=?').get(args.themeId).n>=10000)throw Error('主题成员数量已达上限');
+   const row=get(ident(args.sourceRecordId));
+   if(!row||row.deleted||row.kind==='ai_annotation')throw Error('来源不存在');
+   if(row.revision!==rev(args.sourceRevision))throw Error('来源已更新，请重新读取');
+   if(!fields.includes(args.field))throw Error('来源字段无效');
+   const all=texts(row,args.field),index=args.field==='excerpt'?args.excerptIndex:0;
+   if(!Number.isSafeInteger(index)||index<0||index>=all.length||(args.field!=='excerpt'&&args.excerptIndex!=null))throw Error('来源摘录无效');
+   const value=all[index],whole=args.quote===undefined&&args.start===undefined&&args.end===undefined;
+   let start=0,end=value.length,quote=value;
+   if(!whole){
+    quote=text(args.quote,1000000,'片段',true);
+    if(args.start===undefined&&args.end===undefined){
+     start=value.indexOf(quote);
+     if(start!==-1&&value.indexOf(quote,start+1)!==-1)throw Error('片段出现多次，请指定原文起止位置');
+     end=start+quote.length;
+    }else{
+     start=args.start;
+     end=args.end;
+    }
+    if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<=start||end>value.length||value.slice(start,end)!==quote)throw Error('片段与当前原文不一致，请重新选择');
+   }
+   text(quote,1000000,'片段');
+   const id=randomUUID();
+   db.prepare('INSERT INTO theme_members VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id,args.themeId,row.id,libraryId(),row.title,row.kind,args.field,args.field==='excerpt'?index:null,whole?1:0,quote,value.slice(Math.max(0,start-64),start),value.slice(end,end+64),start,end,row.revision,now(),0);
+   bump(args.themeId);
+   return receiptOnly?{id:args.themeId,revision:args.revision+1,memberId:id}:read(args.themeId);
+  })(),
   themeMemberRemove:({themeId,revision,memberId}={})=>db.transaction(()=>{checked(themeId,revision);ident(memberId);if(!db.prepare('DELETE FROM theme_members WHERE id=? AND theme_id=?').run(memberId,themeId).changes)throw Error('主题成员不存在');bump(themeId);return read(themeId);})(),
   recordThemes:({id}={})=>{ident(id);const row=get(id);if(!row||row.deleted)return [];return db.prepare('SELECT DISTINCT t.* FROM themes t JOIN theme_members m ON m.theme_id=t.id WHERE m.source_blocked=0 AND m.source_library_id=? AND m.source_record_id=? ORDER BY t.updated DESC,t.id DESC').all(libraryId(),id).map(summary);}
  };

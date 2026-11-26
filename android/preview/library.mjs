@@ -1,19 +1,39 @@
+import {previewExploration} from './exploration.mjs';
 import {library,records as initial} from './fixtures.mjs';
 export const isNative=true;
 export const leaveApp=async()=>{};
 let records=[...initial],appearance={theme:'light',language:'zh-CN'},draft=null,previewConflictRefreshed=false;
 const scenario=new URLSearchParams(location.search).get('scenario')||'normal';
 let conversations=[{id:'preview-chat',title:'新会话',updatedAt:'2026-11-01T08:00:00Z'}];
+const recData=new Map();
+const phoneModels=['Flash','Pro'].map((model,i)=>({name:'Preview',model,revision:'preview-'+i,baseUrl:'https://example.invalid/v1/',configured:true}));
 export async function bootstrap(){return {...library};}
 export async function call(method,args={}){
   if(scenario==='error'&&['recordList','review'].includes(method))throw Error('模拟读取失败');
   switch(method){
+    case 'explorationCall':return {result:previewExploration(args.method,args.args??{})};
     case 'libraryList':return {items:[library],activeId:library.libraryId};
     case 'recordDraftRead':return {draft,nextGeneration:0};
     case 'recordDraftSave':draft={requestId:args.requestId,localGeneration:args.localGeneration,content:args.content};return {};
     case 'recordDraftAcknowledge':draft=null;return {cleared:true};
     case 'readDraft':return {draft:null};
-    case 'modelConfig':return scenario==='chat'?{configured:true,revision:1}:{configured:false};
+    case 'modelConfig':return scenario==='chat'?{...phoneModels[0],models:phoneModels}:{configured:false,models:[]};
+    case 'phoneRecData':return {value:structuredClone(recData.get(args.key)??null)};
+    case 'phoneRecCommit':
+      if((recData.get('state')?.version??0)!==args.expected)throw Error('预览数据已变化');
+      recData.set('state',structuredClone(args.state));if(args.card)recData.set('card-'+args.card.cardId,structuredClone(args.card));
+      if(args.receipt)recData.set(args.receipt.key,structuredClone(args.receipt));return {saved:true};
+    case 'phoneRecSources':return {rows:args.after?[]:records.slice(0,12).map(r=>({...r,updated:new Date().toISOString()}))};
+    case 'phoneRecAnalyze':{
+      const p=JSON.parse(args.input),hit=p.passages.find(x=>x.record===p.seed);
+      return {text:JSON.stringify(hit?[{scene:'writing',type:'writing',question:hit.title+'里有哪些可写的细节？',reason:'示例原文提供了一个写作切入点。',refs:[hit.n]}]:[])};
+    }
+    case 'defaultPhoneModel':{const i=phoneModels.findIndex(x=>x.revision===args.revision);if(i>=0)phoneModels.unshift(...phoneModels.splice(i,1));return {...phoneModels[0],models:phoneModels};}
+    case 'agentSelectModel':{
+      const model=phoneModels.find(item=>item.revision===args.revision);
+      conversations=conversations.map(c=>c.id===args.conversationId?{...c,model:model.model,modelRevision:model.revision}:c);
+      return {items:conversations,activeId:args.conversationId};
+    }
     case 'settingsGet':return appearance;
     case 'settingsUpdate':appearance={...appearance,...args};return appearance;
     case 'nodeList':return scenario==='service'?{items:[{id:'preview-node',name:'示例电脑',baseUrl:'https://example.local:3081/',connectionState:'online',authenticated:true,profileSyncStatus:'synced',profileMemoryCount:3,fingerprint:'preview',endpoints:['https://example.local:3081/']}],activeId:'preview-node'}:{items:[],activeId:null};

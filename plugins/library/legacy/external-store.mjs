@@ -23,7 +23,7 @@ export function imageType(bytes){
  if(bytes.length>=12&&bytes.subarray(0,4).toString('ascii')==='RIFF'&&bytes.subarray(8,12).toString('ascii')==='WEBP')return 'webp';
  throw Error('不支持的图片格式');
 }
-export class AccessError extends Error{constructor(message,status=403){super(message);this.status=status;}}
+export class AccessError extends Error{constructor(message,status=403){super(message);this.status=status;if(status===403)this.code="permission_denied";if(status===401)this.code="unauthorized";}}
 export const recordSummary=row=>({id:row.id,revision:row.revision,title:row.title,kind:row.kind,origin:row.origin,day:row.importInfo?row.importInfo.day:row.dateInfo?row.dateInfo.day:dateKey(row.created),url:row.url,annotation:row.annotation,stage:row.stage,sourceIds:row.sourceIds,...readingNoteInfo(row)});
 const recordSummaryWithAnchor=row=>({...recordSummary(row),...(row.annotationOf?{annotationOf:row.annotationOf}:{})});
 export function externalStore(db,api){
@@ -47,7 +47,12 @@ export function externalStore(db,api){
    const identity=active(client.id),definition=definitions[name];
    if(!definition)throw Error('未知工具');
    if(definition.permission!=='upload'&&!identity.scopes.includes(definition.permission))throw new AccessError('当前凭据没有 '+definition.permission+' 权限');
+   if(definition.requiresRead&&!identity.scopes.includes('read'))throw new AccessError('当前凭据没有 read 权限');
    const args=parseCall(name,raw);
+   if(definition.exploration)return api.exploration.call(name,args,identity.id,identity.scopes);
+   if((args.suggestions?.length||args.requireSuggestions)&&!identity.scopes.includes('read'))throw new AccessError('随附建议需要 read 权限');
+   if((name==='shiwen_save'||name==='shiwen_collect')&&args.expectedLibraryId!==undefined&&args.expectedLibraryId!==api.themeContext().libraryId)throw new AccessError('资料库已切换',409);
+   if(definition.assist)return api.assist.call(name,args,identity.id,identity.scopes);
    if(definition.permission==='upload')return db.transaction(()=>{
     if(name==='shiwen_image_begin'){
      if(!identity.scopes.includes(args.purpose))throw new AccessError('当前凭据没有 '+args.purpose+' 权限');
@@ -76,6 +81,7 @@ export function externalStore(db,api){
     return {uploadId:upload.id,attachmentId:upload.id,partBytes:PART_BYTES,missingParts:missing,ready};
    })();
    const read=()=>{
+    if(name==='shiwen_theme_list')return api.themeListPage(args);
     if(name==='shiwen_search')return api.searchRecords({...args,limit:20});
     if(name==='shiwen_original_version')return api.originalVersionInfo(args);
     if(name==='shiwen_annotation_list')return api.annotationList(args).map(recordSummaryWithAnchor);
@@ -90,7 +96,7 @@ export function externalStore(db,api){
     }
     if(args.revision!==undefined&&args.revision!==row.revision)throw new AccessError('内容已更新，请重新读取',409);
     const body=markdownSource(row.doc),offset=args.offset??0;
-    return {...recordSummaryWithAnchor(row),format:'markdown',body:body.slice(offset,offset+6000),totalLength:body.length,nextOffset:body.length>offset+6000?offset+6000:null,attachments:api.attachments({record:row.id}),contentOrigins:Object.entries(readDoc(row.doc,row.origin).groups).filter(([,text])=>text.trim()).map(([origin])=>origin),externalSources:row.externalSources};
+    return {...recordSummaryWithAnchor(row),libraryId:api.themeContext().libraryId,format:'markdown',body:body.slice(offset,offset+6000),totalLength:body.length,nextOffset:body.length>offset+6000?offset+6000:null,attachments:api.attachments({record:row.id}),contentOrigins:Object.entries(readDoc(row.doc,row.origin).groups).filter(([,text])=>text.trim()).map(([origin])=>origin),externalSources:row.externalSources};
    };
    if(definition.permission==='read'){const result=read();db.prepare('UPDATE external_clients SET last_used=? WHERE id=?').run(now(),client.id);return result;}
    return db.transaction(()=>{
@@ -117,7 +123,14 @@ export function externalStore(db,api){
      return {item,bytes};
     });
     const attach=record=>{for(const {item,bytes} of staged){db.prepare('INSERT INTO attachments VALUES(?,?,?,?,?)').run(item.id,record.id,item.name,bytes.toString('base64'),now());db.prepare('DELETE FROM external_image_parts WHERE upload_id=?').run(item.id);db.prepare('DELETE FROM external_image_uploads WHERE id=?').run(item.id);}};
-    if(name==='shiwen_annotation_create'){const row=api.annotationCreate({...fields,requestId:operationId},{beforeSync:attach});result={saved:true,...recordSummaryWithAnchor(row)};
+    const themeMutation=name==='shiwen_theme_create'||name==='shiwen_theme_member_add';
+    if(themeMutation){
+     const {libraryId}=api.themeContext();
+     if(fields.expectedLibraryId!==undefined&&fields.expectedLibraryId!==libraryId)throw new AccessError('资料库已切换，请重新读取',409);
+     result=name==='shiwen_theme_create'
+      ?{saved:true,libraryId,...api.themeSave(fields)}
+      :{added:true,libraryId,...api.themeMemberAdd(fields,{receiptOnly:true})};
+    }else if(name==='shiwen_annotation_create'){const row=api.annotationCreate({...fields,requestId:operationId},{beforeSync:attach});result={saved:true,...recordSummaryWithAnchor(row)};
     }else if(name==='shiwen_annotation_update'){const row=api.annotationUpdate({...fields,requestId:operationId},{beforeSync:attach});result={updated:true,...recordSummaryWithAnchor(row)};
     }else if(name==='shiwen_annotation_delete'){const row=api.annotationDelete({...fields,requestId:operationId});result={deleted:true,...recordSummaryWithAnchor(row)};
     }else if(name==='shiwen_annotation_restore'){const row=api.annotationRestore({...fields,requestId:operationId});result={restored:true,...recordSummaryWithAnchor(row)};
@@ -127,10 +140,15 @@ export function externalStore(db,api){
      const day=content.day??null;if(day!==null&&validDay(day)!==day)throw Error('请输入有效内容日期');
      const row=api.save({...content,reason:'外部客户端保存'},{inTransaction:true,archive:true,beforeSync:record=>{attach(record);if(content.kind!=='journal')db.prepare('INSERT INTO record_dates(record,day,basis) VALUES(?,?,?)').run(record.id,day,'外部客户端提供的内容日期');}});
      result={saved:true,...recordSummary(api.get(row.id))};
+     if(fields.suggestions||fields.requireSuggestions){
+      result.items=(fields.suggestions??[]).map(item=>api.exploration.putSuggestion(client.id,{...item,sources:item.sources??[{recordId:row.id,revision:row.revision}]}));
+      if(fields.requireSuggestions&&!result.items.some(i=>i.status==='created'||i.status==='existing'))
+       throw Object.assign(Error('至少需要一条来源有效的建议'),{code:'suggestions_required',status:400});
+     }
     }else if(name==='shiwen_update')result={updated:true,...recordSummary(api.updateRecord(fields,{beforeSync:attach}))};
     else if(name==='shiwen_delete')result={deleted:true,...api.remove(fields)};
     else result={restored:true,...api.restoreRemoved(fields)};
-    db.prepare('INSERT INTO external_sources VALUES(?,?,?,?,?,?,?,?,?)').run(randomUUID(),result.id,client.id,identity.name,name,source?.sessionId??'',source?.messageId??'',source?.file??'',now());
+    if(!themeMutation)db.prepare('INSERT INTO external_sources VALUES(?,?,?,?,?,?,?,?,?)').run(randomUUID(),result.id,client.id,identity.name,name,source?.sessionId??'',source?.messageId??'',source?.file??'',now());
     const response={...result,client:{id:client.id,name:identity.name},requestId};
     db.prepare('INSERT INTO external_requests VALUES(?,?,?,?,?)').run(client.id,requestId,fingerprint,JSON.stringify(response),now());
     db.prepare('UPDATE external_clients SET last_used=? WHERE id=?').run(now(),client.id);

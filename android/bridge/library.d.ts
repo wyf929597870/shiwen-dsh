@@ -5,7 +5,8 @@ export type Receipt = {status:'unknown'} | {status:'applied'; recordId:string};
 export interface AgentConversation { id:string; title:string; model:string; modelRevision?:string; archived:boolean; readOnly?:boolean; running?:boolean; updatedAt:string }
 export interface AgentConversationSnapshot { items:AgentConversation[]; activeId:string|null }
 export interface AgentTask { id:string; conversationId:string; input:string; output:string; status:'admitted'|'running'|'succeeded'|'failed'|'interrupted'|'cancelled'; error?:string; model:string; updatedAt:string; recordId?:string; contextTurns:number; omittedTurns:number }
-export type ModelConfig = {configured:false} | {configured:true; name:string; baseUrl:string; model:string; revision:string};
+export type PhoneModel = {configured:true; name:string; baseUrl:string; model:string; revision:string};
+export type ModelConfig = ({configured:false}|PhoneModel) & {models:PhoneModel[]};
 export interface Methods {
   appInfo: {args:Record<string,never>; result:{versionName:string;versionCode:number}};
   libraryList: {args:Record<string,never>; result:LibraryRegistry};
@@ -22,6 +23,7 @@ export interface Methods {
   reviewPreview: {args:{period:'1'|'7'|'14'|'30'|'month';month?:string};result:{personalOriginalCharacters:number;observedEdits:{added:number;removed:number;net:number};start:string;end:string;records:Array<{id:string;title:string;kind:MobileRecordKind;contentDay:string;characters:number;goalMarkdown?:string}>;daily:Array<{day:string;personalOriginalCharacters:number;personalOriginalRecords:number}>}};
   workspaceSearch: {args:{libraryId:string;query:string;related?:boolean;offset?:number;limit?:number};result:{libraryScope:string;total:number;items:object[];nextOffset:number|null}};
   workspaceThemes: {args:{libraryId:string;method:string;args:Record<string,unknown>};result:{result:unknown}};
+  explorationCall: {args:{libraryId:string;method:string;args:Record<string,unknown>};result:{result:unknown}};
   workspaceRemote: {args:{libraryId:string;method:string;args:Record<string,unknown>};result:{result:unknown}};
   recordList: {args:{libraryId:string; query?:string; section?:'library'|'collections'; kind?:MobileRecordKind; excludeKind?:MobileRecordKind; cursor?:string|null; limit?:number; deleted?:boolean}; result:RecordPage};
   recordReferenceTitles: {args:{libraryId:string;ids:string[]};result:{items:{id:string;title:string;deleted:boolean}[]}};
@@ -55,8 +57,17 @@ export interface Methods {
   storageInfo: {args:Record<string,never>;result:StorageInfo};
   storageClearTemporary: {args:Record<string,never>;result:{removedBytes:number;removedFiles:number}};
   libraryRename: {args:{name:string};result:{libraryId:string;name:string}};
+  phoneRecSnapshot: {args:{serverId:string;epoch:string;snapshot?:Record<string,unknown>};result:{value:unknown}};
+  phoneRecData: {args:{key:string};result:{value:unknown}};
+  phoneRecCommit: {args:{expected:number;state:Record<string,unknown>;receipt?:Record<string,unknown>;card?:Record<string,unknown>};result:{saved:true}};
+  phoneRecSources: {args:{after:string};result:{rows:Record<string,unknown>[]}};
+  phoneRecAction: {args:{method:string;args:Record<string,unknown>;quotes:Record<string,unknown>[]};result:Record<string,unknown>};
+  phoneRecAnalyze: {args:{revision:number;instruction:string;input:string};result:{text:string;model:string}};
+  reviewFollowups: {args:{instruction:string;input:string}; result:{text:string;model:string}};
   modelConfig: {args:Record<string,never>; result:ModelConfig};
-  configureModel: {args:Record<string,never>; result:{closed:true}};
+  defaultPhoneModel: {args:{revision:string}; result:ModelConfig};
+  agentSelectModel: {args:{conversationId:string;revision:string}; result:AgentConversationSnapshot};
+  configureModel: {args:{revision?:string;add?:boolean}; result:{closed:true}};
   agentConversations: {args:Record<string,never>; result:AgentConversationSnapshot};
   agentCreateConversation: {args:{id:string}; result:AgentConversationSnapshot};
   agentSelectConversation: {args:{id:string}; result:AgentConversationSnapshot};
@@ -152,7 +163,7 @@ export interface RecordVersion {versionId:string;revision:number;title:string;ma
 export interface RecordVersionPage {items:RecordVersion[];nextCursor?:string|null}
 export interface PendingRecordMutation {action:'create'|'update'|'delete'|'restore';requestId:string;localGeneration:number;id?:string;expectedRevision?:number;record?:MobileRecordInput;patch?:Partial<MobileRecordInput>;fingerprint?:string}
 export interface RecordEditorDraft {requestId:string;localGeneration:number;content:Record<string,unknown>;pendingMutation?:PendingRecordMutation|null}
-export interface LibraryDescriptor {libraryId:string;name:string;role:LibraryContext['role'];integrity:NonNullable<LibraryContext['integrity']>;identity?:{serverId:string|null;epoch:string|null;revision:number|null};connectionState?:string;pendingCount?:number|null;conflictCount?:number|null;lastSyncedAt?:string|null}
+export interface LibraryDescriptor {libraryId:string;serverId?:string|null;epoch?:string|null;name:string;role:LibraryContext['role'];integrity:NonNullable<LibraryContext['integrity']>;identity?:{serverId:string|null;epoch:string|null;revision:number|null};connectionState?:string;pendingCount?:number|null;conflictCount?:number|null;lastSyncedAt?:string|null}
 export interface LibraryRegistry {items:LibraryDescriptor[];activeId:string|null}
 export interface ReviewTotals {added:number;removed:number;net:number;personalRecords:number;collected:number;web:number;ai:number;articles:number;finalized:number;reference:number;historicalChars:number;historicalRecords:number}
 export interface ReviewDay {day:string;added:number;removed:number;net:number;historical:number;collected:number}

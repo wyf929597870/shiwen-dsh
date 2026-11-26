@@ -166,3 +166,7 @@ html[data-theme=dark] .chat-execution .agent-composer .composer-input-row textar
 /* Explicit foregrounds keep typed text visible while the theme is loading too. */
 .chat-execution .agent-composer .composer-input-row textarea{color:#20282d;caret-color:#20282d}
 html[data-theme=dark] .chat-execution .agent-composer .composer-input-row textarea{color:#eef2ef;caret-color:#eef2ef}
+
+.phone-model-picker { margin-bottom: 5px; }
+.phone-model-picker label { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; }
+.phone-model-picker select { width:auto; max-width:70%; min-width:0; min-height:32px; padding:3px 8px; text-overflow:ellipsis; }

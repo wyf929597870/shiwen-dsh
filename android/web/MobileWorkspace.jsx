@@ -82,11 +82,11 @@ export function WorkspaceSearch({workspace}){
     {query.trim()&&<SearchResults search={search} t={t} onOpen={item=>workspace.source(item.recordId,item.match)}/>}
   </section>;
 }
-export function WorkspaceThemes({workspace}){
+export function WorkspaceThemes({workspace,onNavigation,detailOpen}){
   const {t}=useI18n();
-  return <section className="mw-themes">{workspace.role!=='standalone'&&<div className="mw-modes">
+  return <section className="mw-themes">{!detailOpen&&workspace.role!=='standalone'&&<div className="mw-modes">
     <button aria-pressed={!workspace.localTopics} onClick={()=>workspace.chooseLocalTopics(false)}>{t('电脑主题','Computer topics')}</button>
     <button aria-pressed={workspace.localTopics} onClick={()=>workspace.chooseLocalTopics(true)}>{t('手机主题','Phone topics')}</button></div>}
-    <small>{workspace.localTopics?t('保存在当前手机资料库','Saved in this phone library'):t('与已绑定电脑共用主题，需要连接电脑。','Shared with this library’s computer while connected.')}</small>
-    <ThemesPage key={workspace.localTopics?'phone':'computer'} draftNamespace={workspace.localTopics?'phone':'computer'} rpc={workspace.rpc} t={t} onOpenSource={(id,opts)=>workspace.source(id,opts.match)}/></section>;
+    {!detailOpen&&<small>{workspace.localTopics?t('保存在当前手机资料库','Saved in this phone library'):t('与已绑定电脑共用主题，需要连接电脑。','Shared with this library’s computer while connected.')}</small>}
+    <ThemesPage onNavigation={onNavigation} key={workspace.localTopics?'phone':'computer'} draftNamespace={workspace.localTopics?'phone':'computer'} rpc={workspace.rpc} t={t} onOpenSource={(id,opts)=>workspace.source(id,opts.match)}/></section>;
 }

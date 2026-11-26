@@ -76,3 +76,6 @@ html[data-theme=light] .settings-page .local-profile label textarea{background:#
 .settings-page .library-replica-head{justify-content:flex-end;padding:0}
 .settings-page .library-identity-card{margin-top:10px}
 html[data-theme=light] .settings-page .server-settings .node-card{background:#fff}
+
+.phone-model-entry { display:grid; gap:6px; border-top:1px solid var(--line); padding:12px 0; overflow-wrap:anywhere; }
+.phone-model-entry p { margin:4px 0 0; }

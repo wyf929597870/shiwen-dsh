@@ -27,7 +27,7 @@ test('synced topics require matching local and server source text, with the serv
 test('phone workspace navigates collections and highlights, adds a passage to a topic and opens the generated outline in Writing',{skip:!process.env.SHIWEN_TEST_CHROME},async t=>{
   const dir=await mkdtemp(join(tmpdir(),'shiwen-mobile-workspace-'));t.after(()=>rm(dir,{recursive:true,force:true}));
   const entry=resolve('tests/support/mobile-workspace-browser.jsx');
-  await build({entryPoints:[entry],bundle:true,outfile:join(dir,'app.js'),nodePaths:[resolve('android/node_modules')],jsx:'automatic',plugins:[{
+  await build({entryPoints:[entry],bundle:true,loader:{'.webp':'file'},outfile:join(dir,'app.js'),nodePaths:[resolve('android/node_modules')],jsx:'automatic',plugins:[{
     name:'isolated-native-bridge',setup(b){b.onResolve({filter:/^\.\.\/bridge\/library\.mjs$/},()=>({path:entry}));}
   }]});
   await writeFile(join(dir,'index.html'),'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="app.css"><div id="root"></div><script src="app.js"></script>');

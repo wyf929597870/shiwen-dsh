@@ -60,6 +60,14 @@ export class MobileSyncAdapter {
   }
   async execute(action,request={},signal){
     signal?.throwIfAborted?.();
+    if(action.startsWith('exploration')){
+      this.context(request);
+      try{return this.library.exploration.sync.execute(action,request);}
+      catch(error){
+        if(/^(CURSOR_EXPIRED|SNAPSHOT_EXPIRED|EXPLORATION_[A-Z_]+|FINGERPRINT_MISMATCH|RESOLUTION_STALE|OPERATION_REUSED)$/.test(error.message))error.code=error.message;
+        throw error;
+      }
+    }
     if(actions.has(action)){
       const sync=this.syncStore();
       if(action!=='identity')this.context(request);
@@ -73,7 +81,7 @@ export class MobileSyncAdapter {
           if(canonicalJSON(operation)!==file.bytes.toString('utf8')||operation.operationId!==item.operationId||fingerprint(operation)!==item.requestFingerprint)fail('MANIFEST_MISMATCH');
           operations.push({inlineBody:operation});
         }
-        const result=action==='push'?sync.push({...request,operations}):sync.receipts(request),ctx=this.context(request);
+        const result=action==='push'?(this.library.exploration?.sync?this.library.exploration.sync.recordPush(request.deviceId,request.epoch,operations,()=>sync.push({...request,operations})):sync.push({...request,operations})):sync.receipts(request),ctx=this.context(request);
         for(const receipt of result.receipts??[]){
           if(receipt.currentRecord&&Buffer.byteLength(canonicalJSON(receipt.currentRecord))>limits.maxInlineBytes){receipt.currentRecordRef=this.publishPayload(ctx,receipt.currentRecord,{sourceAction:'pushConflictRecord',operationId:receipt.operationId});receipt.currentRecord=null;}
           if(receipt.currentVersion&&Buffer.byteLength(canonicalJSON(receipt.currentVersion))>limits.maxInlineBytes){receipt.currentVersionRef=this.publishPayload(ctx,receipt.currentVersion,{sourceAction:'pushConflictVersion',operationId:receipt.operationId});receipt.currentVersion=null;}

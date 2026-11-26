@@ -68,6 +68,15 @@ export SHIWEN_TOKEN_FILE="$HOME/.config/shiwen/workbuddy-token"
 
 每次新的写入用一个新的 `requestId`；网络超时后，使用同一个 ID 和完全相同的参数重试。同一凭据下重复请求返回原结果，不重复写入。不同操作或不同正文复用 ID 会被拒绝。成功响应含记录 ID、版本和登记的客户端名称。
 
+## 主题与原文片段
+
+在支持主题工具的版本中，MCP、CLI 和 HTTP 共用以下操作。
+
+- `shiwen_theme_list` 使用读取权限，按页返回主题 ID、标题、说明、当前版本和片段数。跟随 `nextOffset` 可继续读取。
+- `shiwen_theme_create` 使用新增权限，传入 `requestId`、`title` 和可选的 `summary`。从资料回顾发起时可以带上 `expectedLibraryId`。回执包含主题 ID 和版本。
+- `shiwen_theme_member_add` 使用读取和修改权限。先读原文，把 `shiwen_read` 返回的 `libraryId`、`id`、`revision` 分别作为 `expectedLibraryId`、`sourceRecordId`、`sourceRevision`，再传入主题的 `themeId`、`revision`、新的 `requestId` 和原文 `quote`。普通素材、日记和自由书写选 `field: "body"`，读书感想选 `"reflection"`，书摘选 `"excerpt"` 并传从 0 开始的 `excerptIndex`。
+- 同一句在字段中出现多次时，提供该字段内的 UTF-16 起止位置 `start`、`end`，右端不含。每次添加用上次回执的主题版本；超时原样重试。主题或原文版本冲突时，重新读取后再核对。保存后的片段可以在拾文「主题」页查看上下文。
+
 ## HTTP API
 
 读取数据目录的 `external-endpoint.json` 得到 `endpoint`。默认数据目录为 `${XDG_DATA_HOME:-~/.local/share}/shiwen-dsh`。不要硬编码端口。
@@ -128,3 +137,23 @@ CLI 可使用 `shiwen-bridge upload-image ./photo.png` 上传，命令输出附�
 `shiwen_read` 返回结构化 `readingNote`。更新省略章节、页码、摘录即保留；传入 excerpts 数组表示完整替换，空数组清空。不能同时提交 readingNote 和原始 annotation。旧备注无法识别时不能静默覆盖。只有摘录、没有感想也可以单独成条（`body` 留空），不必转存为参考资料。历史记录可能包含多段摘录与一段共用感想，不对其臆造逐条对应关系；删除这类记录会连同其所有划线一起删除。
 
 `shiwen_review` 保留原有 totals/daily 编辑统计，并增加 originals（现存个人原文字数）和 goals（definitions/daily/summary），与页面复用同一算法。查询某一天用 `{"period":"1","day":"2026-11-10"}`；近 7/14/30 天、自然月沿用原参数。日记与自由书写分开统计；读书笔记只计感想，已有笔记字数优先于当天打卡数字，不重复相加。旧打勾只统计完成天数，未知数值为 null，不推算分钟或字数；统计结果不返回日记正文。
+
+## 桌面推荐与原文分析
+
+桌面和 MCP 读取同一资料库。每日推荐使用 `shiwen_recommendation_list({view:"daily"})`，最多两张，优先当天新增或补过引文的卡。每周列表同时附上这两张卡的摘要 `daily`。`shiwen_recommendation_list({view:"today"})` 返回服务端本地当天增补的原卡；`view:"week"` 返回整周，并附当天可见卡数 `todayCount`。卡片的 `todayUpdate` 给出日期、类型（created 或 evidence）和当天新增且仍有效的引文 ID。同一卡片当天多次补充只计一张。本周列表按桌面顺序返回，前十项对应首页。列表、详情和反馈历史均可只读访问。自动推荐默认关闭，开启时 DSH 的默认模型可收到相关节选。手动入口也可以只做本地检索。
+
+1. 调用 `shiwen_recommendation_settings({})` 取得 `libraryId`、`revision`、`week`。有 read 和 update 的凭据可提交 `{expectedLibraryId,revision,requestId,enabled:true}` 启用推荐。
+2. 调用 `shiwen_recommendation_refresh({expectedLibraryId,requestId})`，再用同一凭据调用 `shiwen_assist_result({jobId})`，直到返回 ready 或 failed。优先收录有依据的模型推荐，少于七张时补入仍有效的历史卡或附有原文的「原文重读」卡。材料用尽时展示实际数量。同周后续一次合计最多增补两条。
+3. 调用 `shiwen_recommendation_list({view:"week"})` 和 `shiwen_recommendation_read({expectedLibraryId,cardId})`。从详情的 `quotes` 选取用户指定的原句。用 `shiwen_read({id:recordId,revision:sourceRevision})` 对照正文或对应的书摘。讨论带入所选原句、问题及出处。
+4. 在手动入口调用 `shiwen_assist_analyze({expectedLibraryId,callId,scene:"writing",mode:"analyze",question:""})`。另外两个场景是 `experience`、`reading`。可提供 `selection:{recordId,sourceRevision,text}`。使用 `mode:"search"` 只查候选；模型不可用时，分析也会返回候选和 modelError。轮询后从 `result.items` 选择一组分析。
+5. 对持久卡写入时传 `expectedLibraryId,cardId,cardRevision,requestId`；手动分析使用 `resultId,resultVersion` 替代卡 ID 和版本，同一凭据可在 30 分钟内使用。同一参数和请求号可安全重试。下一次独立写入应取新请求号和最新版本。
+
+| 用户操作 | 工具和回执 |
+| --- | --- |
+| 保存用户确认的决定 | `shiwen_assist_save_decision` 加 `body,day`，需要 read＋create。返回 recordId、revision、day、cardRevision。 |
+| 收录、回看主题 | `shiwen_assist_add_to_theme` 加 `quoteIds,themeId,themeRevision`，需要 read＋update；新主题改传 `newThemeTitle`，另需 create。逐句返回 added、already_present 或 source_changed。按卡详情的 themeId、memberId 从 `shiwen_theme_read` 分页回读。 |
+| 起草和续写 | `shiwen_assist_create_draft` 加 `title,quoteIds,mode:"first"`，需要 read＋create。返回 created 或 existing 和 articleId。续写用 `shiwen_read` 读已有文章；明确要新稿才传 `mode:"another"`。 |
+| 稍后看 | `shiwen_recommendation_feedback` 传 action 为 save_later 或 remove_later，返回 savedForLater 和 cardRevision。按 view=later 跨周查询。 |
+| 略过、纠错、撤销 | 同一反馈工具传 skip、reject_relation 或 undo。纠错指定 relationId 和原关系完整 quoteIds，可附 reason。调用 `shiwen_recommendation_feedback_list` 找到 feedbackId，再用当前卡版本撤销该事件。反馈写入需 read＋update。 |
+
+冲突返回 `revision_conflict` 和当前版本。切库返回 `library_changed`，重新获取资料库上下文；短期结果过期返回 `result_expired`，需要重新分析。先修正权限再重试 `permission_denied`；撤销的凭据需重新授权。仅在重新确认有效来源后补写 source_changed 的条目。分页继续传上次的 nextCursor。

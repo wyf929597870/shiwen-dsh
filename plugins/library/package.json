@@ -1,4 +1,5 @@
 {
+  "browser": {"./src/assist/hash-node.mjs":"./src/assist/hash-browser.mjs"},
   "name": "@shiwen/dsh-library",
   "version": "0.1.0",
   "private": true,

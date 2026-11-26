@@ -11,6 +11,7 @@ import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.time.LocalDate
 import java.util.UUID
 import kotlin.system.measureNanoTime
 
@@ -25,14 +26,15 @@ class LibraryScaleTest {
         val repo = manager.create("Synthetic scale fixture")
         try {
             val text = "完整历史资料无需依赖服务器。".repeat(20)
+            val firstDay = LocalDate.of(1990, 1, 1)
             val prototype = repo.create(UUID.randomUUID().toString(), JSONObject().put("title", "历史素材 00000")
                 .put("kind", "journal").put("markdown", text).put("origin", "personal").put("processing", "original")
-                .put("contentDay", "2020-03-01"), 1)
+                .put("contentDay", firstDay.toString()), 1)
             val version = repo.versions(prototype.id).single()
             repo.db.runInTransaction {
                 for (i in 1 until 10_000) {
                     val id = UUID(0, i.toLong()).toString(); val versionId = UUID(1, i.toLong()).toString()
-                    val record = prototype.copy(id = id, title = "历史素材 ${i.toString().padStart(5, '0')}", versionId = versionId,
+                    val record = prototype.copy(id = id, contentDay = firstDay.plusDays(i.toLong()).toString(), title = "历史素材 ${i.toString().padStart(5, '0')}", versionId = versionId,
                         changeId = UUID(2, i.toLong()).toString())
                     repo.dao.insertRecord(record)
                     repo.dao.putHead(LibraryHead(id, 1, versionId, record.changeId, false))

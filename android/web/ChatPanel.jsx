@@ -1,3 +1,5 @@
+import {DiscussionTransfer} from '../../plugins/workbench/src/DiscussionTransfer.jsx';
+import {PhoneIcon} from './PhoneIcon.jsx';
 import {MessageDialog} from './MessageDialog.jsx';
 import './chat-translations.mjs';
 import './chat-redesign.css';
@@ -41,17 +43,17 @@ export function ChatPanel(props) {
   return <div className="chat-execution">
     <details className="chat-execution-bar chat-mode-menu">
       <summary>{mode==='local'?t('手机助手'):t('服务器助手')} ▾</summary><div className="chat-mode-switch" role="group" aria-label={t('助手运行位置')}>
-        <button type="button" aria-pressed={mode==='local'} disabled={busy} onClick={()=>setMode('local')}>{t('手机助手')}</button>
-        <button type="button" aria-pressed={mode==='remote'} disabled={busy} onClick={()=>setMode('remote')}>{t('服务器助手')}</button>
+        <button type="button" aria-pressed={mode==='local'} disabled={busy} onClick={e=>{setMode('local');e.currentTarget.closest('details').open=false;}}>{t('手机助手')}</button>
+        <button type="button" aria-pressed={mode==='remote'} disabled={busy} onClick={e=>{setMode('remote');if(selected||!nodes.length)e.currentTarget.closest('details').open=false;}}>{t('服务器助手')}</button>
       </div>
-      {mode==='remote'&&<select aria-label={t('会话服务器')} disabled={busy} value={selected} onChange={event=>setSelected(event.target.value)}><option value="">{t('选择服务器')}</option>{nodes.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select>}
+      {mode==='remote'&&<select aria-label={t('会话服务器')} disabled={busy} value={selected} onChange={event=>{setSelected(event.target.value);event.currentTarget.closest('details').open=false;}}><option value="">{t('选择服务器')}</option>{nodes.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select>}
     </details>
     {mode==='remote'?<>
       {node?<RemoteChatPanel key={`${node.id}:${node.configRevision}`} node={node} onSending={sending} onDirect={props.onDirect}/>:<p>{t('请先在设置中添加并连接服务器。')}<button className="text" onClick={props.onOpenSettings}>{t('打开设置')}</button></p>}</>:<LocalChatPanel {...props} onSending={sending}/>}
   </div>;
 }
 
-function LocalChatPanel({ready, config, onRead, onDirect, onSending, onOpenSettings, onOpenModel}) {
+function LocalChatPanel({ready, libraryId, config, onRead, onDirect, onSending, onOpenSettings, onOpenModel}) {
   useI18n();
   const [conversations, setConversations] = useState([]), [activeId, setActiveId] = useState(null);
   const [draft, setDraft] = useState(emptyDraft), [tasks, setTasks] = useState([]), [nextOffset, setNextOffset] = useState(null);
@@ -65,7 +67,9 @@ function LocalChatPanel({ready, config, onRead, onDirect, onSending, onOpenSetti
   const active = useMemo(() => conversations.find(item => item.id === activeId) || null, [conversations, activeId]);
   const legacy = activeId === 'legacy-single-tasks';
   const archived = Boolean(active?.archived || active?.readOnly || legacy);
-  const revisionChanged = Boolean(config?.configured && active?.modelRevision && active.modelRevision !== config.revision);
+  const models = config?.models ?? (config?.configured?[config]:[]);
+  const selectedRevision = active?.modelRevision || config?.revision;
+  const revisionChanged = Boolean(active?.modelRevision && !models.some(item=>item.revision===active.modelRevision));
   useEffect(()=>setSessionNoticeClosed(false),[activeId,archived,revisionChanged]);
 
   const loadRecent = useCallback(async (conversationId, offset = 0, append = false) => {
@@ -284,7 +288,7 @@ function LocalChatPanel({ready, config, onRead, onDirect, onSending, onOpenSetti
     if (!conversationId || !draft.input.trim() || sending || loading || archived || !config?.configured || revisionChanged || conflict) return;
     setSending(true); onSending?.(true); setMessage('');
     const submitted = {...draftRef.current};
-    const modelRevision = active?.modelRevision || config.revision;
+    const modelRevision = selectedRevision;
     try {
       await flush(conversationId, submitted);
       const status = await call('agentStatus', {conversationId, id:submitted.id});
@@ -333,7 +337,19 @@ function LocalChatPanel({ready, config, onRead, onDirect, onSending, onOpenSetti
     finally { setLoading(false); }
   };
   const rescue = () => onDirect?.(draft.input, {rescue:true, kind:draft.kind});
-  const startWithNewModel = async () => { await createConversation(); };
+  async function chooseModel(revision){
+    if(!activeId||!revision||loading||sending||archived||active?.running)return;
+    const conversationId=activeId;
+    setLoading(true);
+    try{
+      const snapshot=await call('agentSelectModel',{conversationId,revision});
+      if(mounted.current&&activeIdRef.current===conversationId){
+        conversationsRef.current=snapshot.items;
+        setConversations(snapshot.items);
+      }
+    }catch(error){if(mounted.current)setMessage(error.message);}
+    finally{if(mounted.current)setLoading(false);}
+  }
   const sheetItems = conversations.map(item => ({
     id: item.id,
     title: item.title,
@@ -351,17 +367,17 @@ function LocalChatPanel({ready, config, onRead, onDirect, onSending, onOpenSetti
           aria-label={t('选择会话')} title={t('选择会话')} disabled={!ready || loading || sending} onClick={() => setSheetOpen(true)}>
           <span>{active?.title || t('选择会话')}</span><span className="session-trigger-caret" aria-hidden="true">▾</span>
         </button>
-        <button className="chip chat-icon-action" aria-label={t('刷新会话状态','Refresh conversations')} title={t('刷新会话状态','Refresh conversations')} disabled={!ready||loading||sending} onClick={async()=>{try{await refreshConversationSnapshot();}catch(error){setMessage(`${t('会话状态读取失败：','Could not refresh conversation status: ')}${error.message||error}`);}}}>↻</button>
-        <button className="chip chat-icon-action" aria-label={t('新会话','New conversation')} title={t('新会话','New conversation')} disabled={!ready || loading || sending} onClick={createConversation}>＋</button>
+        <button className="chip chat-icon-action" aria-label={t('刷新会话状态','Refresh conversations')} title={t('刷新会话状态','Refresh conversations')} disabled={!ready||loading||sending} onClick={async()=>{try{await refreshConversationSnapshot();}catch(error){setMessage(`${t('会话状态读取失败：','Could not refresh conversation status: ')}${error.message||error}`);}}}><PhoneIcon name="refresh" size={18}/></button>
+        <button className="chip chat-icon-action" aria-label={t('新会话','New conversation')} title={t('新会话','New conversation')} disabled={!ready || loading || sending} onClick={createConversation}><PhoneIcon name="plus" size={18}/></button>
       </div>
     </div>
     {runningElsewhere.map(item=><button key={item.id} className="session-running" onClick={()=>selectConversation(item.id)}>{t(`“${item.title}”仍有任务运行 · 查看`,`A task is still running in “${item.title}” · View`)}</button>)}
     {(archived || revisionChanged) && !sessionNoticeClosed && <MessageDialog title={t('会话状态','Conversation status')} onClose={()=>setSessionNoticeClosed(true)}>
-      {legacy ? <><strong>{t('历史单次任务（只读）')}</strong><span>{t('旧任务不会自动重发。若有旧草稿，可直接保存到本机资料库。','Old tasks are not resent automatically. Any old draft can be saved directly to the phone library.')}</span></> : archived ? <><strong>{t('归档会话（只读）')}</strong><span>{t('可以查看历史内容；新内容请创建会话。','History is available to read. Create a new conversation to continue.')}</span></> : <><strong>{t('模型配置已变化')}</strong><span>{t('为避免在同一会话混用模型版本，请新建会话继续。','Start a new conversation to avoid mixing model versions in one conversation.')}</span><button className="text" onClick={startWithNewModel}>{t('新建会话继续')}</button></>}
+      {legacy ? <><strong>{t('历史单次任务（只读）')}</strong><span>{t('旧任务不会自动重发。若有旧草稿，可直接保存到本机资料库。','Old tasks are not resent automatically. Any old draft can be saved directly to the phone library.')}</span></> : archived ? <><strong>{t('归档会话（只读）')}</strong><span>{t('可以查看历史内容；新内容请创建会话。','History is available to read. Create a new conversation to continue.')}</span></> : <><strong>{t('模型配置已变化')}</strong><span>{t('请在输入框旁重新选择模型，再继续这段对话。','Choose a model by the message box to continue this conversation.')}</span></>}
     </MessageDialog>}
     {profileIssue && <MessageDialog title={t('服务端人设状态需要处理')} message={profileIssue} onClose={()=>setProfileIssue('')}><div className="profile-actions"><button className="chip" onClick={()=>{setProfileIssue('');onOpenSettings();}}>{t('打开设置')}</button><button className="chip" onClick={()=>{setProfileIssue('');createConversation();}}>{t('新建会话')}</button></div></MessageDialog>}
     {legacy && draft.input && <div className="legacy-rescue"><p>{draft.input}</p><button className="primary" onClick={rescue}>{t('直接记录这份旧草稿')}</button></div>}
-    <div className="conversation" role="log" aria-live="polite">
+    <div className={'conversation'+(!tasks.length&&!draft.input?' phone-welcome-scene':'')} role="log" aria-live="polite">
       {!tasks.length && !draft.input && <div className="chat-welcome"><h1>{t('把想法放在这里')}</h1><p className="secondary">{t('和拾文助手讨论日常、整理资料，再把有价值的内容留在资料库。')}</p></div>}
       {nextOffset != null && <button className="text" disabled={loading} onClick={loadOlder}>{t('加载更早的对话')}</button>}
       {tasks.map(task => <article className="turn" key={task.id}>
@@ -377,6 +393,17 @@ function LocalChatPanel({ready, config, onRead, onDirect, onSending, onOpenSetti
       {activeId&&!legacy&&<AgentProposals key={activeId} conversationId={activeId} onRead={onRead}/>}
     </div>
     {!archived && (composerOpen ? <div className={`agent-composer${composerExpanded?' is-expanded':''}`}>
+      {!loading&&!sending&&!conflict&&activeId&&<DiscussionTransfer rpc={async()=>({libraryId})} inputActions={{
+        captureInsertion:()=>({id:activeId,generation:draftRef.current.localGeneration}),
+        insertText:(text,span)=>{if(span.id!==activeId||span.generation!==draftRef.current.localGeneration)return false;edit({input:draftRef.current.input+text});return true;}
+      }}/>}
+      <div className="phone-model-picker">
+        {models.length>0?<label>{t('会话模型','Conversation model')} <select aria-label={t('会话模型','Conversation model')} value={revisionChanged?'':(selectedRevision??'')}
+          disabled={!ready||loading||sending||!activeId||active?.running||tasks.some(isRunning)} onChange={event=>chooseModel(event.target.value)}>
+          {revisionChanged&&<option value="" disabled>{t('请选择模型','Choose a model')}</option>}
+          {models.map(item=><option key={item.revision} value={item.revision}>{item.name} · {item.model}</option>)}
+        </select></label>:<button type="button" className="text" onClick={onOpenModel}>{t('配置手机模型','Configure phone models')}</button>}
+      </div>
       <div className="composer-input-row"><textarea rows={1} aria-label={t('发送消息')} placeholder={config?.configured?t('输入消息…','Message…'):t('请先配置模型','Configure a model first')} value={draft.input} onChange={event => edit({input:event.target.value})} disabled={!ready || loading || sending || conflict} />
       <button className="primary composer-send" onPointerDown={event=>event.preventDefault()} disabled={!ready || loading || sending || !draft.input.trim() || !config?.configured || revisionChanged || conflict} onClick={send}>{t(sending ? '发送中…' : '发送')}</button></div>
       <div className="composer-save-option"><label><input type="checkbox" checked={draft.saveOriginal} onChange={event=>{if(event.target.checked)setChooseSaveKind(true);else edit({saveOriginal:false});}} disabled={!ready||loading||sending||conflict}/>{t('发送时保存全文','Save full text on send')}</label>{draft.saveOriginal&&<button type="button" className="text composer-kind-button" onClick={()=>setChooseSaveKind(true)}>{t(kindLabels[draft.kind]||kindLabels.journal)} ▾</button>}<button type="button" className="text composer-expand-button" onClick={()=>setComposerExpanded(value=>!value)}>{composerExpanded?t('缩小输入框','Shrink input'):t('展开输入框','Expand input')}</button></div>

@@ -3,6 +3,7 @@ import {call} from '../bridge/library.mjs';
 import {useI18n} from './i18n.js';
 import './record.css';
 import '../../plugins/workbench/src/review-goals.css';
+import {ReviewFollowups} from '../../plugins/workbench/src/ReviewFollowups.jsx';
 import {ReviewTrend} from '../../plugins/workbench/src/ReviewTrend.jsx';
 import {RecordPreview} from '../../plugins/workbench/src/ReviewPage.jsx';
 import MarkdownIt from 'markdown-it';
@@ -10,8 +11,8 @@ const md=new MarkdownIt({html:false});
 
 const metric=(value,suffix='')=>`${Number(value||0).toLocaleString()}${suffix}`;
 const localMonth=()=>{const date=new Date();return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`;};
-export function ReviewPanel({libraryId,request=call}) {
-  const {t}=useI18n();
+export function ReviewPanel({libraryId,workspace,request=call}) {
+  const {t,language}=useI18n();
   const [period,setPeriod]=useState('7'),[month,setMonth]=useState(localMonth),[report,setReport]=useState(null),[preview,setPreview]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[selected,setSelected]=useState(null),[trendMetric,setTrendMetric]=useState('original');
   const loadSequence=useRef(0);
   const load=useCallback(async()=>{
@@ -33,6 +34,8 @@ export function ReviewPanel({libraryId,request=call}) {
       <article><span>{t('收集素材')}</span><strong>{metric(totals.collected,t('条'))}</strong><small>{t('网页')} {metric(totals.web)} · {t('AI 讨论')} {metric(totals.ai)}</small></article>
       <article><span>{t('文章')}</span><strong>{metric(totals.articles,t('篇'))}</strong><small>{t('已定稿')} {metric(totals.finalized,t('篇'))}</small></article>
     </div>
+    <ReviewFollowups key={libraryId+report.start+report.end} scope={libraryId} rows={originals} t={t} english={language==='en'}
+      searchRpc={workspace?.online ? (method,args)=>workspace.rpc(method==='contentSearchStatus'?'serverSearchStatus':method,args) : null} read={id=>request('recordRead',{libraryId,id})} generate={args=>request('reviewFollowups',{...args,libraryId})} onOpen={setSelected}/>
     <section className="review-chart"><ReviewTrend metric={trendMetric} onMetricChange={setTrendMetric} preview={preview} daily={report.daily} t={t} onOpen={setSelected}/></section>
     <details className="sw-goals-fold"><summary>{t('个人原文明细','Personal original details')} · {originals.length}</summary><section className="review-details"><header><h2>{t('个人原文明细','Personal original details')}</h2><span className="secondary">{t('包含个人导入资料，按内容日期归档','Includes imported personal records, by content date')}</span></header>{originals.map(item=><div className="review-day-detail" key={item.id}><time>{item.contentDay}</time><span>{item.title||t('未命名')}</span><span>{metric(item.characters,t('字'))}</span></div>)}{!originals.length&&<p className="empty-state">{t('这段时间没有个人原文。','No personal originals in this period.')}</p>}</section></details>
     <details className="sw-goals-fold"><summary>{t('编辑统计','Edit statistics')}</summary><section className="review-details"><h2>{t('已观察到的个人编辑','Observed personal edits')}</h2><p>{t('新增')} {metric(edits.added,t('字'))} · {t('删减','Removed')} {metric(edits.removed,t('字'))} · {t('净变化','Net change')} {metric(edits.net,t('字'))}</p><p className="secondary">{t('按实际编辑时间计算，导入与资料整理不算新增写作；不与原文字数相加。','Uses actual edit dates; imports and archival cleanup are not new writing. Do not add this to original character totals.')}</p></section></details>

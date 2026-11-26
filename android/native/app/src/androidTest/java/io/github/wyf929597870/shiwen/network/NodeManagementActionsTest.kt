@@ -26,6 +26,7 @@ class NodeManagementActionsTest {
         store.update(id, row.getString("baseUrl"), row.getString("configRevision")) {
             it.put("authenticated", true).put("cookies", JSONArray().put("node-session=fixture; Path=/"))
         }
+        server.verifyFixtureConnection(store,row.getString("id"))
         return id
     }
 
@@ -62,7 +63,7 @@ class NodeManagementActionsTest {
             val error = runCatching { NodeManagementActions(NodeConnection(store)).manage(id, "../arbitrary", JSONObject()) }
                 .exceptionOrNull()
             assertEquals("NODE_MANAGEMENT_ACTION_DENIED", error?.message)
-            assertEquals(0, server.requestCount)
+            assertEquals(0, server.afterHandshakeRequestCount)
         } finally { store.clearForTest(); server.shutdown() }
     }
 
@@ -109,7 +110,7 @@ class NodeManagementActionsTest {
             val request = JSONObject(server.takeRequest(2, TimeUnit.SECONDS)!!.body.readUtf8())
             assertEquals("externalClientCreate", request.getString("method"))
             assertEquals("My agent", request.getJSONObject("args").getString("name"))
-            assertEquals(1, server.requestCount)
+            assertEquals(1, server.afterHandshakeRequestCount)
         } finally { store.clearForTest(); server.shutdown() }
     }
 
@@ -124,7 +125,7 @@ class NodeManagementActionsTest {
                     .put("request", JSONObject().put("id", "schedule-1")))
             }.exceptionOrNull()
             assertEquals("NODE_WRITE_RESULT_UNKNOWN", error?.message)
-            assertEquals(1, server.requestCount)
+            assertEquals(1, server.afterHandshakeRequestCount)
             val request = server.takeRequest(2, TimeUnit.SECONDS)!!
             assertEquals("schedules.run", JSONObject(request.body.readUtf8()).getJSONObject("args").getString("action"))
         } finally { store.clearForTest(); server.shutdown() }
@@ -142,7 +143,7 @@ class NodeManagementActionsTest {
             }.exceptionOrNull()
             assertEquals("NODE_WRITE_RESULT_UNKNOWN", error?.message)
             assertFalse(error?.message.orEmpty().contains("sw_sensitive"))
-            assertEquals(1, server.requestCount)
+            assertEquals(1, server.afterHandshakeRequestCount)
         } finally { store.clearForTest(); server.shutdown() }
     }
 
@@ -157,7 +158,7 @@ class NodeManagementActionsTest {
             }.exceptionOrNull()
             assertEquals("INVALID_REQUEST", error?.message)
             assertFalse(error?.message.orEmpty().contains("sw_secret"))
-            assertEquals(1, server.requestCount)
+            assertEquals(1, server.afterHandshakeRequestCount)
         } finally { store.clearForTest(); server.shutdown() }
     }
 
@@ -173,7 +174,7 @@ class NodeManagementActionsTest {
             }.exceptionOrNull()
             assertEquals("NODE_WRITE_RESULT_UNKNOWN", error?.message)
             assertFalse(error?.message.orEmpty().contains("sw_secret"))
-            assertEquals(1, server.requestCount)
+            assertEquals(1, server.afterHandshakeRequestCount)
         } finally { store.clearForTest(); server.shutdown() }
     }
 
@@ -194,8 +195,8 @@ class NodeManagementActionsTest {
             val result = pending.get(5, TimeUnit.SECONDS)
             assertTrue(result.getBoolean("nodeChanged"))
             assertEquals("started", result.getJSONObject("data").getString("status"))
-            assertEquals(1, oldServer.requestCount)
-            assertEquals(0, newServer.requestCount)
+            assertEquals(1, oldServer.afterHandshakeRequestCount)
+            assertEquals(0, newServer.afterHandshakeRequestCount)
             assertNotEquals(row.getString("configRevision"), store.get(id).getString("configRevision"))
         } finally { store.clearForTest(); oldServer.shutdown(); newServer.shutdown() }
     }
@@ -215,7 +216,7 @@ class NodeManagementActionsTest {
             store.save(id, "management node", newServer.url("/").toString(), true)
             val error = runCatching { pending.get(5, TimeUnit.SECONDS) }.exceptionOrNull()
             assertEquals("NODE_CHANGED", error?.cause?.message ?: error?.message)
-            assertEquals(0, newServer.requestCount)
+            assertEquals(0, newServer.afterHandshakeRequestCount)
         } finally { store.clearForTest(); oldServer.shutdown(); newServer.shutdown() }
     }
 }

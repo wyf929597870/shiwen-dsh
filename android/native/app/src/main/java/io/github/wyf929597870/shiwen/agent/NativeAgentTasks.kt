@@ -22,6 +22,14 @@ internal class NativeAgentTasks private constructor(private val repository: Agen
     private val mutex = Mutex()
     private val jobs = mutableMapOf<String, Job>()
 
+    suspend fun selectModel(id: String, model: String, revision: String) = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            check(!closed.get()) { "TASK_OWNER_CLOSED" }
+            check(id !in store.dao.runningConversationIds()) { "CONVERSATION_RUNNING" }
+            check(store.dao.selectModel(id, model, revision) == 1) { "CONVERSATION_READ_ONLY" }
+        }
+    }
+
     suspend fun submit(requestId: String, input: String, model: LLModel, modelConfigRevision: String,
         conversationId: String, profile: AgentProfileSnapshot? = null, approvedDraft: ProbeDraft? = null,
         executorFactory: () -> PromptExecutor): AgentTask = withContext(Dispatchers.IO) {
@@ -43,14 +51,15 @@ internal class NativeAgentTasks private constructor(private val repository: Agen
             check(!conversation.readOnly && !conversation.archived) { "CONVERSATION_READ_ONLY" }
             check(conversation.modelRevision == null || conversation.modelRevision == modelConfigRevision) { "MODEL_CONFIG_CHANGED" }
             check(conversation.model == null || conversation.model == model.id) { "MODEL_CONFIG_CHANGED" }
+            val firstTurn = !store.dao.hasTurns(conversationId)
             check(conversation.profileRevision == profile?.revision && conversation.profileAgentId == profile?.agentId &&
                 conversation.profileNodeId == profile?.nodeId && conversation.systemContext == profile?.systemContext ||
-                conversation.modelRevision == null) { "PROFILE_CHANGED" }
+                firstTurn) { "PROFILE_CHANGED" }
             val systemContext = profile?.systemContext ?: conversation.systemContext.orEmpty()
             check(systemContext.length <= MAX_PROFILE_CONTEXT_CHARS) { "AGENT_PROFILE_CONTEXT_TOO_LARGE" }
             check(input.length + systemContext.length <= MAX_TOTAL_PROMPT_TEXT_CHARS) { "MODEL_CONTEXT_BUDGET_EXCEEDED" }
             val now = now()
-            if (conversation.modelRevision == null) {
+            if (firstTurn) {
                 val title = if (conversation.title == NEW_CONVERSATION_TITLE) input.take(64) else conversation.title
                 check(store.dao.bindConversation(conversationId, model.id, modelConfigRevision, title,
                     profile?.revision, profile?.agentId, profile?.nodeId, profile?.systemContext, now) == 1) {

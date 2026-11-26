@@ -32,6 +32,20 @@ internal class PhoneAgent(context: Context, private val repo: AgentLibraryAccess
     }
     private val tasks = runBlocking { NativeAgentTasks.open(repo, store) }
 
+    fun reviewFollowups(instruction: String, input: String): JSObject {
+        require(input.length in 1..16000 && instruction.length in 1..1200) { "Invalid review request" }
+        return generateFromPassages(instruction, input, 1600)
+    }
+
+    fun generateFromPassages(instruction:String,input:String,maxTokens:Int):JSObject =
+        analyze(configs,executorFactory,instruction,input,maxTokens)
+
+    fun selectModel(conversationId: String, revision: String): JSObject = runBlocking {
+        val config = configs.get(revision)
+        tasks.selectModel(conversationId, config.model, config.revision)
+        snapshot()
+    }
+
     fun conversations(): JSObject = snapshot()
 
     fun createConversation(id: String): JSObject {
@@ -144,8 +158,7 @@ internal class PhoneAgent(context: Context, private val repo: AgentLibraryAccess
                 saveOriginal, kind, conversationId)) { "REQUEST_REUSED" }
             return@runBlocking json(existing)
         }
-        val config = configs.read() ?: error("MODEL_NOT_CONFIGURED")
-        check(config.revision == revision) { "MODEL_CONFIG_CHANGED" }
+        val config = configs.get(revision)
         val profile = profileProvider()?.let {
             AgentProfileSnapshot(it.getString("revision"), it.getString("agentId"), it.getString("nodeId"),
                 it.getString("systemContext"))
@@ -194,6 +207,25 @@ internal class PhoneAgent(context: Context, private val repo: AgentLibraryAccess
     }
 
     companion object {
+        fun analyze(context:Context,instruction:String,input:String,maxTokens:Int):String =
+            checkNotNull(analyze(ModelConfigStore(context),ModelTransport::create,instruction,input,maxTokens).getString("text"))
+        private fun analyze(configs:ModelConfigStore, executorFactory:(ModelConfig)->PromptExecutor, instruction:String, input:String, maxTokens:Int): JSObject = runBlocking {
+            require(input.length in 1..64000 && instruction.length in 1..6000) { "Invalid analysis request" }
+            val config = configs.read() ?: error("请先在手机模型设置中配置模型 / Configure a model on this device.")
+            val prompt = ai.koog.prompt.Prompt.build("review-followups",
+                params = ai.koog.prompt.params.LLMParams(maxTokens = maxTokens)) {
+                system(instruction)
+                user(input)
+            }
+            val answer = kotlinx.coroutines.withTimeout(120_000) {
+                StreamingExecutor(executorFactory(config), {}).use { executor ->
+                    executor.execute(prompt, ModelTransport.model(config), emptyList()).textContent()
+                }
+            }
+            check(answer.isNotBlank()) { "Empty model reply" }
+            JSObject().put("text", answer).put("model", config.model)
+        }
+
         private const val PAGE_SIZE = 20
         private val CONTENT_KINDS = setOf("journal", "freewrite", "reading_note", "idea", "web", "ai", "reference")
         private val instances = java.util.concurrent.ConcurrentHashMap<String, PhoneAgent>()

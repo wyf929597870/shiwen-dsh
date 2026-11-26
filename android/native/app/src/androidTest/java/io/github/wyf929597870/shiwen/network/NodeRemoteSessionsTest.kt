@@ -23,6 +23,7 @@ class NodeRemoteSessionsTest {
         store.update(row.getString("id"), row.getString("baseUrl"), row.getString("configRevision")) {
             it.put("authenticated", true).put("cookies", JSONArray().put("node-session=fixture; Path=/"))
         }
+        server.verifyFixtureConnection(store,row.getString("id"))
         return row
     }
     @Test fun requestsAreBoundToExplicitNodeAndExactSessionMethod() {
@@ -41,7 +42,7 @@ class NodeRemoteSessionsTest {
             assertEquals("mobileSessions", body.getString("method"))
             assertEquals("list", body.getJSONObject("args").getString("action"))
             assertNotNull(runCatching { NodeConnection(store).mobileSessions(row.getString("id"), "shell", JSONObject()) }.exceptionOrNull())
-            assertEquals(1, server.requestCount)
+            assertEquals(1, server.afterHandshakeRequestCount)
         } finally { store.clearForTest(); server.shutdown() }
     }
     @Test fun staleNodeRevisionIsRejectedBeforeTheRequestLeavesThePhone() {
@@ -51,7 +52,7 @@ class NodeRemoteSessionsTest {
             val row = node(store, server)
             val result = runCatching { NodeConnection(store).mobileSessions(row.getString("id"), "send", JSONObject(), "old-revision") }
             assertEquals("NODE_CHANGED", result.exceptionOrNull()?.message)
-            assertEquals(0, server.requestCount)
+            assertEquals(0, server.afterHandshakeRequestCount)
         } finally { store.clearForTest(); server.shutdown() }
     }
     @Test fun lostWriteAcknowledgementIsNotAutomaticallyRetried() {
@@ -64,7 +65,7 @@ class NodeRemoteSessionsTest {
                 JSONObject().put("requestId", UUID.randomUUID().toString()).put("sessionId", "synthetic").put("mode", "queue")
                     .put("content", JSONArray().put(JSONObject().put("type", "text").put("text", "synthetic message")))) }
             assertEquals("NODE_SESSION_WRITE_UNKNOWN", result.exceptionOrNull()?.message)
-            assertEquals(1, server.requestCount)
+            assertEquals(1, server.afterHandshakeRequestCount)
         } finally { store.clearForTest(); server.shutdown() }
     }
     @Test fun pendingDraftSurvivesNewStoreInstanceAndCannotCrossNodeRevision() {

@@ -40,7 +40,9 @@ try{
  const user=process.env.ANDROID_USER??userResult?.stdout.trim();
  if((!process.env.ANDROID_USER&&(userResult?.error||userResult?.status!==0))||!/^\d+$/.test(user??''))throw Error('Unable to determine Android user; set ANDROID_USER explicitly');
 
- service=await startServer({root,host:'127.0.0.1',port:0},{runtime});
+ const packaged=process.env.SHIWEN_TEST_OLD_PC==='1';
+ const launch=packaged?{runtime,worker:join(runtime,'scripts/server-worker.mjs'),node:join(runtime,'../runtime/primary-runtime/dependencies/node/bin/node')}:{runtime};
+ service=await startServer({root,host:'127.0.0.1',port:0},launch);
  const base=service.url.slice(0,-1),hostPort=Number(new URL(service.url).port);
  port=hostPort;
  assert.ok(Number.isInteger(hostPort)&&hostPort>0);
@@ -52,7 +54,7 @@ try{
  const setup=await request(`${base}/auth/password`,{password},bootstrapCookie);
  if(setup.status!==200)throw Error(`Synthetic host password setup failed (${setup.status})`);
 
- const ownerCookie=cookieOf(setup);assert.ok(ownerCookie);
+ let ownerCookie=cookieOf(setup);assert.ok(ownerCookie);
  const sync=async(action,body)=>{
   let response;
   try{response=await request(`${base}/api/shiwen`,{method:'mobileSync',args:{action,request:body}},ownerCookie);}
@@ -71,8 +73,29 @@ try{
  run(adbArgs(['reverse',`tcp:${hostPort}`,`tcp:${hostPort}`]));reverseInstalled=true;
  const host='http://127.0.0.1:'+hostPort;
  const appId='io.github.wyf929597870.shiwen.probe.test';
+ const oldClient=process.env.SHIWEN_TEST_OLD_APK==='1';
+ const oldApk=oldClient?run(adbArgs(['shell','pm','path','io.github.wyf929597870.shiwen'])).stdout.trim().replace(/^package:/,''):null;
+ const testName=oldClient?'OldApkSyncTest':'LibrarySyncHostTest';
+ let questionId,sourceId;
+ const exploration=async(method,args)=>{
+  const r=await request(base+'/api/shiwen',{method:'shiwen_exploration_'+method,args:{expectedLibraryId:identity.libraryId,...args}},ownerCookie);
+  assert.equal(r.status,200);return (await r.json()).result;
+ };
+ if(oldClient){
+  // Keep the pool's evidence independent of the diary intentionally edited by the desktop.
+  sourceId=randomUUID();
+  const evidence=structuredClone(operation);
+  Object.assign(evidence,{operationId:randomUUID(),recordId:sourceId,changeId:randomUUID(),versionId:randomUUID()});
+  Object.assign(evidence.payload,{id:sourceId,kind:'idea',title:'探索依据'});evidence.activities[0].activityId=randomUUID();
+  assert.equal((await sync('push',{...binding,operations:[{inlineBody:evidence}]})).receipts[0].status,'applied');
+  const q=await exploration('suggest',{requestId:randomUUID(),suggestions:[{type:'explore',externalItemId:'old-client',text:'旧客户端是否能照常整理日记？',sources:[{recordId:sourceId,revision:1}]}]});
+  questionId=q.items[0].questionId;
+ }
+ const registrySuffix=randomUUID(),queuedResponse=randomUUID();
  const instrumentation=run(adbArgs(['shell','am','instrument','--user',user,'-w',
-  '-e','class','io.github.wyf929597870.shiwen.library.LibrarySyncHostTest',
+  '-e','class','io.github.wyf929597870.shiwen.library.'+testName,
+  ...(oldClient?['-e','oldApkPath',oldApk]:[]),
+  ...(process.env.SHIWEN_TEST_OLD_PC==='1'?['-e','oldComputer','true','-e','registrySuffix',registrySuffix,'-e','queuedResponse',queuedResponse]:[]),
   '-e','syntheticHost',host,'-e','syntheticPassword',password,'-e','syntheticRecordId',recordId,
   `${appId}/androidx.test.runner.AndroidJUnitRunner`]),{allowFailure:true});
  const output=redact((instrumentation.stdout||'')+'\n'+(instrumentation.stderr||''));
@@ -80,6 +103,7 @@ try{
   const tail=output.trim().split(/\r?\n/).slice(-16).join('\n').slice(-8_000);
   throw Error(`Android real Host instrumentation failed (${instrumentation.status??'signal'}).\n${tail}`);
  }
+ if(oldClient){const q=await exploration('read',{questionId});assert.equal(q.status,'pending');assert.equal(q.sources[0].recordId,sourceId);}
  const snapshot=await sync('bootstrapBegin',binding);
  const resolvePayload=async item=>{
   if(!item.payloadRef)return item;
@@ -100,13 +124,35 @@ try{
  };
  const records=await readEntity('records');
  const created=records.filter(item=>item.title==='Android sync fixture');
- assert.equal(created.length,1);assert.equal(created[0].markdown,'服务端并发编辑');
+ assert.equal(created.length,1);
+ if(oldClient||process.env.SHIWEN_TEST_OLD_PC==='1'){
+  assert.equal(created[0].markdown,'离线第一天\n第二天新增\n第三天新增');
+  const changed=records.filter(r=>r.id===recordId);assert.equal(changed.length,1);assert.equal(changed[0].markdown,'电脑更新了另一篇日记');
+  const versions=await readEntity('versions');assert.equal(versions.filter(v=>v.recordId===recordId).length,2);assert.equal(versions.filter(v=>v.recordId===created[0].id).length,3);
+  console.log(JSON.stringify({oldClient,libraryId:identity.libraryId,epoch:identity.epoch,questionId,desktopJournal:recordId,mobileJournal:created[0].id,versionCounts:[2,3]}));
+ }else{
+ assert.equal(created[0].markdown,'服务端并发编辑');
  const longRecord=records.find(item=>item.title==='Android long fixture');
  assert.ok(longRecord,`Synthetic snapshot records: ${JSON.stringify(records.map(item=>({title:item.title,keys:Object.keys(item)})))}`);
  assert.equal(longRecord.markdown,'长文资料'.repeat(200_000));assert.equal(longRecord.attachmentDescriptors.length,1);
  const activities=await readEntity('activities');
  assert.equal(activities.filter(item=>item.recordId===created[0].id).length,4);
  console.log('Android real sync passed: full snapshot, historic provenance, consecutive offline edits, repeat-sync deduplication, 800k Chinese text and original attachment upload, concurrent conflict with preserved phone history.');
+ }
+ if(packaged){
+  await stopServer(root);
+  service=await startServer({root,host:'127.0.0.1',port:hostPort},{runtime:resolve(import.meta.dirname,'..')});
+  const login=await request(base+'/auth/login',{password});
+  assert.equal(login.status,200);ownerCookie=cookieOf(login);
+  const same=await exploration('suggest',{requestId:randomUUID(),suggestions:[{externalItemId:randomUUID(),
+   text:'升级后还能接着写吗？',type:'explore',sources:[{recordId,revision:2}]}]});
+  const desktopQuestion=same.items[0].questionId;assert.ok(desktopQuestion);
+  const recovered=run(adbArgs(['shell','am','instrument','-w','-e','class','io.github.wyf929597870.shiwen.library.UpgradedHostTest',
+   '-e','desktopQuestion',desktopQuestion,'-e','upgradedLibrary',identity.libraryId,'-e','syntheticPassword',password,'-e','registrySuffix',registrySuffix,'-e','queuedResponse',queuedResponse,
+   appId+'/androidx.test.runner.AndroidJUnitRunner']));
+  assert.match(recovered.stdout,/OK \(1 test\)/,redact(recovered.stdout).slice(-2000));
+  console.log(JSON.stringify({upgradedLibrary:identity.libraryId,queuedResponse,desktopQuestion,reconnections:2,pending:0}));
+ }
  console.log('Transport was USB adb reverse to a temporary isolated Host; Wi-Fi/LAN access was not tested.');
  passed=true;
 }finally{

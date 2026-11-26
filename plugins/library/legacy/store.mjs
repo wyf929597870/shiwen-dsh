@@ -1,4 +1,6 @@
 import {validateReadingNote,decodeReadingNote,readingNoteFields} from './reading-note.mjs';
+import {createExplorationStore,explorationTables} from '../src/exploration/store.mjs';
+import {createAssistStore} from '../src/assist/store.mjs';
 import {externalDDL,externalStore,imageType} from './external-store.mjs';
 import {agentDDL,createAgentStore,memoryDefaults} from './agent-store.mjs';
 import {migrateConversations,conversationStore} from './conversations.mjs';
@@ -401,10 +403,10 @@ export function createStore(path,{recover=true}={}) {
     totals.net=totals.added-totals.removed;
     return {...range,totals,daily,historical:historical.map(decode),undated:records.filter(r=>!r.deleted&&(imported.has(r.id)?!imported.get(r.id).day&&imported.get(r.id).path!==':assets':recordDates.has(r.id)&&!recordDates.get(r.id).day)).length,edits:rows,articles:records.filter(x=>active.has(x.id)&&!x.deleted).map(decode),collected:collectedRecords.map(decode)};
   }
-  function exportBackup(){const payload={schema:17,libraryId:syncMeta('sync_library_id'),created:stamp(),drafts:{capture:getSetting('captureDraft',''),origin:getSetting('captureDraftOrigin','personal'),editing:getSetting('editingDraft')},tables:{}};for(const table of ['records','links','versions','edits','memories','messages','runs','attachments','imports','agent_documents','agent_sessions','memory_events','conversations','conversation_sources','conversation_drafts','record_sources','record_dates','agent_actions','dsh_record_sources','external_sources','sync_changes','sync_activities','sync_receipts','sync_journal_inputs','sync_record_sources','sync_version_sources','sync_version_parents','sync_branches','sync_branch_blobs','workbench_image_stages','workbench_image_receipts','workbench_drafts','annotation_relations','themes','theme_members','record_relations'])payload.tables[table]=db.prepare(`SELECT * FROM ${table}`).all();return JSON.stringify({format:'shiwen-backup',payload,sha256:createHash('sha256').update(JSON.stringify(payload)).digest('hex')});}
+  function exportBackup(){const payload={schema:19,explorationTimezone:api.exploration.timezone(),libraryId:syncMeta('sync_library_id'),created:stamp(),drafts:{capture:getSetting('captureDraft',''),origin:getSetting('captureDraftOrigin','personal'),editing:getSetting('editingDraft')},tables:{}};for(const table of ['records','links','versions','edits','memories','messages','runs','attachments','imports','agent_documents','agent_sessions','memory_events','conversations','conversation_sources','conversation_drafts','record_sources','record_dates','agent_actions','dsh_record_sources','external_sources','sync_changes','sync_activities','sync_receipts','sync_journal_inputs','sync_record_sources','sync_version_sources','sync_version_parents','sync_branches','sync_branch_blobs','workbench_image_stages','workbench_image_receipts','workbench_drafts','annotation_relations','themes','theme_members','record_relations','assist_data',...explorationTables])payload.tables[table]=db.prepare(`SELECT * FROM ${table}`).all();return JSON.stringify({format:'shiwen-backup',payload,sha256:createHash('sha256').update(JSON.stringify(payload)).digest('hex')});}
   function restoreBackup(raw,{requireEmpty=false}={}){
     if(typeof raw!=='string'||raw.length>1000000000)throw new Error('备份文件过大或无效');
-    const b=parse(raw);if(b.format!=='shiwen-backup'||![1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17].includes(b.payload?.schema)||b.sha256!==createHash('sha256').update(JSON.stringify(b.payload)).digest('hex'))throw new Error('备份格式或校验不通过');
+    const b=parse(raw);if(b.format!=='shiwen-backup'||![1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19].includes(b.payload?.schema)||b.sha256!==createHash('sha256').update(JSON.stringify(b.payload)).digest('hex'))throw new Error('备份格式或校验不通过');
     if(b.payload.schema===1)for(const row of b.payload.tables.messages??[])row.context='{}';
     if(b.payload.schema<3)b.payload.tables.imports=[];
     if(b.payload.schema<4){for(const table of ['agent_documents','agent_sessions','memory_events','conversations','conversation_sources','conversation_drafts','record_sources','record_dates','agent_actions'])b.payload.tables[table]=[];for(const row of b.payload.tables.memories??[])Object.assign(row,{...memoryDefaults,...row,category:row.scope==='global'?(row.category??'memory'):'project'});}
@@ -421,8 +423,23 @@ export function createStore(path,{recover=true}={}) {
     if(b.payload.schema<15)b.payload.tables.annotation_relations=[];
     if(b.payload.schema<16){b.payload.tables.themes=[];b.payload.tables.theme_members=[];}else if(typeof b.payload.libraryId!=='string'||!b.payload.libraryId.trim()||b.payload.libraryId.length>100)throw Error('备份资料库身份无效');
     if(b.payload.schema<17)b.payload.tables.record_relations=[];
-    const tables=['records','links','versions','edits','memories','messages','runs','attachments','imports','agent_documents','agent_sessions','memory_events','conversations','conversation_sources','conversation_drafts','record_sources','record_dates','agent_actions','dsh_record_sources','external_sources','sync_changes','sync_activities','sync_receipts','sync_journal_inputs','sync_record_sources','sync_version_sources','sync_version_parents','sync_branches','sync_branch_blobs','workbench_image_stages','workbench_image_receipts','workbench_drafts','annotation_relations','themes','theme_members','record_relations'];
+    if(b.payload.schema<19)for(const table of explorationTables.slice(8))b.payload.tables[table]=[];
+    if(b.payload.schema<18){
+      for(const table of explorationTables)b.payload.tables[table]=[];
+      b.payload.tables.assist_data=[];
+    }else{
+      if(typeof b.payload.explorationTimezone!=='string')throw Error('备份探索池时区无效');
+      new Intl.DateTimeFormat('en',{timeZone:b.payload.explorationTimezone});
+    }
+    for(const r of b.payload.tables.exploration_responses)r.passage??=null;
+    for(const period of b.payload.tables.exploration_periods)period.seen??='[]';
+    const tables=['records','links','versions','edits','memories','messages','runs','attachments','imports','agent_documents','agent_sessions','memory_events','conversations','conversation_sources','conversation_drafts','record_sources','record_dates','agent_actions','dsh_record_sources','external_sources','sync_changes','sync_activities','sync_receipts','sync_journal_inputs','sync_record_sources','sync_version_sources','sync_version_parents','sync_branches','sync_branch_blobs','workbench_image_stages','workbench_image_receipts','workbench_drafts','annotation_relations','themes','theme_members','record_relations','assist_data',...explorationTables];
     for(const table of tables){if(!Array.isArray(b.payload.tables[table]))throw new Error('备份缺少数据表');const columns=db.prepare(`PRAGMA table_info(${table})`).all().map(x=>x.name);for(const row of b.payload.tables[table]){if(Object.keys(row).length!==columns.length||!columns.every(k=>Object.hasOwn(row,k)))throw new Error('备份字段不匹配');if(table==='records'){if(![...kinds,'ai_annotation'].includes(row.kind)||!origins.includes(row.origin))throw new Error('备份内容类型错误');readDoc(parse(row.doc),row.origin);}}}
+    // Imported historical cards and preferences belong to the restored records.
+    // Receipts are tied to the caller and source library identity.
+    b.payload.tables.assist_data=b.payload.tables.assist_data.filter(r=>r.library===b.payload.libraryId&&
+      (r.kind!=='receipt'||r.library===syncMeta('sync_library_id'))).map(r=>({...r,library:syncMeta('sync_library_id')}));
+    if(b.payload.libraryId!==syncMeta('sync_library_id'))b.payload.tables.exploration_receipts=[];
     validateTopicBackup(b.payload.tables.themes,b.payload.tables.theme_members);
     validateRelationsBackup(b.payload.tables.record_relations);
     if(b.payload.schema>=16)for(const member of b.payload.tables.theme_members)if(member.source_library_id===b.payload.libraryId)member.source_library_id=syncMeta('sync_library_id');else if(member.source_library_id===syncMeta('sync_library_id'))member.source_blocked=1;
@@ -440,8 +457,10 @@ export function createStore(path,{recover=true}={}) {
     const imageIds=new Set(b.payload.tables.workbench_image_stages.map(image=>image.id)),receiptIds=new Set(b.payload.tables.workbench_image_receipts.map(receipt=>receipt.id));
     for(const row of b.payload.tables.workbench_drafts){const draft=parse(row.payload);if(!draft)continue;const committed=draft.pendingImageSave?.requestId&&receiptIds.has(draft.pendingImageSave.requestId);if(!Array.isArray(draft.stagedImages??[])||(!committed&&(draft.stagedImages??[]).some(id=>!imageIds.has(id))))throw Error('备份草稿图片缺失');}
     db.transaction(()=>{if(requireEmpty&&['records','memories','messages','runs','settings','themes','record_relations'].some(table=>db.prepare(`SELECT 1 FROM ${table} LIMIT 1`).get()))throw new Error('目标资料库已有内容，导入不会覆盖');for(const table of [...tables].reverse())db.prepare(`DELETE FROM ${table}`).run();db.prepare('DELETE FROM operations').run();db.prepare('DELETE FROM external_requests').run();db.prepare("DELETE FROM settings WHERE key IN ('captureDraft','captureDraftOrigin','editingDraft')").run();if(b.payload.drafts){setSetting('captureDraft',requireText(b.payload.drafts.capture,1000000));if(!origins.includes(b.payload.drafts.origin))throw new Error('草稿来源错误');setSetting('captureDraftOrigin',b.payload.drafts.origin);if(b.payload.drafts.editing){readDoc(b.payload.drafts.editing.doc);setSetting('editingDraft',b.payload.drafts.editing);}}for(const table of tables){const columns=db.prepare(`PRAGMA table_info(${table})`).all().map(x=>x.name);const insert=db.prepare(`INSERT INTO ${table} (${columns.join(',')}) VALUES (${columns.map(()=>'?').join(',')})`);for(const row of b.payload.tables[table])insert.run(...columns.map(k=>row[k]));}if(b.payload.schema<5)migrateConversations(db);db.prepare("UPDATE runs SET status='interrupted' WHERE status='running'").run();db.prepare("UPDATE messages SET status='interrupted' WHERE status='streaming'").run();
+      db.exec('INSERT OR IGNORE INTO exploration_config SELECT 1,1,0,1,COALESCE(MAX(seq),0),0 FROM sync_changes');
+      if(b.payload.explorationTimezone)db.prepare("UPDATE meta SET value=? WHERE key='exploration_timezone'").run(b.payload.explorationTimezone);
       db.prepare("UPDATE meta SET value=? WHERE key='sync_epoch'").run(randomUUID());
-      for(const table of ['sync_acks','sync_snapshots','sync_manifests'])db.prepare(`DELETE FROM ${table}`).run();
+      for(const table of ['sync_acks','sync_snapshots','sync_manifests','exploration_stream','exploration_pages','exploration_snapshots','exploration_devices','exploration_operations'])db.prepare(`DELETE FROM ${table}`).run();
       for(const row of db.prepare('SELECT id FROM records ORDER BY id').all())appendSyncChange(row.id,'restore',{createActivity:false,preserveSources:true});
     })();db.transaction(()=>{for(const version of db.prepare('SELECT id,record FROM versions ORDER BY record,revision,id').all())if(!db.prepare('SELECT 1 FROM sync_version_parents WHERE version_id=?').get(version.id)){const previous=db.prepare('SELECT id FROM versions WHERE record=? AND revision<(SELECT revision FROM versions WHERE id=?) ORDER BY revision DESC LIMIT 1').get(version.record,version.id);db.prepare('INSERT INTO sync_version_parents VALUES(?,?)').run(version.id,JSON.stringify(previous?[previous.id]:[]));}})();consolidateJournals();return true;
   }
@@ -622,7 +641,7 @@ export function createStore(path,{recover=true}={}) {
     recordDate:args=>db.transaction(()=>{if(args?.day!==undefined)assertJournalDay(args.id,args.day);const result=conversationStore(db,get,save).recordDate(args);if(args?.day!==undefined){bumpSyncRevision(args.id,'归档日期修正');appendSyncChange(args.id,'update',{createActivity:false,preserveSources:true});}return result;})(),
     updateMessageContext:({id,context})=>{db.prepare('UPDATE messages SET context=? WHERE id=?').run(JSON.stringify(context),id);return true;},
     exportBackup,restoreBackup,
-    close:()=>db.close(),
+    close:()=>{api.exploration.discovery.close();db.close();},
     mobileSync:options=>createMobileSyncStore({db,get,save,syncMeta,syncRecord,hash,appendSyncChange,bumpSyncRevision,consolidateJournals,journalForDay:api.journalForDay,ownerId:options?.ownerId??'owner'})
-  };Object.assign(api,externalStore(db,api));consolidateJournals();return api;
+  };api.exploration=createExplorationStore(db,api);api.assist=createAssistStore(db,api);Object.assign(api,externalStore(db,api));consolidateJournals();return api;
 }

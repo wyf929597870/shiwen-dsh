@@ -58,6 +58,52 @@ class ModelConfigStoreTest {
         assertEquals("https://beta.example/v1/", changed.baseUrl)
     }
 
+    @Test fun existingSingleModelEnvelopeKeepsRevisionAndKeyOnUpgrade() = isolated { namespace, store ->
+        val old = store.save("旧模型", "https://model.example/v1", "legacy", "secret-legacy")
+        val key = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.getKey("$namespace-aes", null)
+        val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding").apply {
+            init(javax.crypto.Cipher.ENCRYPT_MODE, key)
+            updateAAD(namespace.toByteArray())
+        }
+        fun encode(data: ByteArray) = android.util.Base64.encodeToString(data, android.util.Base64.NO_WRAP)
+        val payload = old.publicJson().put("apiKey", old.apiKey).toString().toByteArray()
+        val legacy = org.json.JSONObject().put("iv", encode(cipher.iv)).put("data", encode(cipher.doFinal(payload)))
+        context.getSharedPreferences(namespace, Context.MODE_PRIVATE).edit().putString("encrypted",legacy.toString()).commit()
+        val next = store.saveEntry(null, "新模型", "https://second.example/v1", "new", "new-key")
+        assertEquals(old.revision, store.read()!!.revision)
+        assertEquals("secret-legacy", store.get(old.revision).apiKey)
+        assertEquals("new-key", store.get(next.revision).apiKey)
+    }
+
+    @Test fun multipleEndpointsKeepIndependentKeysAndDefaultSurvivesReopen() = isolated { namespace, store ->
+        val a = store.save("A", "https://a.example/v1", "same-model", "secret-one")
+        val b = store.saveEntry(null, "B", "https://b.example/v1", "same-model", "secret-two")
+        assertEquals(a.revision, store.read()!!.revision)
+        assertEquals(2, store.catalog().getJSONArray("models").length())
+        assertFalse(store.catalog().toString().contains("secret-"))
+        store.makeDefault(b.revision)
+        val reopened = ModelConfigStore(context, namespace)
+        assertEquals(b.revision, reopened.read()!!.revision)
+        assertEquals("secret-one", reopened.get(a.revision).apiKey)
+        val updated = reopened.saveEntry(a.revision, "A", a.baseUrl, "another", "")
+        assertEquals("secret-one", updated.apiKey)
+        assertEquals("secret-two", reopened.read()!!.apiKey)
+        reopened.remove(b.revision)
+        assertEquals(updated.revision, reopened.read()!!.revision)
+    }
+
+    @Test fun bulkSelectionIsAtomicAndKeepsExistingModelBindings() = isolated { _, store ->
+        val url = "https://plan.example/v1/"
+        val first = store.save("Plan", url, "first", "stored")
+        val selected = store.saveModels(first.revision, "Plan", url, listOf("second", "first", "second"), "")
+        assertEquals(listOf("second", "first"), selected.map { it.model })
+        assertEquals(first.revision, store.read()!!.revision)
+        val repeated = store.saveModels(null, "Plan", url, listOf("first", "second"), "stored")
+        assertEquals(selected.map { it.revision }.toSet(), repeated.map { it.revision }.toSet())
+        assertTrue(runCatching { store.saveModels(first.revision, "Plan", url, listOf("third", ""), "") }.isFailure)
+        assertEquals(2, store.catalog().getJSONArray("models").length())
+    }
+
     @Test fun invalidOrPlainHttpEndpointsAreRejectedBeforeSaving() = isolated { _, store ->
         for (url in listOf("http://model.example/v1", "https://u:p@model.example/v1", "https://model.example/v1?token=x", "not-a-url")) {
             assertTrue("Rejected URL: $url", runCatching { store.save("provider", url, "model", "key") }.isFailure)

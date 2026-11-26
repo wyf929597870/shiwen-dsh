@@ -32,3 +32,31 @@ test('Web profile 重复启动保留自定义配置且不接管已有非拾文 p
   await assert.rejects(()=>setupWebProfile({home:dir,bundle}),/不属于拾文/);
  }finally{await rm(dir,{recursive:true,force:true});}
 });
+
+test('推荐分析遵循模型额度和推理设置，截断时丢弃残缺回复',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'shiwen-assist-budget-')),cleanup=[];
+ const selection={provider:'test',model:'reasoner',reasoningEffort:'high'};
+ let store,budget=32000,finish='stop',sent;
+ const llm={
+  async prepareCall(model,signal,configure){
+   assert.deepEqual(model,selection);
+   const config={...model,...configure({reasoningEffort:model.reasoningEffort},{defaultMaxTokens:budget})};
+   return {config,async *stream(options){
+    sent=options;assert.equal(options.signal,signal);
+    yield {type:'text-delta',text:finish==='stop'?'[]':'[{'};
+    yield {type:'finish',reason:{kind:finish}};
+   }};
+  }
+ };
+ const ctx={get:key=>({llm,agentDefaultModel:{currentSelection:()=>selection}})[key],effect:fn=>cleanup.push(fn()),provide:(_,v)=>{store=v;}};
+ try{
+  apply(ctx,{dataDir:join(dir,'library')});
+  assert.equal(await store.generateAssist('指令','样例'),'[]');
+  assert.equal(sent.maxTokens,16384);assert.equal(sent.reasoningEffort,'high');
+  budget=1024;finish='max-tokens';
+  await assert.rejects(()=>store.generateAssist('指令','样例'),/达到模型输出上限/);
+  assert.equal(sent.maxTokens,1024);
+  budget=undefined;finish='stop';await store.generateAssist('指令','样例');
+  assert.equal(sent.maxTokens,undefined);
+ }finally{for(const dispose of cleanup.reverse())dispose?.();await rm(dir,{recursive:true,force:true});}
+});

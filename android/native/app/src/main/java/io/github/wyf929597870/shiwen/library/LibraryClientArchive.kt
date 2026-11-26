@@ -17,6 +17,10 @@ internal class LibraryClientArchive(context: Context) {
         val result = try { JSONObject().put("version", 1).put("editorDrafts", drafts.archive(repo.libraryId)) }
             finally { drafts.close() }
         result.put("workspaceThemes", JSONArray(repo.dao.workspaceThemes().map(::JSONObject)))
+        if(repo.registryItem().role=="standalone"){
+            val entries=repo.dao.explorationScope("standalone").filter {it.kind in portableExploration}
+            if(entries.isNotEmpty())result.put("exploration",JSONArray(entries.map {obj("kind" to it.kind,"key" to JSONArray(it.key),"data" to JSONObject(it.data))}))
+        }
         val references = draftAttachmentReferences(result.getJSONArray("editorDrafts"))
         val store = LibraryAttachmentDraftStore(app, repo.libraryId)
         val staged = JSONArray()
@@ -46,6 +50,9 @@ internal class LibraryClientArchive(context: Context) {
         try { store.restoreArchive(repo.libraryId, archive.getJSONArray("editorDrafts"), digest) }
         finally { store.close() }
         repo.db.runInTransaction {
+            if(repo.registryItem().role=="standalone")for(entry in archive.optJSONArray("exploration")?.objects().orEmpty()){
+                repo.dao.putExploration(ExplorationObject("standalone",entry.getString("kind"),entry.getJSONArray("key").toString(),entry.getJSONObject("data").toString()))
+            }
             archive.optJSONArray("workspaceThemes")?.let { themes ->
                 for (i in 0 until themes.length()) {
                     val theme = themes.getJSONObject(i)
@@ -67,9 +74,15 @@ internal class LibraryClientArchive(context: Context) {
     private fun digest(value: JSONObject) = MessageDigest.getInstance("SHA-256").digest(value.toString().toByteArray())
         .joinToString("") { "%02x".format(it) }
     companion object {
+        private val portableExploration=setOf("exploration_questions","exploration_discoveries","exploration_evidence","exploration_reviews",
+            "exploration_aliases","exploration_pairs","exploration_decisions","exploration_periods","exploration_responses","settings","legacy")
         fun validate(archive: JSONObject) {
+            for(entry in archive.optJSONArray("exploration")?.objects().orEmpty()){
+                require(entry.getString("kind") in portableExploration && entry.getJSONArray("key").length() in 1..3)
+                entry.getJSONObject("data")
+            }
             require(archive.optInt("version") == 1 && archive.toString().length <= 24 * 1024 * 1024) { "CLIENT_ARCHIVE_INVALID" }
-            require(archive.keys().asSequence().all { it in setOf("version", "editorDrafts", "agentArchive", "draftAttachments", "workspaceThemes") }) { "CLIENT_ARCHIVE_UNEXPECTED_FIELD" }
+            require(archive.keys().asSequence().all { it in setOf("version", "editorDrafts", "agentArchive", "draftAttachments", "workspaceThemes", "exploration") }) { "CLIENT_ARCHIVE_UNEXPECTED_FIELD" }
             archive.optJSONArray("workspaceThemes")?.let { themes ->
                 val ids = mutableSetOf<String>()
                 for (i in 0 until themes.length()) {

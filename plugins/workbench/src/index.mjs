@@ -1,4 +1,6 @@
-import {markdownSource,updateMarkdownDoc} from '../../library/legacy/markdown.mjs';
+import {explorationTools} from '../../../integration/exploration.mjs';
+import {assistTools} from '../../../integration/recommendations.mjs';
+import {markdownSegments,markdownSource,updateMarkdownDoc} from '../../library/legacy/markdown.mjs';
 import {plainDoc} from '../../library/legacy/content.mjs';
 import {readSessionMessages} from '../../library/src/session-messages.mjs';
 import {createHash} from 'node:crypto';
@@ -12,7 +14,7 @@ import {createManagementAdapter} from '../../mobile/src/management-adapter.mjs';
 import {createRemoteSessionsAdapter} from '../../mobile/src/remote-sessions-adapter.mjs';
 import {createMobileSyncAdapter} from '../../mobile/src/sync-adapter.mjs';
 export const inject=['connection','shiwenLibrary','sessionQuery','shiwenExternal'];
-const ownerMethods=new Set(['contentSearch','contentSearchStatus','contentSearchEnable','contentSearchRebuild','relatedArticles','recordNeighborhood','recordRelationAdd','recordRelationRemove','themeContext','themeList','themeRead','themeSave','themeDelete','themeMemberAdd','themeMemberRemove','recordThemes','readingNoteList','readingNoteSave','removedRecords','mobileAgentProfile','agentState','agentDocumentSave','memorySave','memoryDelete','memoryDecide',
+const ownerMethods=new Set(['explorationRecordSearch',...Object.keys(explorationTools),...Object.keys(assistTools),'reviewSource','reviewFollowups','contentSearch','contentSearchStatus','contentSearchEnable','contentSearchRebuild','relatedArticles','recordNeighborhood','recordRelationAdd','recordRelationRemove','themeContext','themeList','themeRead','themeSave','themeDelete','themeMemberAdd','themeMemberRemove','recordThemes','readingNoteList','readingNoteSave','removedRecords','mobileAgentProfile','agentState','agentDocumentSave','memorySave','memoryDelete','memoryDecide',
   'externalStatus','externalClientCreate','externalClientRevoke','mobileManagement','mobileSync','mobileSessions',
   'readImage','stageImage','discardStagedImages','workbenchSaveReceipt','workbenchDraft','originalVersionInfo','annotationList','annotationRead','annotationCreate','annotationUpdate','annotationDelete','annotationRestore','reviewPreview','correctRecordOrigin','exportDocumentBundle']);
 export function apply(ctx){
@@ -34,7 +36,32 @@ export function apply(ctx){
       }
       const library=ctx.shiwenLibrary;
       let result;
-      if(method==='contentSearch'){
+      if(method==='explorationRecordSearch'){
+        if(args.expectedLibraryId!==library.themeContext().libraryId)throw Error('资料库已切换，请重新选择');
+        result=library.searchRecords({query:args.query,offset:args.offset,limit:20});
+        result.items=result.items.map(item=>({...item,revision:library.get(item.id).revision}));
+      }else if(Object.hasOwn(explorationTools,method)){
+        result=library.exploration.call(method,args??{});
+      }else if(Object.hasOwn(assistTools,method)){
+        result=await library.assist.call(method,args??{});
+      }else if(method==='reviewFollowups'){
+        const selection=ctx.get('agentDefaultModel')?.currentSelection();
+        const llm=ctx.get('llm');
+        if(!selection?.model||!selection.provider||!llm)throw Error('请先在 DSH 设置中配置默认模型 / Configure a default model in DSH settings.');
+        const {input,instruction}=args??{};
+        if(typeof input!=='string'||!input.length||input.length>16000||typeof instruction!=='string'||instruction.length>1200)throw Error('无效的回顾请求 / Invalid review request');
+        let text='',finished=false;
+        for await(const chunk of llm.stream({...selection,maxTokens:1600,signal:AbortSignal.any([request.signal,AbortSignal.timeout(120_000)]),
+          system:instruction,messages:[{role:'user',content:[{type:'text',text:input}]}]})){
+          if(chunk.type==='text-delta')text+=chunk.text;
+          if(chunk.type==='finish'){
+            if(chunk.reason.kind!=='stop')throw Error(chunk.reason.failure?.message||'模型回复未完成 / Incomplete response');
+            finished=true;
+          }
+        }
+        if(!finished||!text.trim())throw Error('模型没有返回完整回复 / Empty or incomplete model reply');
+        result={text,model:selection.model};
+      }else if(method==='contentSearch'){
         result=await library.contentSearch.search(args);
       }else if(method==='contentSearchStatus'){
         result=library.contentSearch.status();
@@ -90,6 +117,11 @@ export function apply(ctx){
         const {exportDocumentBundle}=await import('../../../integration/document-export.mjs');result=exportDocumentBundle(library,args);
       }else if(method==='annotationRead'){
         const row=library.annotationRead(args);result={...row,markdown:markdownSource(row.doc)};
+      }else if(method==='reviewSource'){
+        const row=library.get(args.id);
+        if(!row||row.deleted||row.origin!=='personal')result={deleted:true};
+        else result={id:row.id,title:row.title,origin:row.origin,revision:row.revision,contentDay:row.contentDay,
+          sourceLibraryId:library.themeContext().libraryId,sources:markdownSegments(row.doc,row.origin)};
       }else if(method==='readMarkdown'){
         const row=library.get(args.id);if(!row||row.deleted)throw Object.assign(new Error('记录不存在'),{code:'RECORD_NOT_FOUND'});
         const admission=ctx.connection.admit?.(request);
@@ -142,7 +174,7 @@ export function apply(ctx){
         const code=typeof error?.code==='string'&&/^SQLITE_[A-Z_]+$/.test(error.code)?error.code:undefined;
         console.error('[shiwen-sync-diagnostic]',JSON.stringify({action:'setupCommit',errorName:String(error?.name??'Error'),...(code?{code}:{}),frames}));
       }
-      return Response.json({error:String(error.message??error),...(typeof error.code==='string'?{code:error.code}:{}),...(error.name==='ProtocolError'&&error.details&&typeof error.details==='object'?{details:error.details}:{})},{status:400,headers:{'Cache-Control':'no-store'}});
+      return Response.json({error:String(error.message??error),...(typeof error.code==='string'?{code:error.code,currentRevision:error.currentRevision}:{}),...(error.name==='ProtocolError'&&error.details&&typeof error.details==='object'?{details:error.details}:{})},{status:400,headers:{'Cache-Control':'no-store'}});
     }
   }}));
 }

@@ -12,6 +12,6 @@ export function createClient({root=dataRoot(),tokenFile=process.env.SHIWEN_TOKEN
   if(!key)throw Error('请配置 SHIWEN_TOKEN_FILE 或 SHIWEN_TOKEN，凭据在拾文的外部接入页面创建。');
   let response;
   try{response=await fetch(new URL(path,url),{method:body?'POST':'GET',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000),redirect:'error'});}catch(error){if(signal?.aborted)throw error;throw Error('无法连接拾文，请确认应用正在运行；写入重试时保留原 requestId。');}
-  const value=await response.json();if(!response.ok)throw Error(value.error??`HTTP ${response.status}`);return value;
+  const value=await response.json();if(!response.ok)throw Object.assign(Error(value.error??`HTTP ${response.status}`),{code:value.code,currentRevision:value.currentRevision});return value;
  };
 }

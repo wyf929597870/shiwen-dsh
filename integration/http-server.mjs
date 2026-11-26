@@ -18,9 +18,9 @@ export async function startExternalServer({store,root,command,args=[],skillPath}
    for await(const chunk of req){size+=chunk.length;if(size>8*1024*1024){respond(413,{error:'请求过大'});return;}chunks.push(chunk);}
    const input=JSON.parse(Buffer.concat(chunks).toString('utf8'));
    if(!input||typeof input.name!=='string'||Object.keys(input).some(key=>!['name','arguments'].includes(key)))throw Error('请求格式无效');
-   const result=store.externalCall(client,input.name,input.arguments??{});
+   const result=await store.externalCall(client,input.name,input.arguments??{});
    respond(200,{result});
-  }catch(error){if(!res.headersSent)respond(error.status??400,{error:error.name==='ZodError'?'参数不符合工具定义':String(error.message)});}
+  }catch(error){if(!res.headersSent)respond(error.status??400,{...(error.code?{code:error.code,currentRevision:error.currentRevision}:{}),error:error.name==='ZodError'?'参数不符合工具定义':String(error.message)});}
  });
  server.requestTimeout=15000;server.headersTimeout=10000;
  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});

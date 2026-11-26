@@ -10,7 +10,7 @@
 
 [为什么做](#为什么做拾文) · [能做什么](#能做什么) · [界面预览](#界面预览) · [项目架构](#项目架构) · [开始使用](#开始使用) · [数据与隐私](#数据与隐私) · [参与开发](#参与开发)
 
-可下载 **[Android 0.1.38 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.38)**、**[Linux 0.1.38 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.38)**、**[Windows 0.1.9 预览版](https://github.com/wyf929597870/shiwen-dsh/releases/tag/windows-v0.1.9)**，以及 [DSH 插件 0.2.0-dev.7](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.7)。项目采用 [MIT](LICENSE) 许可证。Android 使用电脑主题和语义检索时，请同步升级电脑服务。本版 Android 真机覆盖升级尚待验证；Windows 旧版已验证虚拟机安装与服务启停，新版完整图形界面仍待验收。macOS 未提供本项目安装包。
+可下载 **[Android 0.1.57](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.57)**、**[Linux 0.1.57](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.57)**、**[Windows 0.1.9 预览版](https://github.com/wyf929597870/shiwen-dsh/releases/tag/windows-v0.1.9)**，以及 [DSH 插件 0.2.0-dev.7](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.7)。项目采用 [MIT](LICENSE) 许可证。在手机和电脑之间同步探索问题及回应，请将电脑服务也升级到 0.1.57。本版 Android 真机覆盖升级尚待验证；Windows 旧版已验证虚拟机安装与服务启停，新版完整图形界面仍待验收。macOS 未提供本项目安装包。
 
 桌面和手机工作台按「记录」「读书」「收藏」「创作」浏览内容。全局搜索可打开命中的原文，关联内容可生成带来源的文章大纲。升级电脑端前请退出客户端、停止旧服务，安装后重新启动。[更新记录](CHANGELOG.md)
 
@@ -170,7 +170,7 @@ npm run package:linux
 sudo apt install ./release/linux/shiwen-dsh_*_amd64.deb
 ```
 
-源码启动的服务可在同一数据根目录下执行 `npm run server:stop` 停止；安装包也提供无需系统 Node 的管理命令，见 [独立服务说明](docs/server.md)。升级后重新启动本机服务。无需自行构建时，可直接下载下方的 v0.1.38 安装包。
+源码启动的服务可在同一数据根目录下执行 `npm run server:stop` 停止；安装包也提供无需系统 Node 的管理命令，见 [独立服务说明](docs/server.md)。升级后重新启动本机服务。无需自行构建时，可直接下载下方的 v0.1.57 安装包。
 
 ### 只运行独立服务，让浏览器访问
 
@@ -189,12 +189,12 @@ npm run server:url
 
 ### 已发布的 Linux 桌面版
 
-下载 **[Linux x64 安装包（.deb）](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.38/shiwen-dsh_0.1.38_amd64.deb)**。这是预览版，适合愿意反馈问题的用户；Windows 安装包见下方。校验文件与已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.38)。
+下载 **[Linux x64 安装包（.deb）](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.57/shiwen-dsh_0.1.57_amd64.deb)**。Windows 安装包见下方。校验文件与已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.57)。
 
 完整退出拾文并停止仍在运行的独立服务，再在下载目录安装或升级：
 
 ```bash
-sudo apt install ./shiwen-dsh_0.1.38_amd64.deb
+sudo apt install ./shiwen-dsh_0.1.57_amd64.deb
 ```
 
 从应用菜单打开「拾文」，或运行 `shiwen-dsh`。安装包包含 Electron、Node、DSH 和拾文插件，无需另外安装 Node 或保留源码目录。当前桌面验证环境为 Ubuntu 26.04 x64，其他发行版仍需验证。
@@ -203,9 +203,9 @@ sudo apt install ./shiwen-dsh_0.1.38_amd64.deb
 
 ### Android 正式签名安装包
 
-下载 [Android 0.1.38 APK](https://github.com/wyf929597870/shiwen-dsh/releases/download/android-v0.1.38/shiwen-android-0.1.38.apk)，支持 Android 9 及以上。升级直接覆盖安装，保留现有资料与配置；不要先卸载有未同步资料的应用。该 APK 使用发布签名，不是 `.probe` 调试应用；两个应用的数据目录不同。
+下载 [Android 0.1.57 APK](https://github.com/wyf929597870/shiwen-dsh/releases/download/android-v0.1.57/shiwen-android-0.1.57.apk)，支持 Android 9 及以上。升级直接覆盖安装，保留现有资料与配置；不要先卸载有未同步资料的应用。该 APK 使用发布签名，不是 `.probe` 调试应用；两个应用的数据目录不同。
 
-手机拥有完整本地资料库，断网可以记录和编辑。设置中添加服务地址、访问密码，为节点命名；连接电脑所在局域网后，可手动同步或启用自动同步。手机模型与密钥单独配置，不随资料同步。支持范围、校验文件和已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.38) 与 [Android 使用说明](android/README.md)。
+手机拥有完整本地资料库，断网可以记录和编辑。设置中添加服务地址、访问密码，为节点命名；连接电脑所在局域网后，可手动同步或启用自动同步。手机模型与密钥单独配置，不随资料同步。支持范围、校验文件和已知限制见 [发布说明](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.57) 与 [Android 使用说明](android/README.md)。
 
 ### Windows x64 预览安装包
 

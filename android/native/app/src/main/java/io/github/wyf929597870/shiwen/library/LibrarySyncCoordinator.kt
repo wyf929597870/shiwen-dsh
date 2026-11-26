@@ -220,6 +220,8 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
         manager.update(old.copy(integrity = "complete", appliedCursor = cursor, completeCursor = cursor,
             cursor = cursor, manifestDigest = expectedDigest, lastSyncedAt = Instant.now().toString()))
         snapshotCoverage?.let { markSnapshotCoveredOutbox(repo, it) }
+        val exploration=ExplorationSync(repo){action,params->rpc(nodeId,configRevision,action,params)}
+        if(exploration.connect())runCatching { exploration.sync(force=true) }.onFailure { explorationFailure(repo,it) }
         putProgress(repo, operationId, "completed", "finalize", completed, total, null)
     }
 
@@ -234,6 +236,7 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
         repo.db.runInTransaction {
             for (captured in coverage.operations) {
                 if (captured.operationId !in covered) continue
+                if(PhoneExploration(repo).get("bodyOwner",captured.recordId,area="exploration-body-owners")!=null)continue
                 val row = repo.dao.outbox(captured.operationId) ?: continue
                 if (row.recordId != captured.recordId || row.versionId != captured.versionId) continue
                 if (row.state in setOf("pending", "unknown", "blocked-dependency")) {
@@ -256,7 +259,14 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
         if (identity.optJSONObject("capabilities")?.optBoolean("dailyJournal") != true &&
             repo.dao.pendingOutbox(100_000).any { JSONObject(it.payloadJson).getJSONObject("payload").optString("kind") == "journal" })
             error("请先更新电脑端拾文，以支持同一天日记合并")
-        pushOutbox(repo, nodeId, configRevision, epoch, operationId, stagedAttachments)
+        val exploration=ExplorationSync(repo){action,params->rpc(nodeId,configRevision,action,params)}
+        val supportsExploration=exploration.connect()
+        // Draining the independent exploration channel also works when ordinary synchronization fails.
+        try {
+            pushOutbox(repo, nodeId, configRevision, epoch, operationId, stagedAttachments,exploration)
+        } finally {
+            if(supportsExploration)runCatching { exploration.sync() }.onFailure { explorationFailure(repo,it) }
+        }
         var cursor = row.cursor ?: "0"
         var count = 0
         while (true) {
@@ -303,7 +313,12 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
         putProgress(repo, operationId, "completed", "finalize", count, null, null)
     }
 
-    private fun pushOutbox(repo: LibraryRepository, nodeId: String, revision: String, epoch: String, operationId: String, stagedAttachments: Boolean) {
+    private fun explorationFailure(repo:LibraryRepository,error:Throwable){
+        val pool=PhoneExploration(repo)
+        pool.put("sync",(pool.get("sync","status",area=pool.local)?:obj()).put("state","pending").put("message",error.message),"status",area=pool.local)
+    }
+
+    private fun pushOutbox(repo: LibraryRepository, nodeId: String, revision: String, epoch: String, operationId: String, stagedAttachments: Boolean, exploration:ExplorationSync) {
         repairKnownRejectedAttachmentDescriptors(repo)
         // Send a record's offline edits in dependency order. Before each POST, persist
         // the exact immutable body and mark it unknown so a lost ACK is resolved via
@@ -326,7 +341,13 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
             var row = repo.dao.outbox(id) ?: continue
             if (row.state in setOf("conflict", "rejected")) continue
 
-            if (row.attempts > 0 || row.state == "unknown") {
+            if(exploration.recordTracked(row)){
+                val receipt=exploration.beforeRecord(row)
+                if(receipt!=null){
+                    if(receipt.optString("status")!="unknown")applyPushReceipt(repo,row,receipt,nodeId,revision,epoch)
+                    continue
+                }
+            } else if (row.attempts > 0 || row.state == "unknown") {
                 val checked = rpc(nodeId, revision, "receipts", JSONObject().put("libraryId", repo.libraryId)
                     .put("epoch", epoch).put("deviceId", repo.deviceId).put("operationIds", JSONArray().put(id)))
                     .getJSONArray("receipts")
@@ -581,6 +602,7 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
                         stableConflictId(repo.libraryId, row.operationId, observed.revision, observed.changeId), row.recordId,
                         row.operationId, "{}", body.toString(), observed.recordJson, observed.revision, "open", Instant.now().toString()))
                 }
+                repo.confirmRecordAttachments(row.recordId, body)
                 repo.dao.updateOutbox(row.copy(state = state, lastError = null))
             }
         } else if (status == "conflict") {

@@ -14,6 +14,7 @@ public class MainActivity extends BridgeActivity {
         restoringActivity = state != null;
         // Capacitor dispatches the launch Intent through onNewIntent during super.onCreate.
         super.onCreate(state);
+        io.github.wyf929597870.shiwen.library.PhoneDiscoveryWorker.schedule(this);
         getOnBackPressedDispatcher().addCallback(this, backCallback);
         if (bridge != null && bridge.getWebView() != null) {
             bridge.getWebView().setWebChromeClient(new com.getcapacitor.BridgeWebChromeClient(bridge) {

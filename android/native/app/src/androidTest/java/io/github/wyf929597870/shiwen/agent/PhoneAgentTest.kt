@@ -95,7 +95,7 @@ class PhoneAgentTest {
             assertEquals("MODEL_EMPTY_REPLY", emptyResult.getString("error"))
             assertEquals(savedId, emptyResult.getString("recordId"))
             assertEquals(2, repo.db.dao().records(0, 30).size)
-            val changed = configs.save("测试供应商", config.baseUrl, config.model, "")
+            val changed = configs.save("测试供应商", config.baseUrl, config.model + "-v2", "")
             assertTrue(runCatching {
                 val otherConversation = UUID.randomUUID().toString()
                 service.createConversation(otherConversation)

@@ -2,9 +2,9 @@
 
 拾文 Android 是独立的本地资料库客户端。界面使用 React + Capacitor，资料、草稿、任务与同步状态保存在 Kotlin/Room 中，手机不需要运行 Node 服务。早期真机验收范围见 [验证记录](../docs/android/validation-2026-11-07.md)。
 
-下载 [Android 0.1.38 正式签名 APK](https://github.com/wyf929597870/shiwen-dsh/releases/download/android-v0.1.38/shiwen-android-0.1.38.apk)，无需自行构建。最低 Android 9，应用 ID 为 `io.github.wyf929597870.shiwen`。升级直接覆盖安装，避免卸载造成未同步资料丢失。
+下载 [Android 0.1.57 正式签名 APK](https://github.com/wyf929597870/shiwen-dsh/releases/download/android-v0.1.57/shiwen-android-0.1.57.apk)，无需自行构建。最低 Android 9，应用 ID 为 `io.github.wyf929597870.shiwen`。升级直接覆盖安装，避免卸载造成未同步资料丢失。
 
-需要与电脑同步时，请配套升级拾文服务，例如 Linux 0.1.38。电脑和手机需要网络互通，离线修改会保存在手机。
+需要与电脑同步时，请配套升级拾文服务，例如 Linux 0.1.57。电脑和手机需要网络互通，离线修改会保存在手机。
 
 ## 日常使用
 
@@ -52,7 +52,7 @@ npm --prefix android run android:debug
 
 设置 `ANDROID_HOME` 或在未跟踪的 `android/native/local.properties` 中填写 `sdk.dir`。`sync` 将当前本地网页装入 APK，配置不使用远端 `server.url`。
 
-产物为 `debug/android/shiwen-android-0.1.38-debug.apk`。在已经使用调试包的手机上用 `adb install -r` 覆盖更新，保持原应用 ID 与签名，不要先卸载。正式签名、CI 和升级说明见 [构建与签名](../docs/android/build-and-signing.md)。
+产物为 `debug/android/shiwen-android-0.1.57-debug.apk`。在已经使用调试包的手机上用 `adb install -r` 覆盖更新，保持原应用 ID 与签名，不要先卸载。正式签名、CI 和升级说明见 [构建与签名](../docs/android/build-and-signing.md)。
 
 ## 验证
 

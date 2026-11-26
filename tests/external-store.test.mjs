@@ -38,7 +38,7 @@ test('external image chunks commit with the record and remain idempotent',t=>{
 });
 test('外部来源与作者分离、请求重试幂等、权限独立且可撤销',t=>{
  const {store}=setup(t),{issued,identity}=client(store,['create']);
- assert.deepEqual(store.externalCatalog(identity).map(x=>x.name),['shiwen_image_begin','shiwen_image_part','shiwen_image_status','shiwen_save','shiwen_collect','shiwen_annotation_create']);
+ assert.deepEqual(store.externalCatalog(identity).map(x=>x.name),['shiwen_image_begin','shiwen_image_part','shiwen_image_status','shiwen_save','shiwen_collect','shiwen_theme_create','shiwen_annotation_create']);
  const first=store.externalCall(identity,'shiwen_save',saveArgs);
  assert.equal(first.origin,'personal');assert.equal(first.client.name,'WorkBuddy');assert.equal(store.get(first.id).externalSources[0].session_id,saveArgs.source.sessionId);
  assert.deepEqual(store.externalCall(identity,'shiwen_save',{...saveArgs,source:{messageId:'message-1',sessionId:'external-conversation'}}),first);
@@ -114,4 +114,48 @@ test('MCP annotation images are attached atomically and remain readable on retry
  const note=store.externalCall(identity,'shiwen_annotation_create',args);assert.deepEqual(store.externalCall(identity,'shiwen_annotation_create',args),note);
  assert.equal(store.externalCall(identity,'shiwen_image_read',{id:note.id,attachmentId:uploadId}).dataBase64,bytes.toString('base64'));
  assert.equal(store.attachments({record:original.id}).length,0);
+});
+
+test('外部主题定位、原文保护、权限与幂等回执',t=>{
+ const {store}=setup(t);
+ const {identity}=client(store,['read','create','update']);
+ const call=(name,args)=>store.externalCall(identity,name,args);
+ const source=store.save({kind:'journal',body:'😀例句，再举例句。'});
+ const original=call('shiwen_read',{id:source.id});
+ const create={requestId:'theme-create',title:'待解的问题',summary:'说明',expectedLibraryId:original.libraryId};
+ assert.throws(()=>call('shiwen_theme_create',{...create,expectedLibraryId:'old-library'}),/资料库/);
+ const theme=call('shiwen_theme_create',create);
+ const args={requestId:'add',themeId:theme.id,revision:theme.revision,expectedLibraryId:original.libraryId,
+  sourceRecordId:source.id,sourceRevision:original.revision,field:'body',quote:'例句'};
+ for(const scopes of [['update'],['read'],['create','read']]){
+  const limited=client(store,scopes).identity;
+  assert.ok(!store.externalCatalog(limited).some(tool=>tool.name==='shiwen_theme_member_add'));
+  assert.throws(()=>store.externalCall(limited,'shiwen_theme_member_add',args),/权限/);
+ }
+ assert.throws(()=>call('shiwen_theme_member_add',{...args,expectedLibraryId:'old-library'}),/资料库/);
+ assert.throws(()=>call('shiwen_theme_member_add',{...args,sourceRevision:original.revision+1}),/来源已更新/);
+ assert.throws(()=>call('shiwen_theme_member_add',args),/多次/);
+ assert.throws(()=>call('shiwen_theme_member_add',{...args,start:2}),/不一致/);
+ assert.throws(()=>call('shiwen_theme_member_add',{...args,start:1,end:3}),/不一致/);
+ assert.throws(()=>call('shiwen_theme_member_add',{...args,quote:'错引'}),/不一致/);
+ const anchored={...args,start:2,end:4};
+ const added=call('shiwen_theme_member_add',anchored);
+ assert.deepEqual(call('shiwen_theme_member_add',anchored),added);
+ assert.deepEqual(call('shiwen_theme_create',create),theme);
+ assert.throws(()=>call('shiwen_theme_member_add',{...anchored,quote:'其他'}),/不同请求/);
+ assert.throws(()=>call('shiwen_theme_member_add',{...anchored,requestId:'stale'}),/主题已更新/);
+ const current=store.themeRead({id:theme.id});
+ assert.equal(current.members.length,1);
+ assert.equal(current.members[0].id,added.memberId);
+ assert.equal(current.members[0].quote,'例句');
+ assert.deepEqual(call('shiwen_read',{id:source.id}),original);
+ const list=call('shiwen_theme_list',{});
+ assert.equal(list.libraryId,original.libraryId);
+ assert.equal(list.items[0].revision,added.revision);
+ for(let i=0;i<20;i++)store.themeSave({title:'主题 '+i});
+ const page=call('shiwen_theme_list',{});
+ const next=call('shiwen_theme_list',{offset:page.nextOffset});
+ assert.equal(page.items.length,20);
+ assert.equal(next.nextOffset,null);
+ assert.equal(new Set([...page.items,...next.items].map(row=>row.id)).size,21);
 });

@@ -10,7 +10,7 @@ Shiwen is a personal AI workspace built on [DeepSeek Harness (DSH)](https://gith
 
 [Why Shiwen](#why-shiwen) · [What it does](#what-it-does) · [Screenshots](#screenshots) · [Architecture](#architecture) · [Getting started](#getting-started) · [Data and privacy](#data-and-privacy) · [Contributing](#contributing)
 
-Downloads: **[Android 0.1.38 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.38)**, **[Linux 0.1.38 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.38)**, **[Windows 0.1.9 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/windows-v0.1.9)** and [DSH plugin 0.2.0-dev.7](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.7). Licensed under [MIT](LICENSE). Upgrade the computer service for shared topics and semantic search on Android. An on-device Android upgrade check is pending for this release. Windows installation and service lifecycle were checked for the previous version; full GUI validation of the new version remains outstanding. No project macOS installer is provided.
+Downloads: **[Android 0.1.57](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.57)**, **[Linux 0.1.57](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.57)**, **[Windows 0.1.9 Preview](https://github.com/wyf929597870/shiwen-dsh/releases/tag/windows-v0.1.9)** and [DSH plugin 0.2.0-dev.7](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.2.0-dev.7). Licensed under [MIT](LICENSE). Upgrade the computer service to 0.1.57 to sync exploration questions and responses with Android. An on-device Android upgrade check is pending for this release. Windows installation and service lifecycle were checked for the previous version; full GUI validation of the new version remains outstanding. No project macOS installer is provided.
 
 Browse Records, Reading, Collections and Writing on desktop and Android. Open a source from global search or generate a linked article outline from related passages. Before upgrading the computer, quit the client and stop the old service. Restart the service after installation. [Changelog](CHANGELOG.md)
 
@@ -169,7 +169,7 @@ npm run package:linux
 sudo apt install ./release/linux/shiwen-dsh_*_amd64.deb
 ```
 
-For a service launched from source, use `npm run server:stop` with the same data root. The package also includes management commands that need no system Node; see the [standalone service guide](docs/server.md). Restart the local service after upgrading. To use a prebuilt package, download the v0.1.38 installer below.
+For a service launched from source, use `npm run server:stop` with the same data root. The package also includes management commands that need no system Node; see the [standalone service guide](docs/server.md). Restart the local service after upgrading. To use a prebuilt package, download the v0.1.57 installer below.
 
 ### Run only the service and connect from a browser
 
@@ -188,12 +188,12 @@ The service can run without a desktop window. LAN devices must be able to reach 
 
 ### Published Linux desktop
 
-Download the **[Linux x64 installer (.deb)](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.38/shiwen-dsh_0.1.38_amd64.deb)**. This preview is intended for users willing to report issues; A Windows installer is available below. See the [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.38) for checksums and known limitations.
+Download the **[Linux x64 installer (.deb)](https://github.com/wyf929597870/shiwen-dsh/releases/download/v0.1.57/shiwen-dsh_0.1.57_amd64.deb)**. The Windows installer is available below. See the [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/v0.1.57) for checksums and known limitations.
 
 Fully quit Shiwen and stop any running standalone service, then install or upgrade from your download directory:
 
 ```bash
-sudo apt install ./shiwen-dsh_0.1.38_amd64.deb
+sudo apt install ./shiwen-dsh_0.1.57_amd64.deb
 ```
 
 Open 拾文 from the application menu or run `shiwen-dsh`. The package includes Electron, Node, DSH and Shiwen plugins; no separate Node installation or source checkout is required. Desktop validation currently covers Ubuntu 26.04 x64. Other distributions still need testing.
@@ -202,9 +202,9 @@ Start by creating a record in Records. For AI conversations, configure a model a
 
 ### Signed Android installer
 
-Download the [Android 0.1.38 APK](https://github.com/wyf929597870/shiwen-dsh/releases/download/android-v0.1.38/shiwen-android-0.1.38.apk), requiring Android 9 or later. Install updates over the existing release to preserve data and settings; do not uninstall an app containing unsynced records. This is a release-signed APK, separate from the `.probe` debug application and its storage.
+Download the [Android 0.1.57 APK](https://github.com/wyf929597870/shiwen-dsh/releases/download/android-v0.1.57/shiwen-android-0.1.57.apk), requiring Android 9 or later. Install updates over the existing release to preserve data and settings; do not uninstall an app containing unsynced records. This is a release-signed APK, separate from the `.probe` debug application and its storage.
 
-The phone keeps a complete local library and supports offline editing. Add and name a service node in Settings with its address and password, then sync manually or enable automatic sync when the service is reachable on the LAN. Phone model credentials are configured separately and excluded from library sync. See [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.38) and the [Android guide](android/README.md).
+The phone keeps a complete local library and supports offline editing. Add and name a service node in Settings with its address and password, then sync manually or enable automatic sync when the service is reachable on the LAN. Phone model credentials are configured separately and excluded from library sync. See [release notes](https://github.com/wyf929597870/shiwen-dsh/releases/tag/android-v0.1.57) and the [Android guide](android/README.md).
 
 ### Windows x64 preview installer
 

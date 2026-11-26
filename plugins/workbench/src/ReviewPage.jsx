@@ -1,3 +1,4 @@
+import {ReviewFollowups} from './ReviewFollowups.jsx';
 import {ReadingNoteSources} from './reading/ReadingNotesPage.jsx';
 import React,{useState,useEffect,useRef} from 'react';
 import {ReviewTrend} from './ReviewTrend.jsx';
@@ -32,6 +33,7 @@ export function ReviewPage({rpc,language,md,typeName}){
     [t('更新文章','Updated articles'),totals.articles,t('篇','articles'),`${t('其中定稿','Finalized')} ${totals.finalized}`]
    ].map(([label,value,unit,note])=><div key={label}><span>{label}</span><p><strong>{fmt(value)}</strong><small>{unit}</small></p><p className="sw-metric-note">{note}</p></div>)}</div>
 
+   <ReviewFollowups key={report.start+report.end+reload} rows={personal} t={t} english={!zh} searchRpc={rpc} read={id=>rpc('reviewSource',{id})} generate={args=>rpc('reviewFollowups',args)} onOpen={setSelected}/>
    <div className="sw-review-grid"><div className="sw-review-card sw-trends"><ReviewTrend metric={trendMetric} onMetricChange={setTrendMetric} preview={originalStats} daily={report.daily} t={t} onOpen={setSelected}/></div>
     <div className="sw-review-aside"><section className="sw-review-card"><header><h2>{t('这段时间更新的文章','Articles in this period')}</h2>{report.articles.length>3&&<button className="sw-text-action" onClick={()=>{setTab('articles');const details=document.getElementById('sw-review-details');if(details){details.parentElement.open=true;details.scrollIntoView({block:'start'});}}}>{t('全部','All')} · {report.articles.length}</button>}</header>{report.articles.length?report.articles.slice(0,3).map(r=><button className="sw-review-record" key={r.id} onClick={()=>setSelected(r.id)}><div><strong>{r.title||t('未命名','Untitled')}</strong><small>{new Date(r.updated).toLocaleDateString(zh?'zh-CN':'en-US')}</small></div><span className="sw-status">{r.stage==='final'?t('已定稿','Final'):t('创作中','In progress')}</span></button>):<p className="sw-muted">{t('这段时间还没有文章更新。','No articles updated in this period.')}</p>}</section>
      <section className="sw-review-card"><h2>{t('素材来源','Collection types')}</h2><div className="sw-sources">{[['web',t('网页素材','Web')],['ai',t('AI 讨论','AI discussions')],['reference',t('参考资料','References')]].map(([key,label])=><div key={key}><span>{label}</span><meter min="0" max={Math.max(1,totals.collected)} value={totals[key]} aria-label={label}/><small>{fmt(totals[key])}</small></div>)}</div></section>

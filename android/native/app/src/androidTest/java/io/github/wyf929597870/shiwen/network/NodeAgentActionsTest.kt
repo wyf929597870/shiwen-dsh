@@ -30,6 +30,7 @@ class NodeAgentActionsTest {
         store.update(id, row.getString("baseUrl"), row.getString("configRevision")) {
             it.put("authenticated", true).put("cookies", JSONArray().put("node-session=fixture; Path=/"))
         }
+        server.verifyFixtureConnection(store,row.getString("id"))
         return id
     }
 
@@ -96,7 +97,7 @@ class NodeAgentActionsTest {
             assertEquals(7, rpc.getJSONObject("args").getInt("revision"))
             assertEquals("GET", server.takeRequest(2, TimeUnit.SECONDS)!!.method)
             assertEquals("mobileAgentProfile", JSONObject(server.takeRequest(2, TimeUnit.SECONDS)!!.body.readUtf8()).getString("method"))
-            assertEquals("Write POST must be issued exactly once", 3, server.requestCount)
+            assertEquals("Write POST must be issued exactly once", 3, server.afterHandshakeRequestCount)
         } finally { store.clearForTest(); server.shutdown() }
     }
 
@@ -114,7 +115,7 @@ class NodeAgentActionsTest {
             assertEquals("配置已变更，请刷新后再保存", error?.message)
             val request = server.takeRequest(2, TimeUnit.SECONDS)!!
             assertEquals("agentDocumentSave", JSONObject(request.body.readUtf8()).getString("method"))
-            assertEquals(1, server.requestCount)
+            assertEquals(1, server.afterHandshakeRequestCount)
         } finally { store.clearForTest(); server.shutdown() }
     }
 
@@ -129,7 +130,7 @@ class NodeAgentActionsTest {
             val error = runCatching { NodeAgentActions(store).saveDocument(id, "IDENTITY.md", "内容", 1) }
                 .exceptionOrNull()
             assertEquals("NODE_WRITE_RESULT_UNKNOWN", error?.message)
-            assertEquals(1, server.requestCount)
+            assertEquals(1, server.afterHandshakeRequestCount)
         } finally { store.clearForTest(); server.shutdown() }
     }
 
@@ -147,7 +148,7 @@ class NodeAgentActionsTest {
             val request = server.takeRequest(2, TimeUnit.SECONDS)!!
             assertEquals("agentDocumentSave", JSONObject(request.body.readUtf8()).getString("method"))
             assertEquals("POST", request.method)
-            assertEquals("Only the user may decide whether to retry an unacknowledged write", 1, server.requestCount)
+            assertEquals("Only the user may decide whether to retry an unacknowledged write", 1, server.afterHandshakeRequestCount)
         } finally { store.clearForTest(); server.shutdown() }
     }
 
@@ -173,8 +174,8 @@ class NodeAgentActionsTest {
             assertTrue(result.getBoolean("saved"))
             assertFalse(result.getBoolean("profileSynced"))
             assertEquals("NODE_CHANGED", result.getString("syncError"))
-            assertEquals(1, oldServer.requestCount)
-            assertEquals("Edited address must not receive a profile refresh from the old write", 0, newServer.requestCount)
+            assertEquals(1, oldServer.afterHandshakeRequestCount)
+            assertEquals("Edited address must not receive a profile refresh from the old write", 0, newServer.afterHandshakeRequestCount)
             assertNotEquals(current.getString("configRevision"), store.get(id).getString("configRevision"))
         } finally { store.clearForTest(); oldServer.shutdown(); newServer.shutdown() }
     }
@@ -249,7 +250,7 @@ class NodeAgentActionsTest {
                 .put("memories", JSONArray().put(memory("project", "文章专属要求", "project", "active", "article")))
             server.enqueue(MockResponse().setBody(JSONObject().put("result", state).toString()))
             assertEquals("MEMORY_NOT_FOUND_OR_OUT_OF_SCOPE", runCatching { NodeAgentActions(store).deleteMemory(id, "project", 1) }.exceptionOrNull()?.message)
-            assertEquals(1, server.requestCount)
+            assertEquals(1, server.afterHandshakeRequestCount)
             assertEquals("agentState", JSONObject(server.takeRequest(2, TimeUnit.SECONDS)!!.body.readUtf8()).getString("method"))
         } finally { store.clearForTest(); server.shutdown() }
     }

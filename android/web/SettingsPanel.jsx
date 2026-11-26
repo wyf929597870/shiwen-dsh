@@ -1,3 +1,4 @@
+import {WallpaperSettings} from './WallpaperSettings.jsx';
 import {MessageDialog} from './MessageDialog.jsx';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {call} from '../bridge/library.mjs';
@@ -105,8 +106,8 @@ export function SettingsPanel({ready, libraryId, libraries=[], libraryContext, c
     };
     await poll();
   },[onLibraryChange,onLibrariesRefresh,refreshNodes,t]);
-  const configureModel = () => run(async () => {
-    await call('configureModel'); await refreshModel();
+  const configureModel = revision => run(async () => {
+    await call('configureModel', revision ? {revision} : {add:true}); await refreshModel();
   });
   const configureNode = id => run(async () => {
     const result=await call('configureNode', id ? {id} : {});
@@ -168,12 +169,16 @@ export function SettingsPanel({ready, libraryId, libraries=[], libraryContext, c
 
   return <section className="settings-page" aria-label={t('设置','Settings')}>
     {!(settingsPage===initialPage&&initialPage!=='home')&&<button className="text settings-back" onClick={goSettingsHome}>‹ {t('返回设置','Back to Settings')}</button>}
-    {settingsPage==='appearance'&&<section className="settings-card"><div className="settings-heading"><div><p className="secondary">{t('应用到拾文的所有页面。','Applies across Shiwen.')}</p></div></div><div className="appearance-grid"><label>{t('主题','Theme')}<select value={theme} disabled={!ready||busy||!appearanceReady} onChange={e=>saveAppearance({theme:e.target.value})}><option value="system">{t('系统','System')}</option><option value="light">{t('浅色','Light')}</option><option value="dark">{t('深色','Dark')}</option></select></label><label>{t('语言','Language')}<select value={language} disabled={!ready||busy||!appearanceReady} onChange={e=>saveAppearance({language:e.target.value})}><option value="zh-CN">{t('中文','Chinese')}</option><option value="en">{t('英文','English')}</option></select></label></div></section>}
+    {settingsPage==='appearance'&&<section className="settings-card"><div className="settings-heading"><div><p className="secondary">{t('应用到拾文的所有页面。','Applies across Shiwen.')}</p></div></div><div className="appearance-grid"><label>{t('主题','Theme')}<select value={theme} disabled={!ready||busy||!appearanceReady} onChange={e=>saveAppearance({theme:e.target.value})}><option value="system">{t('系统','System')}</option><option value="light">{t('浅色','Light')}</option><option value="dark">{t('深色','Dark')}</option></select></label><label>{t('语言','Language')}<select value={language} disabled={!ready||busy||!appearanceReady} onChange={e=>saveAppearance({language:e.target.value})}><option value="zh-CN">{t('中文','Chinese')}</option><option value="en">{t('英文','English')}</option></select></label></div><WallpaperSettings/></section>}
     {settingsPage==='model'&&<><p className="secondary">{t('模型凭据由 Android 原生对话框管理，不会进入网页脚本。','Model credentials are managed in native Android dialogs and never enter the web page.')}</p>
     <section className="settings-card" aria-labelledby="model-settings-title">
       <div className="settings-heading"><div><h2 id="model-settings-title">{t('模型','Model')}</h2><p className="secondary">{t('用于手机上的 AI 对话，独立于电脑端配置。','Used for AI chat on this phone; separate from desktop settings.')}</p></div><span className={`state-pill ${modelIsConfigured ? 'is-ready' : ''}`}>{modelIsConfigured ? t('已配置','Configured') : t('未配置','Not configured')}</span></div>
-      {modelIsConfigured && <dl className="settings-details"><div><dt>{t('服务商','Provider')}</dt><dd>{config.name}</dd></div><div><dt>{t('模型','Model')}</dt><dd>{config.model}</dd></div><div><dt>{t('接口地址','API endpoint')}</dt><dd>{config.baseUrl}</dd></div></dl>}
-      <button className="primary" disabled={!ready || busy} onClick={configureModel}>{modelIsConfigured ? t('修改模型配置','Edit model settings') : t('配置模型','Configure model')}</button>
+      {(config?.models ?? (modelIsConfigured?[config]:[])).map(item=><div className="phone-model-entry" key={item.revision}>
+        <div><strong>{item.model}</strong>{item.revision===config.revision&&<small> · {t('默认','Default')}</small>}<p className="secondary">{item.name} · {item.baseUrl}</p></div>
+        <div><button className="chip" disabled={!ready||busy} onClick={()=>configureModel(item.revision)}>{t('编辑','Edit')}</button>
+        {item.revision!==config.revision&&<button className="text" disabled={!ready||busy} onClick={()=>run(async()=>onConfig?.(await call('defaultPhoneModel',{revision:item.revision})))}>{t('设为默认','Set as default')}</button>}</div>
+      </div>)}
+      <button className="primary" disabled={!ready || busy} onClick={()=>configureModel(null)}>{t('添加模型','Add model')}</button>
     </section></>}
     {settingsPage==='services'&&<section className="server-settings" aria-label={t('服务节点','Server nodes')}>
       {nodes.length > 0 ? <div className="node-list">{nodes.map(node => <article className="node-card" key={node.id}>

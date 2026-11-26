@@ -1,14 +1,32 @@
-import React,{useEffect,useState,useSyncExternalStore} from 'react';
+import {Recommendations} from './Recommendations.jsx';
+import {createPortal} from 'react-dom';
+import {requestRecord} from './RelatedArticles.jsx';
+import React,{useEffect,useLayoutEffect,useRef,useState,useSyncExternalStore} from 'react';
 import {recordSection} from '../../library/legacy/record-sections.mjs';
-export function HomeOverview({rpc,locale,layout}){
+function RecentIndex({rpc,locale,layout}){
  const lang=useSyncExternalStore(fn=>locale.subscribe(fn),()=>locale.getSnapshot().active),zh=String(lang).startsWith('zh'),t=(a,b)=>zh?a:b;
  const [data,setData]=useState(null),[error,setError]=useState('');
  useEffect(()=>{let live=true;const load=()=>rpc('snapshot').then(r=>{if(live){setData(r);setError('');}}).catch(()=>{if(live)setError(t('暂时无法读取资料库','Library unavailable'));});load();window.addEventListener('shiwen-library-updated',load);return()=>{live=false;window.removeEventListener('shiwen-library-updated',load);};},[]);
- if(error)return <div className="sw-home-overview"><p className="sw-muted">{error}</p></div>;
- if(!data)return null;
- const today=data.today.totals,articles=data.records.filter(r=>r.kind==='article').slice(0,2),recent=data.records.filter(r=>recordSection(r.kind)==='library').slice(0,3);
- return <div className="sw-home-overview">
-  <section className="sw-home-today"><header><h2>{t('今日积累','Today')}</h2><button onClick={()=>layout.selectPanel('shiwen-review')}>{t('查看回顾','Open review')}</button></header><div>{[[t('个人净增','Personal net'),today.net,t('字','chars')],[t('新增记录','New notes'),today.personalRecords,t('条','notes')],[t('收集素材','Collected'),today.collected,t('条','items')],[t('更新文章','Articles updated'),today.articles,t('篇','articles')]].map(([label,value,unit])=><div key={label}><span>{label}</span><p><strong>{value.toLocaleString()}</strong> <small>{unit}</small></p></div>)}</div></section>
-  <div className="sw-home-panels"><section><header><h2>{t('继续创作','Keep writing')}</h2><button onClick={()=>layout.selectPanel('shiwen-articles')}>{t('进入创作','Open writing')}</button></header>{articles.length?articles.map(r=><div className="sw-home-row" key={r.id}><strong>{r.title}</strong><small>{r.stage==='final'?t('已定稿','Final'):t('创作中','In progress')} · {r.contentDay||t('日期待确认','Date unconfirmed')}</small></div>):<p className="sw-muted">{t('从一个想法开始，慢慢写成一篇文章。','Start with an idea and develop it into an article.')}</p>}</section><section><header><h2>{t('最近记录','Recent notes')}</h2><button onClick={()=>layout.selectPanel('shiwen-library')}>{t('查看记录','Open records')}</button></header>{recent.length?recent.map(r=><div className="sw-home-row" key={r.id}><strong>{r.title}</strong><small>{r.contentDay||t('日期待确认','Date unconfirmed')}</small></div>):<p className="sw-muted">{t('在上方和助手聊聊，让它帮你记下今天。','Talk to your assistant above to capture your day.')}</p>}</section></div>
+ const rows=(data?.records??[]).filter(row=>recordSection(row.kind)).slice(0,40);
+ return <aside className="sw-home-index" aria-label={t('最近内容','Recent items')}>
+    <header><strong>{t('最近内容','Recent items')}</strong><button onClick={()=>layout.selectPanel('shiwen-library')}>{t('全部记录','All records')} ›</button></header>
+    {error&&<p role="status">{error}</p>}
+    {rows.map(row=><button className="sw-index-row" key={row.id} onClick={()=>requestRecord(row.id,layout,recordSection(row.kind))}>
+      <strong>{row.title||t('未命名','Untitled')}</strong><small>{row.contentDay||t('日期待确认','Date unconfirmed')}</small><span className="sw-row-preview">{row.body?.slice(0,180)}</span>
+    </button>)}
+    {data&&!error&&!rows.length&&<p>{t('写下的第一条记录会出现在这里。','Your first entry will appear here.')}</p>}
+  </aside>;
+}
+export function HomeOverview({rpc,locale,layout,composer}){
+ const root=useRef(null),[host,setHost]=useState(null);
+ useLayoutEffect(()=>{
+  const wide=window.matchMedia('(min-width: 1150px)');
+  const sync=()=>setHost(wide.matches?root.current?.closest('[data-phase] [data-conversation-content]'):null);
+  sync();wide.addEventListener('change',sync);
+  return()=>wide.removeEventListener('change',sync);
+ },[]);
+ return <div className="sw-home-overview" ref={root}>
+  {host&&createPortal(<RecentIndex rpc={rpc} locale={locale} layout={layout}/>,host)}
+  <Recommendations rpc={rpc} layout={layout} composer={composer}/>
  </div>;
 }

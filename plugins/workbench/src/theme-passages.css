@@ -1,0 +1,73 @@
+.sw-theme-passages { container-type: inline-size; }
+.sw-theme-card-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+  margin-top: 16px;
+}
+@container (min-width: 560px) {
+  .sw-theme-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sw-theme-card-grid[data-packed] { grid-auto-rows: 4px; row-gap: 0; }
+  .sw-theme-card-grid[data-packed] > article { grid-row-end: span var(--passage-rows, 1); }
+}
+@container (min-width: 900px) {
+  .sw-theme-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.sw-theme-card-grid .sw-theme-member {
+  --paper: var(--dsw-alias-bg-layer-1);
+  --ink: var(--dsw-alias-label-primary);
+  --caption: var(--dsw-alias-label-secondary);
+  --link: var(--dsw-alias-state-business-primary);
+  min-width: 0;
+  padding: 20px 22px 12px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid color-mix(in srgb, var(--ink) 13%, var(--paper));
+  border-radius: 18px;
+  overflow-wrap: anywhere;
+}
+.sw-theme-card-grid .sw-theme-member[data-field="excerpt"] {
+  --paper: color-mix(in srgb, #ab8957 12%, var(--dsw-alias-bg-layer-1));
+}
+.sw-theme-card-grid .sw-theme-member:first-child {
+  --paper: #cddfd8;
+  --ink: #1c3733;
+  --caption: #3f5d55;
+  --link: #174f47;
+}
+.sw-theme-card-kind {
+  display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline;
+  font: 500 12px/1.45 var(--dsw-font-family, system-ui, sans-serif);
+  color: var(--caption);
+}
+.sw-theme-card-kind small { margin-inline-start: auto; font: inherit; }
+.sw-theme-card-grid .sw-theme-member blockquote {
+  margin: 14px 0 12px; padding: 0; border: 0;
+  color: var(--ink); white-space: normal;
+  font: 400 18px/1.65 Georgia, "Noto Serif CJK SC", serif;
+}
+.sw-theme-card-grid .sw-theme-member:first-child blockquote { font-size: 21px; line-height: 1.55; }
+.sw-theme-card-grid blockquote strong { font-weight: 650; }
+.sw-theme-card-grid .sw-theme-card-source {
+  display: block; margin: 4px 0 0; color: var(--caption);
+  font: 500 13px/1.55 var(--dsw-font-family, system-ui, sans-serif);
+}
+.sw-theme-card-source::before { content: "— "; }
+.sw-theme-card-actions {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px;
+  margin-top: 14px; padding-top: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 15%, transparent);
+}
+.sw-theme-card-grid .sw-theme-member :is(.sw-theme-card-actions button, .sw-theme-quote-toggle) {
+  min-height: 32px; padding: 3px 0; border: 0; background: transparent; color: var(--link); font-size: 12px;
+}
+.sw-theme-card-actions .sw-danger { margin-inline-start: auto; }
+.sw-theme-card-grid .sw-theme-member .sw-danger { color: var(--caption); }
+.sw-theme-card-grid .sw-theme-card-actions button:enabled:hover,
+.sw-theme-card-grid .sw-theme-quote-toggle:enabled:hover { text-decoration: underline; }
+.sw-theme-card-grid .sw-theme-context { margin-top: 10px; color: var(--ink); }
+.sw-theme-card-grid .sw-theme-context pre { white-space: pre-wrap; margin-bottom: 0; }
+@media (pointer: coarse) {
+  .sw-theme-card-grid .sw-theme-member :is(.sw-theme-card-actions button, .sw-theme-quote-toggle) { min-height: 44px; }
+}

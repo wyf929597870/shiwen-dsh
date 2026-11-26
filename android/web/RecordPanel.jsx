@@ -1,3 +1,5 @@
+import {MobileExplorationEntry} from './MobileRecommendations.jsx';
+import {PhoneIcon} from './PhoneIcon.jsx';
 import {MessageDialog} from './MessageDialog.jsx';
 import {ReadingNoteSources} from '../../plugins/workbench/src/reading/ReadingNotesPage.jsx';
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
@@ -333,13 +335,15 @@ export function RecordPanel({libraryId, libraries=[], workspace, arrivalId, onAr
     <p className="secondary record-date">{t('内容日期')}：{dateText(selected.contentDay,t)} · {t('记录于')} {dateText(selected.createdAt,t)}{selected.updatedAt&&` · ${t('更新于')} ${dateText(selected.updatedAt,t)}`}</p>
           {selected.url&&<p className="record-source"><span>{t('来源链接')}</span>{safeHttp(selected.url)?<a href={safeHttp(selected.url)} target="_blank" rel="noreferrer">{selected.url}</a>:<span>{selected.url}</span>}</p>}
           {selected.dateBasis&&<p className="record-source"><span>{t('日期说明')}</span>{selected.dateBasis}</p>}{(selected.kind==='reading_note'||isReadingNoteMetadata(selected.annotation))?<ReadingNoteSources annotation={selected.annotation} t={t}/>:selected.annotation&&<p className="record-source"><span>{t('备注')}</span>{selected.annotation}</p>}
+    {workspace&&!selected.deleted&&<MobileExplorationEntry workspace={workspace} record={selected}/>}
     {workspace&&!selected.deleted&&selected.kind!=='reading_note'&&<MaterialActions record={selected} workspace={workspace} bodyRef={bodyRef}/>}
   </>;
   return <section className="record-page" aria-label={t(articles?'创作':collection?'收藏':grouped?'记录':'素材')}>
     {!detailOpen&&<>
+    {workspace&&!articles&&<MobileExplorationEntry workspace={workspace}/>}
     {onBack&&<button className="text record-back-list" onClick={onBack}>‹ {t('返回')}</button>}
     {legacyAnnotationIds.map(id=><button key={id} className="chip" disabled={busy||!draftReady||Boolean(pendingMutation)||Boolean(pendingAction)} onClick={()=>read(id)}>{t('继续旧标注草稿','Continue old annotation draft')} · {id}</button>)}
-    <div className="record-search"><div className="record-search-row"><input type="search" value={query} placeholder={t('搜索标题和正文')} onChange={e=>setQuery(e.target.value)} aria-label={t('搜索标题和正文')}/>{!articles&&<button type="button" className="record-filter-toggle" aria-label={t('按类型筛选','Filter by type')} aria-expanded={showKindFilter} aria-controls="record-kind-filter" onClick={()=>setShowKindFilter(value=>!value)}><span aria-hidden="true">☰</span>{kind&&<i aria-hidden="true"/>}</button>}</div>{!articles&&showKindFilter&&<select id="record-kind-filter" value={kind} onChange={e=>setKind(e.target.value)} aria-label={t('按类型筛选')}><option value="">{t('全部类型')}</option>{(grouped?visibleKinds:[...kinds,'article']).map(item=><option key={item} value={item}>{kindName(item,t)}</option>)}</select>}</div>
+    <div className="record-search"><div className="record-search-row"><input type="search" value={query} placeholder={t('搜索标题和正文')} onChange={e=>setQuery(e.target.value)} aria-label={t('搜索标题和正文')}/>{!articles&&<button type="button" className="record-filter-toggle" aria-label={t('按类型筛选','Filter by type')} aria-expanded={showKindFilter} aria-controls="record-kind-filter" onClick={()=>setShowKindFilter(value=>!value)}><PhoneIcon name="filter" size={18}/>{kind&&<i aria-hidden="true"/>}</button>}</div>{!articles&&showKindFilter&&<select id="record-kind-filter" value={kind} onChange={e=>{setKind(e.target.value);setShowKindFilter(false);}} aria-label={t('按类型筛选')}><option value="">{t('全部类型')}</option>{(grouped?visibleKinds:[...kinds,'article']).map(item=><option key={item} value={item}>{kindName(item,t)}</option>)}</select>}</div>
     {!legacyOnly&&<button className="primary record-create-fab" disabled={busy||!draftReady} onClick={startNew}>＋ {t(articles?'新建文章':collection?'新建收藏':'新建记录',collection?'New collection':undefined)}</button>}</>}
     <div className={`record-layout${detailOpen?' record-detail-open':''}${!detailOpen?' record-list-only':''}`}>
       {!detailOpen&&<div className="record-list" aria-label={t(articles?'文章项目':'素材列表')}>

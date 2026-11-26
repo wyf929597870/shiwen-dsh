@@ -3,6 +3,93 @@
 0.1.4 是本仓库首次公开的 Linux 预览版；0.1.0–0.1.3 为本地开发与打包记录。
 0.1.4 is this repository's first public Linux preview; 0.1.0–0.1.3 are local development builds.
 
+## v0.1.57 - 2026-11-26 (Linux、Android)
+
+- 新增待探索池。查看每个问题的出处和原句，收下、改问法、合并或略过，也可以从外部 MCP 提交带来源的候选。
+- 首页支持把已收下的问题固定到今天或本周，从卡片接着写，或关联已经写过的回应。打开首页只读取排期，略过问题或删除最后一份有效来源后会撤卡。
+- Android 独立资料库支持本地整理。绑定电脑的资料库支持离线写回应，重连后可核对提交回执并处理冲突。旧版电脑仍可同步普通记录，升级后会继续同步待传的探索操作。
+
+## v0.1.56 - 2026-11-26 (Linux、Android)
+
+- 首页单列每日精选和每周推荐。周卡不足时优先复用有依据的推荐并从个人历史原文补齐。绑定电脑的手机可离线浏览已保存的推荐及引文。
+
+## v0.1.55 - 2026-11-26 (Linux)
+
+- 主题片段改为等宽瀑布流，先读摘录，再看出处。长片段与上下文可在卡片内展开。
+
+## v0.1.54 - 2026-11-26 (Linux)
+
+- PC 工作区共用全局背景，切换首页、会话、资料库和读书笔记时保持同一张图片及暗度，明暗主题分别调整文字衬底。
+
+## v0.1.53 - 2026-11-26 (Android)
+
+- 默认背景和自选图片现在铺满手机工作区，切换首页、对话、资料库、模型或设置时共用同一张背景，保留原有图片与暗度设置。
+
+## v0.1.51 - 2026-11-26 (Android)
+
+- 手机模型配置支持从 SenseNova Token Plan、DeepSeek 和自定义兼容接口获取模型列表，一次勾选并保存多个模型供会话切换。
+
+## v0.1.50 - 2026-11-26 (Android)
+
+- 手机支持保存多份模型配置、设置默认模型，并在本机会话输入框旁选择本轮使用的模型。旧配置和密钥沿用原来的加密存储。
+
+- Android 首页提供本周推荐、今日更新与原文阅读，绑定库共用电脑卡片，独立库通过手机模型生成。回到前台时检查新材料，同一次打开内切换标签复用已有推荐。主题详情沿用桌面的片段卡片，在小屏上单列阅读。
+
+## v0.1.48 - 2026-11-26 (Linux)
+
+- 桌面主题列表与片段详情独立滚动，切换主题时详情回到顶部。宽屏片段卡片以不同宽度和自然高度错落排布。
+
+## v0.1.47 - 2026-11-26 (Linux)
+
+- 主题详情中的片段改为自适应卡片，长片段可就地展开，并可从卡片查看上下文、打开原文或移除片段。
+
+## v0.1.46 - 2026-11-26 (Linux)
+
+- 本周推荐逐条核对、保存并展示，首页可查看检查进度，MCP 可在刷新期间读取新卡。兼容模型在 JSON 前后添加说明，单条格式错误可重试。
+
+## v0.1.45 - 2026-11-26 (Linux)
+
+- 推荐分析按模型配置分配输出额度，有明确默认额度时最高使用 16,384 tokens。模型回复被截断时，首页显示分析未完成，并提供重试。
+- Recommendation analysis respects the selected model’s output budget. An interrupted analysis now has a distinct home-screen state.
+
+## v0.1.44 - 2026-11-26 (Linux)
+
+- 本周推荐新增「只看今日更新」，可查看当天新增的卡片及补充的原文。MCP 可通过 `view: "today"` 读取同一批更新。
+- 精简首页，移除「今日积累」和底部的「最近记录」「继续创作」，宽屏左侧的最近内容可直接打开原文。
+- Weekly recommendations now highlight daily additions and new evidence, with the same daily view available over MCP. The home screen keeps the wide-screen recent-items shortcut.
+
+## v0.1.43 - 2026-11-26 (Linux)
+
+- 首页可开启本周推荐，以错落卡片展示最多 10 条。点击卡片可查看原文，同周再次打开时最多增补两条。
+- 桌面和 MCP 均支持从个人记录找经验、书摘和写作选题，共享主题收录、文章草稿和推荐反馈。
+- Weekly recommendations open into source passages. Desktop and MCP clients share evidence, drafts, saved decisions and feedback.
+
+## v0.1.42 - 2026-11-25 (Linux / Android)
+
+- Linux 顶栏可直接输入关键词进行全局搜索，点击结果或按回车打开原文。侧栏已移除重复的搜索入口。
+- 点选主题后从页首显示详情；点「返回主题列表」或使用系统返回键可回到原来的浏览位置。
+- On Linux, global search now lives in the top bar. Click a result or press Enter to open its source. The duplicate sidebar entry has been removed.
+- Selecting a topic opens its details at the top. Both the on-screen and Android back buttons restore the list position.
+
+## v0.1.41 - 2026-11-25 (Linux / Android)
+
+- PC 工作台新增夜色山野背景，支持选择本地图片和调节暗度。记录列表显示日期与正文预览，阅读正文字号调为 15px。
+- 统一侧栏图标尺寸和文字对齐。记录列表与阅读工具栏的更多菜单在选择操作、点击空白处或按 Esc 后收起。
+- 安卓欢迎页支持夜色山野、自选背景和暗度调节。手机端统一导航图标，缩小记录行与阅读字号，选择对话模式或记录类型后会收起菜单。
+- The desktop workspace adds a night landscape, custom local wallpapers and dimming. Record rows show dates and excerpts, and reading text uses a 15px size.
+- Sidebar icons and labels align in both expanded and collapsed navigation. Record toolbar menus dismiss on selection, outside click or Escape.
+- Android adds a night landscape, custom wallpaper and dimming, compact record typography, and consistent navigation icons. Conversation mode and record type menus close after selection.
+
+## v0.1.40 - 2026-11-20 (Linux)
+
+- 外部 Agent 可以列出和新建主题，把日记、自由书写、读书感想或书摘中的原文片段加入主题。来源版本或引文位置发生变化时会提示重新核对。
+- External agents can list and create themes and attach exact passages from records, reflections and book highlights with revision and location checks.
+
+## v0.1.39 - 2026-11-20 (Linux / Android)
+
+- 回顾页新增「后来怎么样了」。点击「查找后续」后，桌面使用 DSH 默认模型，Android 使用手机配置的模型，从所选时段的个人记录中查找有后续的想法，并列出可打开的前后原文。
+- The new “What happened next?” action in Review pairs earlier intentions with later records and links to both originals. It uses the configured desktop or phone model on demand.
+
 ## v0.1.38 - 2026-11-20 (Linux / Android · DSH plugin 0.2.0-dev.7)
 
 - 桌面和手机按记录、读书、收藏和创作浏览。全局搜索可打开命中原文，关联画布和手机文字列表可将选中片段整理为带来源的文章大纲。

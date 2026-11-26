@@ -228,9 +228,14 @@ internal class NodeConnection(private val store: NodeSettingsStore) {
 
     internal fun workspace(id: String, revision: String, libraryId: String, deviceId: String,
         epoch: String, serverId: String, method: String, args: JSONObject): Any {
-        val writes = setOf("themeSave", "themeDelete", "themeMemberAdd", "themeMemberRemove")
-        require(method in writes || method in setOf("themeList", "themeRead", "contentSearch", "contentSearchStatus", "contentSearchEnable", "readMarkdown")) { "WORKSPACE_METHOD_DENIED" }
-        val writing = method in writes
+        val writes = setOf("shiwen_exploration_import","themeSave", "themeDelete", "themeMemberAdd", "themeMemberRemove",
+            "shiwen_recommendation_feedback", "shiwen_recommendation_refresh",
+            "shiwen_assist_save_decision", "shiwen_assist_create_draft", "shiwen_assist_add_to_theme")
+        val settingsWrite = (method == "shiwen_recommendation_settings" || method=="shiwen_exploration_settings") && (args.has("enabled") || args.has("model"))
+        require(method in writes || method in setOf("shiwen_exploration_settings","themeList", "themeRead", "contentSearch", "contentSearchStatus", "contentSearchEnable", "readMarkdown",
+            "shiwen_recommendation_settings", "shiwen_recommendation_list", "shiwen_recommendation_read",
+            "shiwen_recommendation_feedback_list", "shiwen_assist_result")) { "WORKSPACE_METHOD_DENIED" }
+        val writing = method in writes || settingsWrite
         fun verifyLibrary() {
             val identity = mobileSync(id, "identity", JSONObject().put("protocolVersion", "1.0.0-draft.3")
                 .put("deviceId", deviceId), revision).getJSONObject("data")
@@ -369,7 +374,7 @@ internal class NodeConnection(private val store: NodeSettingsStore) {
             "EPOCH_MISMATCH", "LIBRARY_MISMATCH", "DEPENDENCY_MISSING", "ATTACHMENT_MISMATCH", "PROTOCOL_UNSUPPORTED",
             "SETUP_TARGET_BUSY", "SETUP_TARGET_CHANGED", "SETUP_TARGET_NOT_EMPTY", "SETUP_LEASE_EXPIRED", "SETUP_NOT_READY",
             "SETUP_ALREADY_COMMITTED", "MANIFEST_MISMATCH", "RECONCILIATION_REQUIRED")
-        private val MOBILE_SYNC_ACTIONS = setOf("identity", "bootstrapBegin", "bootstrapPage", "changes", "push", "receipts", "ack",
+        private val MOBILE_SYNC_ACTIONS = setOf("explorationCapabilities","explorationBegin","explorationPage","explorationChanges","explorationReserve","explorationProof","explorationSubmit","explorationResolve","explorationAck","identity", "bootstrapBegin", "bootstrapPage", "changes", "push", "receipts", "ack",
             "payloadDownload", "operationPayloadBegin", "operationPayloadPart", "operationPayloadStatus", "operationPayloadCommit",
             "blobBegin", "blobPart", "blobStatus", "blobCommit", "blobDownload", "setupBegin", "setupPage", "setupStatus",
             "setupLease", "setupCommit", "setupAbort", "setupPayloadBegin", "setupPayloadPart", "setupPayloadStatus",
@@ -378,7 +383,7 @@ internal class NodeConnection(private val store: NodeSettingsStore) {
             "reconcileCandidates", "reconcileBranchRead", "reconcileDecide", "reconcileComplete", "reconcilePayloadBegin",
             "reconcilePayloadPart", "reconcilePayloadStatus", "reconcilePayloadCommit", "reconcileBlobBegin", "reconcileBlobPart",
             "reconcileBlobStatus", "reconcileBlobCommit")
-        private val MOBILE_SYNC_WRITE_ACTIONS = setOf("push", "ack", "operationPayloadBegin", "operationPayloadPart",
+        private val MOBILE_SYNC_WRITE_ACTIONS = setOf("explorationReserve","explorationSubmit","explorationResolve","explorationAck","push", "ack", "operationPayloadBegin", "operationPayloadPart",
             "operationPayloadCommit", "blobBegin", "blobPart", "blobCommit", "setupBegin", "setupPage", "setupLease",
             "setupCommit", "setupAbort", "setupPayloadBegin", "setupPayloadPart", "setupPayloadCommit", "setupBlobBegin",
             "setupBlobPart", "setupBlobCommit", "reconcileBegin", "reconcilePage", "reconcileLease", "reconcileAbort",
@@ -390,6 +395,7 @@ internal class NodeConnection(private val store: NodeSettingsStore) {
             "SESSION_CONFLICT", "MODEL_NOT_FOUND", "OPERATION_REUSED", "EPOCH_MISMATCH", "LIBRARY_MISMATCH", "DEPENDENCY_MISSING",
             "ATTACHMENT_MISMATCH", "PROTOCOL_UNSUPPORTED", "SETUP_TARGET_BUSY", "SETUP_TARGET_CHANGED", "SETUP_TARGET_NOT_EMPTY",
             "SETUP_LEASE_EXPIRED", "SETUP_NOT_READY", "SETUP_ALREADY_COMMITTED", "MANIFEST_MISMATCH", "RECONCILIATION_REQUIRED",
+            "CURSOR_EXPIRED","SNAPSHOT_EXPIRED","EXPLORATION_BINDING_CHANGED","EXPLORATION_COVERAGE_REQUIRED","FINGERPRINT_MISMATCH","RESOLUTION_STALE",
             "SESSIONS_UNAVAILABLE"
         )
         private val MANAGEMENT_ACTIONS = setOf(

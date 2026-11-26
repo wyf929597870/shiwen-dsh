@@ -42,6 +42,39 @@ class ModelTransportTest {
         toolCalls.clear()
     }
 
+    @Test fun directoryReadsOfficialAndPlanPathsAndUsesExactWireIds() {
+        val directory = ModelDirectory(okhttp3.OkHttpClient.Builder()
+            .sslSocketFactory(serverTrust.sslSocketFactory(), serverTrust.trustManager))
+        for (base in listOf("/", "/v1/")) {
+            server.enqueue(MockResponse().setBody("""{"data":[{"id":"flash","name":"Flash Name"},{"id":"flash"},{"id":2},{"id":"pro"}]}"""))
+            val request = directory.request(server.url(base).toString(), "fixture-key")
+            assertEquals(listOf(ListedModel("flash", "Flash Name"), ListedModel("pro", null)), directory.read(request.execute()))
+            val wire = server.takeRequest()
+            assertEquals("GET", wire.method)
+            assertEquals(base + "models", wire.path)
+            assertEquals("Bearer fixture-key", wire.getHeader("Authorization"))
+        }
+    }
+
+    @Test fun directoryShowsFailuresAndDoesNotForwardCredentialsOnRedirect() {
+        val directory = ModelDirectory(okhttp3.OkHttpClient.Builder()
+            .sslSocketFactory(serverTrust.sslSocketFactory(), serverTrust.trustManager))
+        val address = server.url("/v1/").toString()
+        fun fetch() = runCatching { directory.read(directory.request(address, "fixture-key").execute()) }
+        server.enqueue(MockResponse().setResponseCode(302).setHeader("Location", server.url("/other")))
+        assertEquals("HTTP_302", fetch().exceptionOrNull()?.message)
+        assertEquals(1, server.requestCount)
+        server.enqueue(MockResponse().setResponseCode(401))
+        assertEquals("HTTP_401", fetch().exceptionOrNull()?.message)
+        server.enqueue(MockResponse().setBody("""{"data":[]}"""))
+        assertEquals("EMPTY_LIST", fetch().exceptionOrNull()?.message)
+        server.enqueue(MockResponse().setBody("""{"error":"unavailable"}"""))
+        assertEquals("INVALID_LIST", fetch().exceptionOrNull()?.message)
+        val existing = ModelConfig("A", address, "a", "stored", "old")
+        assertEquals("stored", ModelConfigStore.endpointKey(existing, address, ""))
+        assertTrue(runCatching { ModelConfigStore.endpointKey(existing, server.url("/other/").toString(), "") }.isFailure)
+    }
+
     @After fun stop() { server.shutdown() }
 
     private fun chunk(delta: String, finish: String? = null): String =

@@ -329,7 +329,13 @@ class LibraryProbePlugin : Plugin() {
                 else -> node.optString("connectionState", "unknown")
             }
         }
-        JSObject().put("libraryId", repository.libraryId).put("state", state)
+        JSObject().put("libraryId", repository.libraryId).put("state", state).apply {
+            if(row.role!="standalone"){
+                val pool=io.github.wyf929597870.shiwen.library.PhoneExploration(repository)
+                put("recordChanges",repository.dao.discoveryCut())
+                put("explorationCursor",pool.get("sync","cursor",area=pool.local)?.optLong("cursor")?:0)
+            }
+        }
     }
     @PluginMethod fun libraryList(call: PluginCall) = run(call, false) {
         val activeId = repository.libraryId
@@ -583,6 +589,112 @@ class LibraryProbePlugin : Plugin() {
         val themes = io.github.wyf929597870.shiwen.library.WorkspaceThemes(repository)
         JSObject().put("result", themes.perform(call.data))
     }
+    @PluginMethod fun explorationCall(call:PluginCall)=run(call){
+        val method=call.getString("method")?:error("MISSING_METHOD")
+        val pool=io.github.wyf929597870.shiwen.library.PhoneExploration(repository)
+        if(pool.bound){
+            val binding=repository.dao.meta("nodeBinding")?.let(::JSONObject)
+            val node=binding?.let { runCatching {nodeSettings.get(it.getString("nodeId"))}.getOrNull() }
+            if(node!=null)check(node.optString("configRevision")==binding.getString("configRevision") &&
+                node.optString("connectionState") !in setOf("login-required","identity-mismatch")){"请先重新验证这台电脑，再打开探索池。"}
+        }
+        val result=pool.execute(method,call.getObject("args")?:JSObject())
+        if(!pool.bound && method=="shiwen_exploration_import")
+            io.github.wyf929597870.shiwen.library.PhoneDiscoveryWorker.enqueue(context,repository.libraryId)
+        if(pool.bound && (method=="explorationConflictResolve" || method in setOf("shiwen_exploration_review","shiwen_exploration_respond","shiwen_exploration_place","shiwen_exploration_suggest")))
+            runCatching { syncCoordinator.syncNow(repository.libraryId,"auto") }
+        JSObject().put("result",result)
+    }
+    @PluginMethod fun phoneRecSnapshot(call: PluginCall) = run(call) {
+        val row = repository.registryItem()
+        check(row.role != "standalone" && !row.serverId.isNullOrBlank() && !row.epoch.isNullOrBlank()
+            && row.serverId == call.getString("serverId") && row.epoch == call.getString("epoch")) { "STALE_CONTEXT" }
+        val key = "bound-recommendations:${row.serverId}:${row.epoch}"
+        val incoming = call.getObject("snapshot")
+        if (incoming != null) {
+            check(incoming.getJSONObject("settings").getString("libraryId") == row.libraryId) { "STALE_CONTEXT" }
+            // Split by character count to stay below Android's CursorWindow row size.
+            val text = incoming.toString()
+            repository.db.runInTransaction {
+                val stamp = incoming.getLong("stamp")
+                val header = repository.dao.meta(key)?.let(::JSONObject)
+                if (header == null || header.getLong("stamp") <= stamp) {
+                    val chunks = mutableListOf<String>()
+                    var start = 0
+                    while (start < text.length) {
+                        var end = minOf(text.length, start + 160000)
+                        if (end < text.length && text[end - 1].isHighSurrogate()) end--
+                        chunks.add(text.substring(start, end))
+                        start = end
+                    }
+                    chunks.forEachIndexed { i, chunk ->
+                        repository.dao.putMeta(io.github.wyf929597870.shiwen.library.LibraryMeta("$key:$i",chunk))
+                    }
+                    for (i in chunks.size until (header?.getInt("count") ?: 0))
+                        repository.dao.putMeta(io.github.wyf929597870.shiwen.library.LibraryMeta("$key:$i",""))
+                    repository.dao.putMeta(io.github.wyf929597870.shiwen.library.LibraryMeta(key,
+                        JSONObject().put("stamp",stamp).put("count",chunks.size).toString()))
+                }
+            }
+            JSObject().put("value",true)
+        } else {
+            val data = repository.db.runInTransaction(java.util.concurrent.Callable {
+                repository.dao.meta(key)?.let(::JSONObject)?.let { header ->
+                    buildString { repeat(header.getInt("count")) { i -> append(checkNotNull(repository.dao.meta("$key:$i"))) } }
+                }
+            })
+            JSObject().put("value", data?.let(::JSONObject) ?: JSONObject.NULL)
+        }
+    }
+    private fun recKey(key: String): String {
+        require(key == "state" || key.matches(Regex("card-[a-f0-9]{64}|receipt-[a-f0-9-]{36}"))) { "INVALID_RECOMMENDATION_KEY" }
+        return "phone-recommendation:$key"
+    }
+    @PluginMethod fun phoneRecData(call: PluginCall) = run(call) {
+        check(repository.registryItem().role == "standalone") { "请使用电脑推荐" }
+        val key = recKey(call.getString("key").orEmpty())
+        val stored = repository.dao.meta(key)
+        JSObject().put("value", stored?.let(::JSONObject) ?: JSONObject.NULL)
+    }
+    @PluginMethod fun phoneRecCommit(call: PluginCall) = run(call) {
+        check(repository.registryItem().role == "standalone") { "请使用电脑推荐" }
+        val state = call.getObject("state") ?: error("INVALID_STATE")
+        val expected = call.getInt("expected") ?: error("MISSING_REVISION")
+        repository.db.runInTransaction {
+            val old = repository.dao.meta(recKey("state"))?.let(::JSONObject)
+            check((old?.getInt("version") ?: 0) == expected && state.getInt("version") == expected + 1) { "推荐已更新，请重试" }
+            call.getObject("card")?.let { card ->
+                repository.dao.putMeta(io.github.wyf929597870.shiwen.library.LibraryMeta(recKey("card-" + card.getString("cardId")), card.toString()))
+            }
+            call.getObject("receipt")?.let { receipt ->
+                repository.dao.putMeta(io.github.wyf929597870.shiwen.library.LibraryMeta(recKey(receipt.getString("key").orEmpty()),receipt.toString()))
+            }
+            repository.dao.putMeta(io.github.wyf929597870.shiwen.library.LibraryMeta(recKey("state"), state.toString()))
+        }
+        JSObject().put("saved", true)
+    }
+    @PluginMethod fun phoneRecSources(call: PluginCall) = run(call) {
+        check(repository.registryItem().role == "standalone")
+        val rows = repository.dao.recommendationBatch(call.getString("after").orEmpty())
+        JSObject().put("rows", JSArray(rows.map { row ->
+            JSONObject().put("id", row.id).put("title", row.title).put("kind", row.kind)
+                .put("revision", row.revision).put("updated", row.updatedAt).put("origin", row.origin)
+                .put("contentDay", row.contentDay ?: JSONObject.NULL).put("annotation", row.annotation ?: JSONObject.NULL)
+                .put("sourceSpans", org.json.JSONArray(row.sourcesJson)).put("markdown",row.markdown)
+        }))
+    }
+    @PluginMethod fun phoneRecAction(call: PluginCall) = run(call) {
+        val result = io.github.wyf929597870.shiwen.library.PhoneRecommendationAction(repository).perform(
+            call.getString("method").orEmpty(), call.getObject("args") ?: error("INVALID_ACTION"),
+            call.getArray("quotes") ?: JSArray())
+        JSObject(result.toString())
+    }
+    @PluginMethod fun phoneRecAnalyze(call: PluginCall) = run(call, network = true) {
+        check(repository.registryItem().role == "standalone")
+        val settings = repository.dao.meta(recKey("state"))?.let(::JSONObject) ?: error("请先开启推荐")
+        check(settings.optBoolean("enabled") && settings.getInt("revision") == call.getInt("revision")) { "推荐设置已变化" }
+        agent.generateFromPassages(call.getString("instruction").orEmpty(), call.getString("input").orEmpty(), 4096)
+    }
     @PluginMethod fun workspaceRemote(call: PluginCall) = run(call, network = true) {
         val row = repository.registryItem()
         val binding = repository.dao.meta("nodeBinding")?.let(::JSONObject) ?: error("请先连接此资料库的电脑")
@@ -703,8 +815,18 @@ class LibraryProbePlugin : Plugin() {
             .put("requestId", d.requestId).put("title", d.title).put("markdown", d.markdown)
             .put("kind", d.kind).put("localGeneration", d.generation))
     }
+    @PluginMethod fun reviewFollowups(call: PluginCall) = run(call, network = true) {
+        agent.reviewFollowups(call.getString("instruction").orEmpty(), call.getString("input").orEmpty())
+    }
     @PluginMethod fun modelConfig(call: PluginCall) = run(call) {
-        agent.configs.read()?.let { JSObject(it.publicJson().toString()) } ?: JSObject().put("configured", false)
+        JSObject(agent.configs.catalog().toString())
+    }
+    @PluginMethod fun defaultPhoneModel(call: PluginCall) = run(call) {
+        agent.configs.makeDefault(call.getString("revision").orEmpty())
+        JSObject(agent.configs.catalog().toString())
+    }
+    @PluginMethod fun agentSelectModel(call: PluginCall) = run(call) {
+        agent.selectModel(call.getString("conversationId").orEmpty(), call.getString("revision").orEmpty())
     }
     @PluginMethod fun configureModel(call: PluginCall) = trusted({
         val admitted = generation.get()
@@ -715,7 +837,8 @@ class LibraryProbePlugin : Plugin() {
         else libraryExecutor.execute {
             try {
                 check(generation.get() == admitted) { "STALE_CONTEXT" }
-                ModelConfigDialog.show(activity, PhoneAgent.get(context, activeRepo).configs, libraryExecutor) {
+                ModelConfigDialog.show(activity, PhoneAgent.get(context, activeRepo).configs, libraryExecutor,
+                    call.getString("revision"), call.getBoolean("add") == true) {
                     modelDialogOpen.set(false)
                     libraryExecutor.execute {
                         if (generation.get() != admitted) call.reject("STALE_CONTEXT")

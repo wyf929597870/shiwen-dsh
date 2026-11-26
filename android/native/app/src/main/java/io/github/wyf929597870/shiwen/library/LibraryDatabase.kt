@@ -100,8 +100,30 @@ data class LibraryDraft(@PrimaryKey val slot: String, val requestId: String, val
 
 data class ReferenceTitle(val id: String, val title: String, val deleted: Boolean)
 
+@Entity(tableName = "exploration_objects", primaryKeys = ["scope","kind","key"])
+data class ExplorationObject(val scope: String, val kind: String, val key: String, val data: String)
+
+data class ExplorationRecordState(val id:String,val title:String,val kind:String,val deleted:Boolean,val revision:Long,val serverRevision:Long?,val syncState:String)
+
+@Entity(tableName="exploration_changes")
+data class ExplorationChange(@PrimaryKey(autoGenerate=true) val seq:Long=0, val record:String, val revision:Long)
+
 @Dao
 interface LibraryDao {
+    @Query("SELECT id,title,kind,deleted,revision,serverRevision,syncState FROM records WHERE id=:id")
+    fun explorationRecordState(id:String):ExplorationRecordState?
+    @Query("SELECT * FROM exploration_objects WHERE scope=:scope AND kind=:kind AND `key`>=:begin AND `key`<:end ORDER BY rowid")
+    fun explorationQuestionEntries(scope:String,kind:String,begin:String,end:String):List<ExplorationObject>
+    @Query("SELECT * FROM exploration_objects WHERE scope=:scope AND kind=:kind AND `key`=:key")
+    fun explorationObject(scope: String, kind: String, key: String): ExplorationObject?
+    @Query("SELECT * FROM exploration_objects WHERE scope=:scope AND kind=:kind ORDER BY rowid")
+    fun explorationList(scope: String, kind: String): List<ExplorationObject>
+    @Insert(onConflict = OnConflictStrategy.REPLACE) fun putExploration(row: ExplorationObject)
+    @Query("DELETE FROM exploration_objects WHERE scope=:scope AND kind=:kind AND `key`=:key")
+    fun dropExploration(scope: String, kind: String, key: String)
+    @Query("DELETE FROM exploration_objects WHERE scope=:scope") fun clearExplorationScope(scope: String)
+    @Query("SELECT * FROM exploration_objects WHERE scope=:scope ORDER BY rowid") fun explorationScope(scope: String): List<ExplorationObject>
+
     @Query("SELECT id, title, deleted FROM records WHERE id IN (:ids)")
     fun referenceTitles(ids: List<String>): List<ReferenceTitle>
 
@@ -109,8 +131,12 @@ interface LibraryDao {
     fun records(query: String, kind: String?, includeDeleted: Boolean, limit: Int, offset: Int, excludeKind: String? = null, section: String? = null): List<LibraryRecord>
     @Query("SELECT * FROM records WHERE id>:after AND deleted=0 AND kind!='ai_annotation' ORDER BY id LIMIT 8")
     fun workspaceBatch(after: String): List<LibraryRecord>
+    @Query("SELECT * FROM records WHERE id>:after AND deleted=0 AND (kind='reading_note' OR (origin='personal' AND kind IN ('idea','journal','freewrite'))) ORDER BY id LIMIT 8")
+    fun recommendationBatch(after: String): List<LibraryRecord>
     @Query("SELECT value FROM library_meta WHERE `key` LIKE 'workspace-theme:%' ORDER BY `key`")
     fun workspaceThemes(): List<String>
+    @Query("SELECT * FROM library_meta WHERE `key` LIKE 'phone-recommendation:card-%' AND `key`>:after ORDER BY `key` LIMIT 20")
+    fun legacyExplorationCards(after:String):List<LibraryMeta>
     @Query("DELETE FROM library_meta WHERE `key`=:key")
     fun removeWorkspaceMeta(key: String)
     @Query("SELECT * FROM records WHERE id=:id") fun record(id: String): LibraryRecord?
@@ -120,6 +146,11 @@ interface LibraryDao {
     fun duplicateJournalDays(): List<String>
     @Query("SELECT * FROM records WHERE kind='journal' AND deleted=0 AND contentDay=:day ORDER BY createdAt,id")
     fun journalsForDay(day: String): List<LibraryRecord>
+    @Query("SELECT COALESCE(MAX(seq),0) FROM exploration_changes") fun discoveryCut():Long
+    @Query("SELECT * FROM exploration_changes WHERE seq>:after AND seq<=:end ORDER BY seq LIMIT 1")
+    fun nextDiscoveryChange(after:Long,end:Long):ExplorationChange?
+    @Query("SELECT * FROM exploration_changes WHERE seq<:before ORDER BY seq DESC LIMIT 1")
+    fun previousDiscoveryChange(before:Long):ExplorationChange?
     @Query("SELECT * FROM records ORDER BY id") fun allRecords(): List<LibraryRecord>
     @Query("SELECT * FROM heads WHERE recordId=:id") fun head(id: String): LibraryHead?
     @Query("SELECT * FROM heads ORDER BY recordId") fun allHeads(): List<LibraryHead>
@@ -133,6 +164,8 @@ interface LibraryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) fun putLink(row: LibraryLink)
     @Query("DELETE FROM links WHERE articleId=:articleId") fun clearLinks(articleId: String)
     @Query("SELECT * FROM links WHERE articleId=:articleId ORDER BY materialId") fun links(articleId: String): List<LibraryLink>
+    @Query("UPDATE attachments SET uploaded=1 WHERE recordId=:recordId AND id=:id AND name=:name AND hash=:hash AND byteLength=:size")
+    fun confirmAttachedBlob(recordId: String, id: String, name: String, hash: String, size: Long)
     @Insert(onConflict = OnConflictStrategy.REPLACE) fun putAttachment(row: LibraryAttachment)
     @Query("SELECT * FROM attachments WHERE recordId=:recordId ORDER BY createdAt,id") fun attachments(recordId: String): List<LibraryAttachment>
     @Query("SELECT * FROM attachments WHERE downloaded=0 ORDER BY recordId,id") fun attachmentsNotDownloaded(): List<LibraryAttachment>
@@ -163,6 +196,8 @@ interface LibraryDao {
     @Query("SELECT * FROM receipts ORDER BY requestId") fun allReceipts(): List<LibraryReceipt>
     @Insert(onConflict = OnConflictStrategy.ABORT) fun insertOutbox(row: LibraryOutbox)
     @Query("SELECT * FROM outbox WHERE state IN ('pending','unknown','blocked-dependency') ORDER BY createdAt, operationId LIMIT :limit") fun pendingOutbox(limit: Int): List<LibraryOutbox>
+    @Query("SELECT EXISTS(SELECT 1 FROM outbox WHERE recordId IN (:ids) AND state NOT IN ('applied','confirmed','snapshot-covered'))")
+    fun hasPendingSourceChanges(ids:List<String>):Boolean
     @Query("SELECT * FROM outbox ORDER BY createdAt,operationId") fun allOutbox(): List<LibraryOutbox>
     @Query("SELECT * FROM outbox WHERE operationId=:id") fun outbox(id: String): LibraryOutbox?
     @Query("SELECT * FROM outbox WHERE versionId=:versionId ORDER BY createdAt,operationId LIMIT 1") fun outboxByVersionId(versionId: String): LibraryOutbox?
@@ -184,8 +219,27 @@ interface LibraryDao {
 @Database(entities = [LibraryRecord::class, LibraryVersion::class, LibraryActivity::class, LibraryLink::class,
     LibraryAttachment::class, LibraryOutbox::class, LibraryReceipt::class, LibraryConflict::class, LibraryMeta::class,
     LibraryDraft::class, LibraryHead::class, LibraryProvenance::class, LibraryRemoteHead::class, LibraryBranch::class,
-    LibraryBranchAttachment::class], version = 7, exportSchema = true)
+    LibraryBranchAttachment::class, ExplorationObject::class, ExplorationChange::class], version = 8, exportSchema = true)
 abstract class LibraryDatabase : RoomDatabase() { abstract fun dao(): LibraryDao }
+
+// Room already holds the schema transaction on create and migration. Ordinary opens must stay read-only.
+private fun installExplorationJournal(db:SupportSQLiteDatabase){
+    db.execSQL("CREATE TRIGGER IF NOT EXISTS exploration_record_insert AFTER INSERT ON records BEGIN INSERT INTO exploration_changes(record,revision) VALUES(NEW.id,NEW.revision); END")
+    db.execSQL("CREATE TRIGGER IF NOT EXISTS exploration_record_update AFTER UPDATE OF revision,deleted ON records WHEN OLD.revision<>NEW.revision OR OLD.deleted<>NEW.deleted BEGIN INSERT INTO exploration_changes(record,revision) VALUES(NEW.id,NEW.revision); END")
+    db.execSQL("INSERT INTO exploration_changes(record,revision) SELECT id,revision FROM records WHERE NOT EXISTS(SELECT 1 FROM exploration_changes) ORDER BY updatedAt,id")
+}
+
+val EXPLORATION_CHANGE_CALLBACK = object:RoomDatabase.Callback(){
+    override fun onCreate(db:SupportSQLiteDatabase){installExplorationJournal(db)}
+}
+
+val LIBRARY_MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS exploration_changes (seq INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, record TEXT NOT NULL, revision INTEGER NOT NULL)")
+        installExplorationJournal(db)
+        db.execSQL("CREATE TABLE IF NOT EXISTS exploration_objects (scope TEXT NOT NULL, kind TEXT NOT NULL, `key` TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(scope,kind,`key`))")
+    }
+}
 
 val LIBRARY_MIGRATION_6_7 = object : Migration(6, 7) {
     override fun migrate(db: SupportSQLiteDatabase) { db.execSQL("ALTER TABLE `versions` ADD COLUMN `journalInputJson` TEXT") }

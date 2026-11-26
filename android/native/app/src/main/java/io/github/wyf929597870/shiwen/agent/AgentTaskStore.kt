@@ -65,9 +65,13 @@ internal interface AgentTaskDao {
     @Query("DELETE FROM agent_tasks WHERE conversationId=:conversationId") fun deleteTasks(conversationId: String): Int
     @Query("DELETE FROM agent_drafts WHERE conversationId=:conversationId") fun deleteDrafts(conversationId: String): Int
     @Query("DELETE FROM agent_conversations WHERE id=:id AND readOnly=0") fun deleteConversation(id: String): Int
-    @Query("UPDATE agent_conversations SET model=:model, modelRevision=:revision, title=:title, profileRevision=:profileRevision, profileAgentId=:profileAgentId, profileNodeId=:profileNodeId, systemContext=:systemContext, updatedAt=:at WHERE id=:id AND modelRevision IS NULL AND readOnly=0")
+    @Query("UPDATE agent_conversations SET model=:model, modelRevision=:revision, title=:title, profileRevision=:profileRevision, profileAgentId=:profileAgentId, profileNodeId=:profileNodeId, systemContext=:systemContext, updatedAt=:at WHERE id=:id AND (modelRevision IS NULL OR modelRevision=:revision) AND archived=0 AND readOnly=0")
     fun bindConversation(id: String, model: String, revision: String, title: String, profileRevision: String?,
         profileAgentId: String?, profileNodeId: String?, systemContext: String?, at: String): Int
+    @Query("UPDATE agent_conversations SET model=:model, modelRevision=:revision WHERE id=:id AND readOnly=0 AND archived=0")
+    fun selectModel(id: String, model: String, revision: String): Int
+    @Query("SELECT EXISTS(SELECT 1 FROM agent_tasks WHERE conversationId=:id)")
+    fun hasTurns(id: String): Boolean
     @Query("UPDATE agent_conversations SET updatedAt=:at WHERE id=:id") fun touchConversation(id: String, at: String)
     @Insert(onConflict = OnConflictStrategy.REPLACE) fun saveSessionState(state: AgentSessionState)
     @Query("SELECT activeId FROM agent_session_state WHERE `key`='active'") fun activeConversationId(): String?
