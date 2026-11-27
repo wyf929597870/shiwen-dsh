@@ -1,4 +1,6 @@
+import {MoreRows,usePullRefresh} from './ListInteractions.jsx';
 import React,{useEffect,useRef,useState} from 'react';
+import {ExplorationSteps,ResponseSteps,stepDraft} from './ExplorationSteps.jsx';
 import {Drawer,openQuote} from './RecommendationDetail.jsx';
 
 const stateLabels={pending:'待筛选',accepted:'已收下',observing:'观察中',skipped:'已略过',answered:'已回答'};
@@ -17,7 +19,7 @@ function RecordPicker({rpc,libraryId,onPick,personal=false}){
   <button onClick={()=>search()}>查找</button>{page?.items.filter(r=>!personal||r.origin==='personal').map(r=><article className="sw-rec-quote" key={r.id}>
    <small>{r.day} · {r.title}</small><p>{r.excerpt}</p>{personal&&<details><summary>关联其中一句</summary><label>回应原句<input value={quotes[r.id]??''} onChange={e=>setQuotes(old=>({...old,[r.id]:e.target.value}))}/></label></details>}
    <button onClick={()=>onPick({...r,quote:quotes[r.id]})}>选择这篇</button></article>)}
-  {page?.nextOffset!=null&&<button onClick={()=>search(page.nextOffset)}>更多记录</button>}{page?.items.length===0&&<p>没有找到记录。</p>}
+  {page?.nextOffset!=null&&<MoreRows cursor={page.nextOffset} onClick={()=>search(page.nextOffset)}>更多记录</MoreRows>}{page?.items.length===0&&<p>没有找到记录。</p>}
   {error&&<p role="alert">{error}</p>}</div>;
 }
 
@@ -42,7 +44,12 @@ function SourceReview({item,rpc,libraryId,onClose}){
   <button disabled={busy||missing.some(id=>!mapped[id])} onClick={resolve}>确认出处</button>{error&&<p role="alert">{error}</p>}</Drawer>;
 }
 
-export function ExplorationQuestion({initial,rpc,layout,onClose,readOnly=false}){
+export function ExplorationQuestion({initial,rpc,layout,onClose,readOnly=false,resume=false}){
+ const [stepForm,setStepForm]=useState(()=>{
+  const next=initial.nextStep;
+  if(resume&&next&&(!next.reviewDay||next.reviewDay<=initial.placements?.day?.key)&&['ask','trial'].includes(next.kind))return stepDraft(next.kind==='trial'?'result':'judgment',next);
+  return null;
+ });
  const [q,setQ]=useState(initial),[mode,setMode]=useState(''),[text,setText]=useState(''),[error,setError]=useState('');
  const [busy,setBusy]=useState(false),[replacements,setReplacements]=useState(null);
  useEffect(()=>{
@@ -70,11 +77,18 @@ export function ExplorationQuestion({initial,rpc,layout,onClose,readOnly=false})
     setReplacements({period:args.period,options});return;
    }
    pending.current.clear();setQ(updated);setMode('');setText('');setReplacements(null);
-   window.dispatchEvent(new Event('shiwen-library-updated'));
+   window.dispatchEvent(new Event('shiwen-library-updated'));return true;
   }catch(e){
    setError(e.message);
    try{setQ(await rpc('shiwen_exploration_read',{expectedLibraryId:q.libraryId,questionId:q.questionId}));}catch{}
   }finally{active.current=false;setBusy(false);}
+ }
+ const last=q.responses[0];
+ const canStep=!readOnly&&['accepted','pending'].includes(q.status)&&Array.isArray(q.steps)&&q.stepsSupported!==false;
+ function startStep(form){setMode('');setStepForm(form);}
+ function responseSteps(r){return canStep&&!mode&&!stepForm&&<ResponseSteps response={r} start={startStep}/>;}
+ function openPassage(s){
+  onClose();openQuote({...s,text:s.quote??''},layout,q.libraryId);
  }
  const review=(action,extra={})=>write('review',{action,...extra});
  function place(period,action,replaceQuestionId){
@@ -83,6 +97,7 @@ export function ExplorationQuestion({initial,rpc,layout,onClose,readOnly=false})
  }
  return <Drawer title={q.type==='follow_up'?'待跟进':'待探索'} onClose={onClose}>
   <small>{stateLabels[q.status]}</small><h2>{q.text}</h2>
+  <ExplorationSteps q={q} busy={busy} form={stepForm} setForm={startStep} readOnly={readOnly||!!mode} save={args=>write('step',args)}/>
   {q.text!==q.originalText&&<p>原提问 · {q.originalText}</p>}
   {q.sources.map((s,i)=><article key={i} className="sw-rec-quote"><small>{s.label} · {s.contentDay||'日期待确认'}</small>
    {s.quote&&<blockquote>{s.quote}</blockquote>}<button onClick={()=>{onClose();openQuote({...s,text:s.quote??''},layout,q.libraryId);}}>{s.title||'打开原文'} ↗</button>
@@ -92,8 +107,16 @@ export function ExplorationQuestion({initial,rpc,layout,onClose,readOnly=false})
    {!readOnly&&['merge','keep_separate'].map(action=><button key={action} disabled={busy} onClick={()=>review(action,{targetQuestionId:m.questionId,expectedTargetRevision:m.revision,evidenceFingerprint:m.evidenceFingerprint})}>{action==='merge'?'合并到这个问题':'分别保留'}</button>)}</section>)}
   {q.mergedQuestions?.map(m=><p key={m.decisionId}>已合并 · {m.text} {!readOnly&&<button disabled={busy} onClick={()=>review('undo_merge',{questionId:m.questionId,expectedRevision:m.revision,targetQuestionId:q.questionId,expectedTargetRevision:q.revision,decisionId:m.decisionId})}>撤销合并</button>}</p>)}
   {!q.sources.length&&<p>当前没有有效来源。</p>}
-  {q.responses.map(r=><p key={r.recordId}>已有回应 · <button onClick={()=>{onClose();openQuote({recordId:r.recordId,kind:r.kind,...r.passage,text:r.passage?.quote??""},layout,q.libraryId);}}>{r.title||"打开回应"} ↗</button></p>)}
-  {!readOnly&&<fieldset disabled={busy} className="sw-rec-actions">
+  {last&&mode!=='respond'&&<article className="sw-rec-quote"><small>上次回应{last.contentDay&&' · '+last.contentDay}</small>
+   <blockquote>{last.preview}</blockquote><button onClick={()=>openPassage({...last,...last.passage})}>{last.title||'打开回应'} ↗</button>{responseSteps(last)}</article>}
+  {q.responses.length>0&&<details><summary>已有回应 · {q.responses.length}</summary>{q.responses.map(r=><article key={r.recordId}>
+   {r.contentDay} <button onClick={()=>openPassage({...r,...r.passage})}>{r.title||'打开回应'} ↗</button>{r.recordId!==last?.recordId&&<><blockquote>{r.preview}</blockquote>{responseSteps(r)}</>}</article>)}</details>}
+  {q.clues?.map(c=><article key={c.recordId} className="sw-rec-quote"><small>可能有关的后续 · {c.contentDay}</small>
+   <blockquote>{c.quote}</blockquote><button onClick={()=>openPassage(c)}>{c.title||'打开原文'} ↗</button>
+   {!readOnly&&<div className="sw-rec-actions"><button disabled={busy} onClick={()=>write('respond',{responseRecordId:c.recordId,sourceRevision:c.revision,
+     passage:{recordId:c.recordId,revision:c.revision,field:c.field,start:c.start,end:c.end,quote:c.quote}})}>关联为回应</button>
+    <button disabled={busy} onClick={()=>review('dismiss_clue',{recordId:c.recordId,sourceRevision:c.revision})}>这篇无关</button></div>}</article>)}
+  {!readOnly&&<fieldset disabled={busy||!!stepForm} className="sw-rec-actions">
    {q.status==='skipped'?<button onClick={()=>review('restore')}>撤销略过</button>:<>
     {q.status==='pending'&&<button onClick={()=>review('accept')}>收下</button>}
     <button onClick={()=>{setMode('rewrite');setText(q.text);}}>改个问法再收下</button>
@@ -105,11 +128,11 @@ export function ExplorationQuestion({initial,rpc,layout,onClose,readOnly=false})
     })}
     <button onClick={()=>{responseId.current=crypto.randomUUID();setMode('respond');setText('');}}>{q.type==='follow_up'?'补记后来发生了什么':'接着写'}</button>
     <button onClick={()=>setMode('link')}>关联已有回应</button>
-    {q.status!=='answered'&&q.responses.length>0&&<button onClick={()=>review('answered')}>已经回答</button>}
+    {q.status!=='answered'&&(q.responses.length>0||q.steps?.length>0)&&<button onClick={()=>review('answered')}>已经回答</button>}
     <button onClick={()=>review('skip')}>略过</button></>}
   </fieldset>}
   {mode==='link'&&<RecordPicker rpc={rpc} libraryId={q.libraryId} personal onPick={r=>write('respond',{responseRecordId:r.id,sourceRevision:r.revision,...(r.quote?{passage:{recordId:r.id,revision:r.revision,quote:r.quote}}:{})})}/>}
-  {['rewrite','respond'].includes(mode)&&<div><label>{mode==='rewrite'?'我的问法':'自由书写'}<textarea autoFocus value={text} onChange={e=>setText(e.target.value)}/></label>
+  {['rewrite','respond'].includes(mode)&&<div>{mode==='respond'&&last&&<article className="sw-rec-quote"><small>上次回应{last.contentDay&&' · '+last.contentDay}</small><blockquote>{last.preview||last.title}</blockquote></article>}<label>{mode==='rewrite'?'我的问法':'自由书写'}<textarea autoFocus value={text} onChange={e=>setText(e.target.value)}/></label>
    <button disabled={busy||!text.trim()} onClick={()=>mode==='rewrite'?review('rewrite',{text}):write('respond',{responseRecordId:responseId.current,body:text})}>保存</button>
    <button disabled={busy} onClick={()=>setMode('')}>取消</button></div>}
   {replacements&&<div><p>固定位已满，选择要替换的问题。</p>{replacements.options.map(o=><button key={o.questionId} disabled={busy} onClick={()=>place(replacements.period,'replace',o.questionId)}>{o.text}</button>)}
@@ -161,7 +184,7 @@ function AddQuestion({rpc,libraryId,recordId,revision,selection,onAdded}){
  <label>引用原句（留空关联整篇）<textarea value={quote} onChange={e=>setQuote(e.target.value)}/></label>
  <button disabled={!text.trim()||busy} onClick={save}>加入原始池</button>{error&&<p role="alert">{error}</p>}</details>;
 }
-export function ExplorationEntry({rpc,layout,recordId,revision,sourceLibraryId,label='待探索'}){
+export function ExplorationEntry({rpc,layout,recordId,revision,sourceLibraryId,compact=false,label='待探索'}){
  const [open,setOpen]=useState(false),[view,setView]=useState('raw'),[page,setPage]=useState(null),[selected,setSelected]=useState(null);
  const [error,setError]=useState(''),[tick,setTick]=useState(0);
  const seq=useRef(0);const [selection,setSelection]=useState(''),[type,setType]=useState('');
@@ -179,15 +202,20 @@ export function ExplorationEntry({rpc,layout,recordId,revision,sourceLibraryId,l
   const reload=()=>setTick(t=>t+1);window.addEventListener('shiwen-library-updated',reload);
   return()=>{seq.current++;window.removeEventListener('shiwen-library-updated',reload);};
  },[open,recordId,view,tick,rpc,type,sourceLibraryId]);
- return <><button onClick={()=>{setSelection(window.getSelection()?.toString()||'');setOpen(true);}}>{label}</button>{open&&<Drawer title="待探索" onClose={()=>setOpen(false)}>
-  <h2>{recordId?'这篇记录的待探索':'待探索'}</h2><div className="sw-rec-actions">{Object.entries({raw:'原始池（待筛选）',accepted:'探索池（已收下）',skipped:'已略过',...(!recordId?{reviews:'来源待核对'}:{})}).map(([key,title])=>
+ const refreshRef=usePullRefresh(()=>load(),open);
+ const Tools=compact?'details':React.Fragment;
+ return <><button className="sw-pool-entry" onClick={()=>{setSelection(window.getSelection()?.toString()||'');setOpen(true);}}>{label}</button>{open&&<Drawer title="待探索" onClose={()=>setOpen(false)}>
+  <h2 ref={refreshRef}>{recordId?'这篇记录的待探索':'待探索'}</h2><div className="sw-rec-actions pool-views">{Object.entries({raw:'原始池（待筛选）',accepted:'探索池（已收下）',skipped:'已略过',...(!recordId?{reviews:'来源待核对'}:{})}).map(([key,title])=>
    <button key={key} aria-pressed={view===key} onClick={()=>setView(key)}>{title}</button>)}</div>
+  <Tools {...(compact?{className:'phone-pool-tools'}:{})}>
+  {compact&&<summary>{type&&view!=='reviews'?(type==='explore'?'待探索':'待跟进')+' · ':''}{recordId?'筛选与提问':'筛选与整理'}</summary>}
   {recordId&&revision&&page&&<AddQuestion rpc={rpc} libraryId={page.libraryId} recordId={recordId} revision={revision} selection={selection} onAdded={()=>{setView('raw');setTick(t=>t+1);}}/>}
   {view!=='reviews'&&<label>类型<select value={type} onChange={e=>setType(e.target.value)}><option value="">全部</option><option value="explore">待探索</option><option value="follow_up">待跟进</option></select></label>}
   {!recordId&&page?.libraryId&&<DiscoveryControls rpc={rpc} libraryId={page.libraryId} onComplete={()=>load()}/>}
-  {error&&<p role="alert">{error}</p>}{page?.items.map(q=>q.reviewItemId?<article key={q.reviewItemId} className="sw-rec-quote"><button onClick={()=>setSelected({...q,libraryId:page.libraryId})}>{q.discovery.text}</button></article>:<article className="sw-rec-quote" key={q.questionId}><small>{q.possibleDuplicates?.length>0&&'可能重复 · '}{stateLabels[q.status]} · {q.sources[0]?.title||'来源已失效'}</small>
+  </Tools>
+  {error&&<p role="alert">{error}</p>}{page?.items.map(q=>q.reviewItemId?<article key={q.reviewItemId} className="sw-rec-quote"><button onClick={()=>setSelected({...q,libraryId:page.libraryId})}>{q.discovery.text}</button></article>:<article className="sw-rec-quote pool-question" key={q.questionId}><small>{q.possibleDuplicates?.length>0&&'可能重复 · '}{stateLabels[q.status]} · {q.sources[0]?.title||'来源已失效'}</small>
    <button onClick={()=>setSelected(q)}>{q.text}</button></article>)}
-  {page&&!page.items.length&&<p>这里暂时没有问题。</p>}{page?.nextCursor!=null&&<button onClick={()=>load(page.nextCursor)}>加载更多</button>}
+  {page&&!page.items.length&&<p>这里暂时没有问题。</p>}{page?.nextCursor!=null&&<MoreRows cursor={page.nextCursor} onClick={()=>load(page.nextCursor)}>加载更多</MoreRows>}
  </Drawer>}{open&&selected?.reviewItemId&&<SourceReview item={selected} rpc={rpc} libraryId={selected.libraryId} onClose={()=>setSelected(null)}/>}
  {open&&selected?.questionId&&<ExplorationQuestion initial={selected} rpc={rpc} layout={layout} onClose={()=>setSelected(null)}/>}</>;
 }

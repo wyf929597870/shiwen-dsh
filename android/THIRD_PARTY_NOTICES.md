@@ -33,3 +33,11 @@ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
 CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+## Android offline semantic search
+
+The bundled BGE Base Chinese v1.5 weights and vocabulary are from BAAI (MIT), exported to ONNX by Xenova. Android uses Microsoft ONNX Runtime 1.22.0 (MIT). Model revision and asset checksums are pinned in app/build.gradle.
+
+https://huggingface.co/BAAI/bge-base-zh-v1.5
+https://huggingface.co/Xenova/bge-base-zh-v1.5
+https://github.com/microsoft/onnxruntime

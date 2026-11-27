@@ -79,6 +79,7 @@ class LibraryRepository internal constructor(
         registryRow.dbFile).addMigrations(LIBRARY_MIGRATION_1_2, LIBRARY_MIGRATION_2_3, LIBRARY_MIGRATION_3_4,
             LIBRARY_MIGRATION_4_5, LIBRARY_MIGRATION_5_6, LIBRARY_MIGRATION_6_7, LIBRARY_MIGRATION_7_8).addCallback(EXPLORATION_CHANGE_CALLBACK).openHelperFactory(LargeRowOpenHelperFactory()).build()
     val dao get() = db.dao()
+    internal val semanticSearch by lazy { PhoneSemanticSearch(app, this) }
     fun context() = LibraryContext(libraryId, registryRow.pageGeneration, registryRow.role, registryRow.integrity, deviceId)
     fun registryItem(): LibraryRegistryRow = registryRow
     internal fun updateRegistry(row: LibraryRegistryRow) { check(row.libraryId == libraryId); registryRow = row }

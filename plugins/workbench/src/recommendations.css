@@ -34,3 +34,9 @@
 .sw-daily-grid .sw-rec-card { display:grid; gap:8px; text-align:start; padding:16px; border-radius:12px; border:1px solid #4e6467; background:#23383b; color:#edf4f4; cursor:pointer; min-width:0; }
 .sw-daily-grid .sw-rec-card strong { font:550 18px/1.5 Georgia,serif; }
 @container (max-width:440px) { .sw-daily-grid { grid-template-columns:minmax(0,1fr); } }
+.sw-step-form label {display:grid;gap:4px;margin-bottom:12px}
+.sw-step-form textarea,.sw-step-form input {width:100%;min-width:0;box-sizing:border-box}
+.sw-step-form textarea {min-height:5em}
+.sw-steps .sw-step-text,.sw-step-form blockquote {white-space:pre-wrap;overflow-wrap:anywhere}
+.sw-steps article>small {display:block;overflow-wrap:anywhere}
+.sw-step-card strong {display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}

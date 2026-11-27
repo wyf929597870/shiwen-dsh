@@ -48,7 +48,7 @@ html[data-theme=light] { --ws-paper:#fff; --ws-ink:#263b32; --ws-wash:#deeee5; }
 .mw-tree-row {display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;border-bottom:1px solid var(--line);}
 .mw-tree-row:has(input:checked) {background:var(--ws-wash);}
 .mw-tree-row .mw-tree-source {display:grid;gap:3px;padding:10px 0;text-align:start;min-width:0;}
-.mw-tree-source strong {font-size:var(--ws-row);overflow-wrap:anywhere;}
+.mw-tree-source strong {display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;overflow-wrap:anywhere;font-size:var(--ws-row);font-weight:550;line-height:1.55;}
 .mw-tree-source small,.mw-tree-source span,.mw-related-tree li>p {color:var(--muted);font-size:var(--ws-meta);}
 .mw-tree-source span {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .mw-related-tree li>p {margin:4px 12px 8px 44px;}
@@ -77,3 +77,33 @@ html[data-theme=light] { --ws-paper:#fff; --ws-ink:#263b32; --ws-wash:#deeee5; }
   --dsw-alias-bg-layer-1:var(--ws-paper); --dsw-alias-border-l1:var(--line); --dsw-alias-state-business-primary:var(--mint);
 }
 .mw-themes .sw-theme-card-grid .sw-theme-card-actions button { min-height:44px; }
+
+/* Use the same create action across the phone library lists. */
+.app :is(.record-page,.mw-themes) .phone-create-fab, .app .rn-page.rn-mode-list .rn-new {
+  position:fixed;
+  inset-inline-end:max(20px,calc((100vw - 760px)/2 + 20px),env(safe-area-inset-right));
+  bottom:calc(88px + env(safe-area-inset-bottom));
+  z-index:5;
+  min-height:48px;
+  padding:8px 16px;
+  border:0;
+  border-radius:12px;
+  white-space:nowrap;
+  box-shadow:0 4px 15px #0003;
+}
+.app .rn-page.rn-mode-list .rn-sidebar { padding-bottom:80px; }
+.mw-themes .sw-themes:has(.sw-list:not([hidden])) {
+  padding:0 0 80px;
+  overflow:visible;
+}
+.mw-themes .sw-list:not([hidden]) {
+  gap:0;
+  margin:0;
+  border-radius:12px;
+  background:var(--phone-paper);
+}
+.mw-themes .sw-theme-list-line + .sw-theme-list-line { border-top:1px solid var(--phone-rule); }
+.mw-themes .sw-theme-list-item { padding:10px 14px; text-align:start; }
+.mw-themes .sw-theme-list-item strong { min-width:0; overflow-wrap:anywhere; }
+.mw-themes .sw-theme-list-item small { flex:none; }
+.mw-themes .sw-list > p { margin:0; padding:14px; }

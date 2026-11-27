@@ -358,3 +358,121 @@ test('A+B 的原始顺序、改写和后台仅用 B 的近义发现，在 MCP �
  const discoveries=JSON.parse(f.store.exportBackup()).payload.tables.exploration_discoveries.filter(d=>d.question===q);
  assert.deepEqual(discoveries.map(d=>JSON.parse(d.sources).map(s=>s.recordId)),[[a.recordId,b.recordId],[b.recordId,a.recordId]]);
 });
+
+test('后来写的个人段落出现在旧问题，确认、忽略、原文改版和备份恢复',async t=>{
+ const f=fixture(t);
+ const source=f.record('阅读时经常被打断。');
+ const {questionId}=f.suggest('阅读被打断后怎么办？',[{...source,quote:'经常被打断'}]);
+ const head=()=>f.read(questionId);
+ f.place(head(),'day','pin',{accept:true});
+ const first=f.write('respond',{questionId,expectedRevision:head().revision,responseRecordId:randomUUID(),body:'关火以后又翻了两页书。'});
+ assert.equal(first.responses[0].preview,'关火以后又翻了两页书。');
+ assert.ok(first.responses[0].contentDay);
+ const followup=f.record('先写一点别的事。\n阅读被打断时，我记下了页码。');
+ const ignore=f.record('阅读被打断以后我去泡了茶。');
+ const edited=f.record('被打断的阅读计划写在纸上。');
+ f.store.save({kind:'freewrite',doc:plainDoc('阅读被打断以后，我重新读了一次。','ai')});
+ f.record('今天骑车去公园。');
+ async function scan(){assert.equal((await waitJob(f,f.write('import',{mode:'incremental'}).jobId)).status,'ready');}
+ await scan();
+ assert.deepEqual(new Set(head().clues.map(c=>c.recordId)),new Set([followup.recordId,ignore.recordId,edited.recordId]));
+ assert.equal(f.feed('daily')[0].clues.length,3);
+ assert.equal(head().responses.length,1);
+ f.review(head(),'dismiss_clue',{recordId:ignore.recordId,sourceRevision:ignore.revision});
+ const passage=head().clues.find(c=>c.recordId===followup.recordId);
+ const {recordId,revision,field,start,end,quote}=passage;
+ assert.equal(quote,'阅读被打断时，我记下了页码。');
+ const link={questionId,expectedRevision:head().revision,responseRecordId:recordId,sourceRevision:revision,passage:{recordId,revision,field,start,end,quote},requestId:randomUUID()};
+ f.write('respond',link);f.write('respond',link);
+ assert.equal(f.feed('daily')[0].responses[0].preview,quote);
+ assert.deepEqual(head().clues.map(c=>c.recordId),[edited.recordId]);
+ const {createMobileSyncAdapter}=await import('../plugins/mobile/src/sync-adapter.mjs');
+ f.store.paths={library:f.root};
+ const adapter=createMobileSyncAdapter({ctx:{connection:{browserPeer:{id:'owner'}}},library:f.store});t.after(()=>adapter.close());
+ const deviceId=randomUUID(),identity=adapter.identity({deviceId,protocolVersion:'1.0.0-draft.3'});
+ const scope={deviceId,libraryId:identity.libraryId,serverId:identity.serverId,epoch:identity.epoch};
+ const send=(action,args={})=>adapter.execute(action,{...scope,...args});
+ scope.coverage=(await send('explorationCapabilities')).coverage;
+ const snapshot=await send('explorationBegin');
+ const page=await send('explorationPage',{snapshotId:snapshot.snapshotId});
+ const clues=page.items.filter(item=>item.entity==='exploration_clues').map(item=>item.value);
+ assert.equal(clues.find(c=>c.record===ignore.recordId).dismissed,1);
+ assert.equal(clues.find(c=>c.record===edited.recordId).revision,edited.revision);
+ assert.ok(page.items.some(item=>item.entity==='exploration_responses' && item.value.record===recordId && item.value.linked_at>0));
+ f.store.save({id:edited.recordId,revision:edited.revision,doc:plainDoc('今天看了天气预报。','personal')});
+ assert.equal(head().clues.length,0);
+ const changes=await send('explorationChanges',{cursor:snapshot.highWatermark});
+ assert.ok(changes.events.some(e=>e.entity==='source_state'&&e.key[0]===edited.recordId&&e.value.revision===edited.revision+1));
+ f.store.save({id:ignore.recordId,revision:ignore.revision,doc:plainDoc('阅读被打断以后又续了一杯茶。','personal')});
+ await scan();
+ assert.equal(head().responses.length,2);assert.equal(head().clues.length,0);
+ const restore=createStore(join(f.root,'restored-followup.sqlite'));
+ try{
+  restore.restoreBackup(f.store.exportBackup());
+  const detail=restore.exploration.call('shiwen_exploration_read',{expectedLibraryId:restore.themeContext().libraryId,questionId});
+  assert.equal(detail.responses[0].preview,quote);assert.deepEqual(detail.clues,[]);
+ }finally{restore.close();}
+});
+
+test('旧备份的整篇回应也能续写，新线索在模型离线时仍可核对',async t=>{
+ const {createHash}=await import('node:crypto');
+ const f=fixture(t),source=f.record('每天阅读的习惯。');
+ const {questionId}=f.suggest('阅读被打断时怎么办？',[source]);
+ f.review(f.read(questionId),'accept');
+ f.write('respond',{questionId,expectedRevision:f.read(questionId).revision,responseRecordId:randomUUID(),body:'先记下书页位置。'});
+ const backup=JSON.parse(f.store.exportBackup());
+ backup.payload.schema=19;delete backup.payload.tables.exploration_clues;
+ for(const row of backup.payload.tables.exploration_responses)delete row.linked_at;
+ backup.sha256=createHash('sha256').update(JSON.stringify(backup.payload)).digest('hex');
+ const target=createStore(join(f.root,'previous-format.sqlite'));
+ try{
+  target.restoreBackup(JSON.stringify(backup));
+  const q=target.exploration.call('shiwen_exploration_read',{expectedLibraryId:target.themeContext().libraryId,questionId});
+  assert.equal(q.responses[0].preview,'先记下书页位置。');assert.deepEqual(q.clues,[]);
+ }finally{target.close();}
+ f.write('settings',{expectedRevision:1,model:true});
+ f.store.generateAssist=async()=>{throw Error('模拟模型离线');};
+ const newer=f.record('我找到上次记下的书页位置了。');
+ assert.equal((await waitJob(f,f.write('import',{mode:'incremental'}).jobId)).status,'failed');
+ assert.deepEqual(f.read(questionId).clues.map(c=>c.recordId),[newer.recordId]);
+});
+
+test('回应、连续追问、判断、尝试和结果能分支，首页跨日接续手选的一步',t=>{
+ const f=fixture(t),source=f.record('我想读完这本书。');
+ const q=f.suggest('我怎样接着读？',[source]).questionId;
+ const head=()=>f.read(q);
+ f.review(head(),'accept');
+ const recordId=randomUUID(),body='关火以后，我还能接着读。';
+ f.write('respond',{questionId:q,expectedRevision:head().revision,responseRecordId:recordId,body});
+ const step=(action,stepId,fields={})=>f.write('step',{questionId:q,expectedRevision:head().revision,action,stepId,...fields});
+ const ask=step('add','ask1',{kind:'ask',text:'为什么这次能继续？',responseId:recordId,responseRevision:1,quote:'我还能接着读'});
+ assert.equal(ask.nextStep.quote,'我还能接着读');
+ assert.equal(f.feed('daily')[0].nextStep.id,'ask1');
+ step('add','ask2',{kind:'ask',text:'我记得停在哪里吗？',parentId:'ask1'});
+ step('add','belief',{kind:'judgment',text:'也许我需要一个明确的起点。',parentId:'ask2'});
+ step('add','trial',{kind:'trial',text:'留张书签',parentId:'belief',observation:'能从停下的地方读下去吗？',reviewDay:'2099-12-01'});
+ f.enable();f.refresh();
+ assert.equal(f.feed('week').length,0);
+ step('select','ask2');assert.equal(f.feed('daily')[0].nextStep.id,'ask2');
+ step('pause','ask2');assert.equal(head().nextStep,null);
+ step('select','trial');
+ const a={questionId:q,expectedRevision:head().revision,action:'add',stepId:'result',kind:'result',parentId:'trial',text:'读了两页',takeaway:'下一次还用书签。',requestId:randomUUID()};
+ const result=f.write('step',a);assert.deepEqual(f.write('step',a),result);
+ assert.equal(result.status,'accepted');assert.equal(result.nextStep.parentId,'trial');
+ assert.equal(f.feed('daily')[0].nextStep.takeaway,'下一次还用书签。');
+ assert.throws(()=>step('add','again',{kind:'result',parentId:'trial',text:'重复结果'}));
+ assert.throws(()=>step('select','trial'));
+ assert.throws(()=>step('add','bad',{kind:'result',parentId:'ask1',text:'错误归属'}));
+ assert.throws(()=>step('add','stale',{kind:'ask',text:'别人的话？',responseId:recordId,responseRevision:1,quote:'原文没有'}));
+ assert.throws(()=>f.write('step',{...a,requestId:randomUUID()}),e=>e.code==='revision_conflict');
+ assert.equal(head().nextStep.id,'result');
+ const tomorrow=step('add','next',{kind:'trial',parentId:'result',text:'再试一次',reviewDay:'2000-01-01'});
+ assert.equal(f.feed('daily')[0].nextStep.id,'next');assert.equal(tomorrow.steps.length,6);
+ const restored=createStore(join(f.root,'steps.sqlite'));
+ try{
+  restored.restoreBackup(f.store.exportBackup());
+  const detail=restored.exploration.call('shiwen_exploration_read',{expectedLibraryId:restored.themeContext().libraryId,questionId:q});
+  assert.deepEqual(detail.steps,tomorrow.steps);assert.equal(detail.nextStep.id,'next');
+ }finally{restored.close();}
+ f.review(head(),'answered');assert.equal(f.feed('daily').length,0);
+});

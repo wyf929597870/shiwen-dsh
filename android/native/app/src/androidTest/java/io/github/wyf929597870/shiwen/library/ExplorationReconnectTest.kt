@@ -36,7 +36,7 @@ class ExplorationReconnectTest {
         val registry=Room.databaseBuilder(context,LibraryRegistryDatabase::class.java,regFile).build()
         val row=LibraryRegistryRow(library,"v6 fixture",device,libFile,"coordinated","complete",arg("server"),arg("epoch"),1,
             null,null,null,"0",null,1,true,false,false,"{}")
-        if(phase=="offline")registry.dao().insert(row)
+        if(phase=="offline" || phase=="stepChain" && registry.dao().get(library)==null)registry.dao().insert(row)
         val repo=LibraryRepository(context,library,device,row.name,registry,row)
         fun remote(action:String,request:JSONObject):JSONObject {
             val http=URL("http://127.0.0.1:"+port+"/sync").openConnection() as HttpURLConnection
@@ -149,6 +149,31 @@ class ExplorationReconnectTest {
                         "mappings" to JSONArray().put(obj("externalSourceId" to "unmapped-source","recordId" to source,"revision" to 1))))
                     sync.sync()
                     assertTrue(pool.rows("outbox",pool.local).isEmpty())
+                }
+                "stepChain" -> {
+                    if(repo.dao.record(source)==null){
+                        val original=repo.create(freshId(),obj("id" to source,"kind" to "idea","origin" to "personal","markdown" to "我把书签留在原地。"),0)
+                        repo.dao.updateRecord(original.copy(syncState="synced",serverRevision=1))
+                    }
+                    sync.sync(true)
+                    val question=arg("stepQuestion")
+                    val ask=pool.detail(question).getJSONObject("nextStep")
+                    assertEquals("ask",ask.getString("kind"))
+                    fun append(id:String,kind:String,text:String,parent:String){
+                        call("shiwen_exploration_step",obj("requestId" to freshId(),"questionId" to question,
+                            "expectedRevision" to pool.detail(question).getInt("revision"),"stepId" to id,"action" to "add",
+                            "kind" to kind,"text" to text,"parentId" to parent))
+                    }
+                    val trial=freshId()
+                    append(trial,"trial","离开前留张书签",ask.getString("id"))
+                    append(freshId(),"result","我回来接着读了两页。",trial)
+                    assertEquals(2,pool.rows("outbox",pool.local).size)
+                    sync.sync(true);sync.sync(true)
+                    assertTrue(pool.rows("outbox",pool.local).isEmpty())
+                    val head=pool.detail(question)
+                    assertEquals("result",head.getJSONObject("nextStep").getString("kind"))
+                    assertEquals(trial,head.getJSONObject("nextStep").getString("parentId"))
+                    assertEquals(3,head.getJSONArray("steps").length())
                 }
                 "interopFinal" -> {
                     // The ordinary channel supplies the same record before evaluating the exploration projection.

@@ -3,7 +3,7 @@ import {hash} from '../assist/evidence.mjs';
 import {fingerprint} from '../sync/canonical.mjs';
 
 const keys={
- exploration_questions:['id'],exploration_evidence:['question','anchor'],exploration_discoveries:['id'],
+ exploration_steps:['question','id'],exploration_clues:['question','record'],exploration_questions:['id'],exploration_evidence:['question','anchor'],exploration_discoveries:['id'],
  exploration_reviews:['id'],exploration_responses:['question','record'],exploration_periods:['period','period_key'],
  exploration_aliases:['child'],exploration_pairs:['left_id','right_id','basis'],exploration_decisions:['id']
 };
@@ -34,6 +34,10 @@ export function createExplorationSync(db,api,call,canonical){
   db.exec(`CREATE TRIGGER IF NOT EXISTS exploration_stream_source AFTER UPDATE OF deleted,revision ON records
    WHEN (NEW.revision<>OLD.revision OR NEW.deleted<>OLD.deleted) AND EXISTS(SELECT 1 FROM exploration_evidence WHERE record=NEW.id OR json_extract(source,'$.annotationId')=NEW.id)
    BEGIN INSERT INTO exploration_stream(entity,k,value) VALUES('source_state',json_array(NEW.id),json_object('id',NEW.id,'revision',NEW.revision,'deleted',NEW.deleted)); END;`);
+  db.exec(`CREATE TRIGGER IF NOT EXISTS exploration_progress_source AFTER UPDATE OF deleted,revision ON records
+    WHEN (NEW.revision<>OLD.revision OR NEW.deleted<>OLD.deleted) AND
+      (EXISTS(SELECT 1 FROM exploration_clues WHERE record=NEW.id) OR EXISTS(SELECT 1 FROM exploration_responses WHERE record=NEW.id))
+    BEGIN INSERT INTO exploration_stream(entity,k,value) VALUES('source_state',json_array(NEW.id),json_object('id',NEW.id,'revision',NEW.revision,'deleted',NEW.deleted)); END;`);
  });
  function session(r,negotiate=false){
   const id=api.themeContext().libraryId;
@@ -52,7 +56,7 @@ export function createExplorationSync(db,api,call,canonical){
   for(const [entity,pk] of Object.entries(keys)){
    for(const row of all('SELECT * FROM '+entity+' ORDER BY '+pk.join(',')))items.push({entity,key:pk.map(k=>row[k]),value:{...row}});
   }
-  for(const s of all(`SELECT id,revision,deleted FROM records WHERE id IN (SELECT record FROM exploration_evidence UNION SELECT json_extract(source,'$.annotationId') FROM exploration_evidence)`))items.push({entity:'source_state',key:[s.id],value:{...s}});
+  for(const s of all(`SELECT id,revision,deleted FROM records WHERE id IN (SELECT record FROM exploration_evidence UNION SELECT record FROM exploration_responses UNION SELECT record FROM exploration_clues UNION SELECT json_extract(source,'$.annotationId') FROM exploration_evidence)`))items.push({entity:'source_state',key:[s.id],value:{...s}});
   for(const op of all("SELECT channel,op,fingerprint,result FROM exploration_operations WHERE binding=? AND result IS NOT NULL",d.binding))items.push({entity:'operation',key:[op.channel,op.op],value:{fingerprint:op.fingerprint,result:JSON.parse(op.result)}});
   const snapshotId=randomUUID(),highWatermark=highest(),digest=fingerprint(items);
   run('DELETE FROM exploration_pages WHERE snapshot IN (SELECT id FROM exploration_snapshots WHERE expires<?)',Date.now());
@@ -97,7 +101,7 @@ export function createExplorationSync(db,api,call,canonical){
   if(r.channel!=='exploration'||fingerprint(r.operation)!==r.fingerprint)throw Error('FINGERPRINT_MISMATCH');
   const p=proof(d,r,false);if(p.status==='committed')return p.receipt;if(p.status!=='not_committed')throw Error('UNKNOWN_OPERATION');
   const {method,args}=r.operation;
-  if(!['shiwen_exploration_review','shiwen_exploration_respond','shiwen_exploration_place','shiwen_exploration_suggest'].includes(method)||args.requestId!==r.operationId||args.expectedLibraryId!==r.libraryId||args.body!==undefined)throw Error('INVALID_OPERATION');
+  if(!['shiwen_exploration_step','shiwen_exploration_review','shiwen_exploration_respond','shiwen_exploration_place','shiwen_exploration_suggest'].includes(method)||args.requestId!==r.operationId||args.expectedLibraryId!==r.libraryId||args.body!==undefined)throw Error('INVALID_OPERATION');
   const actor='bound:'+d.binding;
   let receipt;
   let target=args.questionId?canonical(args.questionId):null;
@@ -150,7 +154,7 @@ export function createExplorationSync(db,api,call,canonical){
   return tx(()=>{
    const d=session(r,action==='explorationCapabilities');
    switch(action){
-    case 'explorationCapabilities':return {capability:'explorationSync.v1',coverage:d.coverage};
+    case 'explorationCapabilities':return {capability:'explorationSync.v1',steps:true,coverage:d.coverage};
     case 'explorationBegin':return snapshot(d);
     case 'explorationPage':{
      const s=get('SELECT * FROM exploration_snapshots WHERE binding=? AND id=? AND expires>?',d.binding,r.snapshotId,Date.now());

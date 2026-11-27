@@ -62,6 +62,11 @@ export async function checkExplorationInterop({root,store,library,source,write,r
   assert.ok((await weekly()).some(x=>x.questionId===mixed));
   for(const q of [read(mixed),await get(mixed)])assert.equal(q.sources[0].confirmed,true);
   await phone('interopFinal',{left,right,linked,mixed,note:note.id});
+  write('step',{questionId:right,expectedRevision:read(right).revision,action:'add',stepId:randomUUID(),kind:'ask',text:'打断后怎样继续？'});
+  await phone('stepChain',{stepQuestion:right});
+  const progress=await get(right);
+  assert.equal(progress.nextStep.text,'我回来接着读了两页。');
+  assert.equal(progress.steps.find(s=>s.id===progress.nextStep.parentId).kind,'trial');
   return {left,right,linked,mixed};
  }finally{await client.close();await server.close();}
 }

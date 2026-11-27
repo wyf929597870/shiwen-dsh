@@ -29,7 +29,7 @@ export function SessionSheet({open, title, items, activeId, onSelect, onCreate, 
     <section className="session-sheet" role="dialog" aria-modal="true" aria-label={title}>
       <header>
         <strong>{title}</strong>
-        <button type="button" className="chip chat-icon-action" aria-label={t('关闭')} onClick={onClose}><PhoneIcon name="close" size={18}/></button>
+        <button type="button" className="chip chat-icon-action" data-sheet-close aria-label={t('关闭')} onClick={onClose}><PhoneIcon name="close" size={18}/></button>
       </header>
       <div className="session-sheet-list">
         {!items.length && <p className="secondary">{t('还没有会话。')}</p>}

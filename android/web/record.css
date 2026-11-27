@@ -110,7 +110,6 @@ html[data-theme=light] .message-dialog .conflict-actions{background:#fff}
 .record-filter-toggle{position:absolute;right:5px;top:4px;bottom:4px;width:42px;border:0;border-radius:8px;background:transparent;color:var(--muted);font-size:19px}
 .record-filter-toggle i{position:absolute;right:5px;top:4px;width:7px;height:7px;border-radius:50%;background:var(--mint)}
 .record-search select{display:block;width:100%;margin-top:8px;background:var(--surface,#22272e)}
-.record-create-fab{position:fixed;right:max(20px,calc((100vw - 760px)/2 + 20px));bottom:calc(88px + env(safe-area-inset-bottom));z-index:5;min-height:48px;box-shadow:0 4px 15px #0003}
 .record-list-only .record-list{padding-bottom:72px}
 /* Separate materials with spacing instead of full-width rules. */
 .record-list-only .record-list{display:grid;gap:8px}

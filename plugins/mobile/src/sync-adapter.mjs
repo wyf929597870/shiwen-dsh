@@ -60,6 +60,23 @@ export class MobileSyncAdapter {
   }
   async execute(action,request={},signal){
     signal?.throwIfAborted?.();
+    if (['topicHeads','topicPage','topicApply'].includes(action)) {
+      const ctx=this.context(request), topics=this.library.topicSync;
+      if (action==='topicHeads') return topics.heads(request);
+      if (action==='topicPage') {
+        const page=topics.page(request);
+        if (Buffer.byteLength(JSON.stringify(page))<=limits.maxInlineBytes) return page;
+        return {pageRef:this.publishPayload(ctx,page,{sourceAction:action})};
+      }
+      let op=request.operation;
+      if (request.payloadReference) {
+        const ref=request.payloadReference;
+        const file=this.chunks().readBytes(ctx,ref.payloadRef,{kind:'operation'});
+        if (file.digest!==ref.digest || file.bytes.length!==ref.byteLength) fail('MANIFEST_MISMATCH');
+        op=JSON.parse(file.bytes.toString('utf8'));
+      }
+      return topics.apply(request,op);
+    }
     if(action.startsWith('exploration')){
       this.context(request);
       try{return this.library.exploration.sync.execute(action,request);}
@@ -112,7 +129,7 @@ export class MobileSyncAdapter {
         return head;
       }
       const result=action==='identity'?this.identity(request):sync[action](request);
-      if(action==='identity')result.capabilities={...result.capabilities,stagedRecordAttachments:true};
+      if(action==='identity')result.capabilities={...result.capabilities,stagedRecordAttachments:true,topicSync:true};
       return result;
     }
     if(setupActions.has(action)){

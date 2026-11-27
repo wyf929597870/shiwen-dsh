@@ -1,3 +1,15 @@
+.sw-theme-list-line { display: flex; align-items: center; min-width: 0; }
+.sw-theme-list-line > .sw-theme-list-item { flex: 1; min-width: 0; }
+.sw-themes[data-single-pane] .sw-theme-list-item { user-select: none; touch-action: pan-y; }
+.sw-themes .sw-theme-list-edit { flex: none; min-height: 44px; padding-inline: 12px; }
+.sw-theme-intro { margin: 0 0 16px; overflow-wrap: anywhere; }
+.sw-theme-intro h1 { margin: 0; font-size: 20px; line-height: 1.35; }
+.sw-theme-intro .sw-theme-summary {
+  margin: 4px 0 0; font-size: 14px; line-height: 1.5; white-space: pre-line;
+  color: var(--dsw-alias-label-secondary, var(--muted));
+}
+.sw-theme-summary:not([data-expanded]) { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.sw-theme-intro .sw-theme-summary-toggle { min-height: 44px; padding-inline: 0; }
 .sw-theme-passages { container-type: inline-size; }
 .sw-theme-card-grid {
   display: grid;
@@ -20,7 +32,7 @@
   --caption: var(--dsw-alias-label-secondary);
   --link: var(--dsw-alias-state-business-primary);
   min-width: 0;
-  padding: 20px 22px 12px;
+  padding: 12px 16px 8px;
   color: var(--ink);
   background: var(--paper);
   border: 1px solid color-mix(in srgb, var(--ink) 13%, var(--paper));
@@ -43,21 +55,24 @@
 }
 .sw-theme-card-kind small { margin-inline-start: auto; font: inherit; }
 .sw-theme-card-grid .sw-theme-member blockquote {
-  margin: 14px 0 12px; padding: 0; border: 0;
+  margin: 0; padding: 0; border: 0;
   color: var(--ink); white-space: normal;
   font: 400 18px/1.65 Georgia, "Noto Serif CJK SC", serif;
 }
 .sw-theme-card-grid .sw-theme-member:first-child blockquote { font-size: 21px; line-height: 1.55; }
 .sw-theme-card-grid blockquote strong { font-weight: 650; }
+.sw-theme-card-footer {
+  margin-top: 12px; padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 15%, transparent);
+}
 .sw-theme-card-grid .sw-theme-card-source {
-  display: block; margin: 4px 0 0; color: var(--caption);
+  margin: 0 0 2px; color: var(--caption);
   font: 500 13px/1.55 var(--dsw-font-family, system-ui, sans-serif);
 }
 .sw-theme-card-source::before { content: "— "; }
 .sw-theme-card-actions {
   display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px;
-  margin-top: 14px; padding-top: 6px;
-  border-top: 1px solid color-mix(in srgb, var(--ink) 15%, transparent);
+  margin-top: 4px;
 }
 .sw-theme-card-grid .sw-theme-member :is(.sw-theme-card-actions button, .sw-theme-quote-toggle) {
   min-height: 32px; padding: 3px 0; border: 0; background: transparent; color: var(--link); font-size: 12px;

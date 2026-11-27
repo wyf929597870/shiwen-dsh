@@ -1,3 +1,4 @@
+import {usePullRefresh} from '../../plugins/workbench/src/ListInteractions.jsx';
 import {DiscussionTransfer} from '../../plugins/workbench/src/DiscussionTransfer.jsx';
 import {PhoneIcon} from './PhoneIcon.jsx';
 import {MessageDialog} from './MessageDialog.jsx';
@@ -359,7 +360,10 @@ function LocalChatPanel({ready, libraryId, config, onRead, onDirect, onSending, 
     readOnly: Boolean(item.readOnly),
     archived: false
   }));
-  return <section className="chat-panel" aria-label={t('AI 对话')}>
+  const refreshRef=usePullRefresh(async()=>{
+    try{await Promise.all([refreshConversationSnapshot(),activeId&&refresh()]);}catch(e){setMessage(e.message);}
+  },ready&&!loading&&!sending&&!sheetOpen);
+  return <section ref={refreshRef} className="chat-panel" aria-label={t('AI 对话')}>
     <div className="chat-toolbar">
       <div><strong>{t('拾文助手')}</strong><span>{active?.title || t('打开或新建会话')}{active?.model ? ` · ${active.model}` : ''}</span></div>
       <div className="chat-session-controls">

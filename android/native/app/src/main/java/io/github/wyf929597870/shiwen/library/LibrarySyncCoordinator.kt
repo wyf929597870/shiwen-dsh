@@ -88,7 +88,7 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
         val repo = manager.openLibrary(libraryId)
         val row = repo.registryItem()
         val pendingOperations = repo.dao.pendingOutbox(100_000)
-        val pending = pendingOperations.size
+        val pending = pendingOperations.size + if (row.role=="standalone") 0 else repo.dao.pendingTopics()
         val rejectedOperations = repo.dao.allOutbox().filter { isActionableRejection(it.state, it.lastError) }
         val conflicts = repo.dao.conflicts(100_000, 0).size
         val progress = repo.dao.meta("syncProgress")?.let(::JSONObject)
@@ -100,6 +100,7 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
             pending > 0 -> "idle"
             else -> "idle"
         }).put("role", row.role).put("integrity", row.integrity).put("pendingCount", pending)
+            .put("topicUpgradeRequired",repo.dao.meta("topic-support")=="upgrade")
             .put("rejectedCount", rejectedOperations.size)
             .put("rejectedOperations", JSONArray(rejectedOperations.map { item ->
                 JSONObject().put("operationId", item.operationId).put("recordId", item.recordId)
@@ -218,10 +219,12 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
         check(cursorNumber(ack.get("completeCursor")) == cursorNumber(cursor)) { "SYNC_ACK_MISMATCH" }
         val old = manager.row(libraryId)
         manager.update(old.copy(integrity = "complete", appliedCursor = cursor, completeCursor = cursor,
-            cursor = cursor, manifestDigest = expectedDigest, lastSyncedAt = Instant.now().toString()))
+            cursor = cursor, manifestDigest = expectedDigest))
         snapshotCoverage?.let { markSnapshotCoveredOutbox(repo, it) }
         val exploration=ExplorationSync(repo){action,params->rpc(nodeId,configRevision,action,params)}
         if(exploration.connect())runCatching { exploration.sync(force=true) }.onFailure { explorationFailure(repo,it) }
+        syncTopics(repo,nodeId,configRevision,epoch,identity)
+        manager.update(manager.row(repo.libraryId).copy(lastSyncedAt = Instant.now().toString()))
         putProgress(repo, operationId, "completed", "finalize", completed, total, null)
     }
 
@@ -306,11 +309,32 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
             .put("completeCursor", cursorNumber(appliedCursor)).put("manifestDigest", current.manifestDigest ?: ""))
         check(cursorNumber(ack.get("appliedCursor")) == cursorNumber(appliedCursor) &&
             cursorNumber(ack.get("completeCursor")) == cursorNumber(appliedCursor)) { "SYNC_ACK_MISMATCH" }
-        manager.update(current.copy(completeCursor = appliedCursor, lastSyncedAt = Instant.now().toString()))
+        manager.update(current.copy(completeCursor = appliedCursor))
         repo.dao.pendingOutbox(100_000).firstOrNull { it.state == "blocked-dependency" }?.let {
             error(if (it.baseVersionId.isNullOrBlank()) "SYNC_PARENT_VERSION_MISSING" else "SYNC_PARENT_NOT_CONFIRMED")
         }
+        syncTopics(repo,nodeId,configRevision,epoch,identity)
+        manager.update(manager.row(repo.libraryId).copy(lastSyncedAt = Instant.now().toString()))
         putProgress(repo, operationId, "completed", "finalize", count, null, null)
+    }
+
+    private fun syncTopics(repo:LibraryRepository,nodeId:String,configRevision:String,epoch:String,identity:JSONObject) {
+        val supported = identity.optJSONObject("capabilities")?.optBoolean("topicSync")==true
+        repo.dao.putMeta(LibraryMeta("topic-support",if (supported) "ready" else "upgrade"))
+        if (!supported) return
+        fun send(action:String,args:JSONObject):JSONObject {
+            args.put("libraryId",repo.libraryId).put("epoch",epoch).put("deviceId",repo.deviceId)
+            return rpc(nodeId,configRevision,action,args)
+        }
+        TopicSync(repo,epoch,::send,
+            { ref -> downloadPayloadObject(repo,nodeId,configRevision,epoch,ref) },
+            { op ->
+                val bytes = Canonical.encode(plain(op)).toByteArray(Charsets.UTF_8)
+                val request = if (bytes.size <= MAX_INLINE_OPERATION_BYTES) obj("operation" to op)
+                    else obj("payloadReference" to uploadOperationPayload(repo,nodeId,configRevision,epoch,
+                        op.getString("operationId"),sha256(bytes),bytes))
+                send("topicApply",request)
+            }).sync()
     }
 
     private fun explorationFailure(repo:LibraryRepository,error:Throwable){
@@ -372,7 +396,7 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
                 JSONObject().put("inlineBody", operation)
             } else {
                 JSONObject().put("operationId", row.operationId).put("requestFingerprint", row.fingerprint)
-                    .put("payloadReference", uploadOperationPayload(repo, nodeId, revision, epoch, row, operationBytes))
+                    .put("payloadReference", uploadOperationPayload(repo, nodeId, revision, epoch, row.operationId, row.fingerprint, operationBytes))
             }
             val result = rpc(nodeId, revision, "push", JSONObject().put("libraryId", repo.libraryId).put("epoch", epoch)
                 .put("deviceId", repo.deviceId).put("operations", JSONArray().put(pushItem)))
@@ -450,10 +474,10 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
     }
 
     private fun uploadOperationPayload(repo: LibraryRepository, nodeId: String, revision: String, epoch: String,
-        row: LibraryOutbox, bytes: ByteArray): JSONObject {
+        operationId: String, fingerprint: String, bytes: ByteArray): JSONObject {
         check(bytes.size.toLong() <= MAX_CANONICAL_OPERATION_BYTES) { "SYNC_OPERATION_TOO_LARGE" }
         val digest = sha256(bytes)
-        val uploadId = UUID.nameUUIDFromBytes("${repo.libraryId}\n$epoch\n${row.operationId}\n${row.fingerprint}\n$digest"
+        val uploadId = UUID.nameUUIDFromBytes("${repo.libraryId}\n$epoch\n$operationId\n$fingerprint\n$digest"
             .toByteArray(Charsets.UTF_8)).toString()
         fun context() = JSONObject().put("libraryId", repo.libraryId).put("epoch", epoch).put("deviceId", repo.deviceId)
         val begin = rpc(nodeId, revision, "operationPayloadBegin", context().put("uploadId", uploadId)
@@ -478,10 +502,10 @@ internal class LibrarySyncCoordinator(context: Context, private val manager: Lib
                 .put("partDigest", sha256(chunk)).put("dataBase64", Base64.encodeToString(chunk, Base64.NO_WRAP)))
         }
         val committed = rpc(nodeId, revision, "operationPayloadCommit", context().put("uploadId", uploadId)
-            .put("operationId", row.operationId).put("requestFingerprint", row.fingerprint))
+            .put("operationId", operationId).put("requestFingerprint", fingerprint))
         check(committed.optString("payloadRef") == uploadId && committed.optString("digest") == digest &&
-            committed.optLong("byteLength") == bytes.size.toLong() && committed.optString("operationId") == row.operationId &&
-            committed.optString("requestFingerprint") == row.fingerprint) { "SYNC_OPERATION_PAYLOAD_COMMIT_UNKNOWN" }
+            committed.optLong("byteLength") == bytes.size.toLong() && committed.optString("operationId") == operationId &&
+            committed.optString("requestFingerprint") == fingerprint) { "SYNC_OPERATION_PAYLOAD_COMMIT_UNKNOWN" }
         return JSONObject().put("payloadRef", uploadId).put("digest", digest).put("byteLength", bytes.size)
             .put("encodingVersion", "shiwen-json-v1")
     }

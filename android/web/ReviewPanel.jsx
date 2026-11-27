@@ -1,3 +1,4 @@
+import {usePullRefresh} from '../../plugins/workbench/src/ListInteractions.jsx';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {call} from '../bridge/library.mjs';
 import {useI18n} from './i18n.js';
@@ -22,9 +23,10 @@ export function ReviewPanel({libraryId,workspace,request=call}) {
     finally{if(sequence===loadSequence.current)setLoading(false);}
   },[libraryId,period,month,request]);
   useEffect(()=>{load();return()=>{loadSequence.current++;};},[load]);
+  const refreshRef=usePullRefresh(load,!loading);
   const totals=report?.totals||{};
   const originals=preview?.records||[],edits=preview?.observedEdits||{};
-  return <section className="review-page">
+  return <section ref={refreshRef} className="review-page">
     <div className="review-period"><select aria-label={t('回顾范围')} value={period} onChange={e=>setPeriod(e.target.value)}>{[['1','今日'],['7','近 7 天'],['14','近 14 天'],['30','近 30 天'],['month','自然月']].map(([value,label])=><option key={value} value={value}>{t(label)}</option>)}</select>{period==='month'&&<input type="month" value={month} onChange={e=>setMonth(e.target.value)} aria-label={t('选择自然月')}/>}<button className="chip" onClick={load} disabled={loading}>{loading?t('更新中…'):t('刷新')}</button></div>
     {!report&&loading&&<p className="empty-state">{t('正在读取回顾…')}</p>}
     {report&&<>

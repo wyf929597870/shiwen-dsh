@@ -5,6 +5,7 @@ import React,{useCallback,useEffect,useRef,useState} from 'react';
 import {call} from '../bridge/library.mjs';
 import {MarkdownView} from './MarkdownView.jsx';
 import {MessageBubble} from './MessageBubble.jsx';
+import {usePullRefresh} from '../../plugins/workbench/src/ListInteractions.jsx';
 import {SessionSheet} from './SessionSheet.jsx';
 import {mergeSessionEvents,sessionEventPresentation} from './remote-session-state.mjs';
 
@@ -213,7 +214,10 @@ export function RemoteChatPanel({node,onSending,onDirect}){
     }catch(e){setError(e.message);}finally{setBusy(false);}
   };
   const reply=async args=>{setBusy(true);try{await rpc('respond',args);await refresh(sessionId);}catch(e){setError(`${t('决定未确认，请刷新：','The decision was not confirmed. Refresh and check: ')}${e.message}`);}finally{setBusy(false);}};
-  return <section className="chat-panel" aria-label={t('服务器 AI 对话')}>
+  const refreshRef=usePullRefresh(async()=>{
+    try{await Promise.all([refreshList(),sessionId&&refresh(sessionId)]);}catch(e){setError(e.message);}
+  },!busy&&!sheetOpen);
+  return <section ref={refreshRef} className="chat-panel" aria-label={t('服务器 AI 对话')}>
     <div className="chat-session-controls">
       <button type="button" className="session-trigger" aria-haspopup="dialog" aria-expanded={sheetOpen}
         aria-label={t('服务器会话')} title={t('服务器会话')} disabled={busy} onClick={()=>setSheetOpen(true)}>

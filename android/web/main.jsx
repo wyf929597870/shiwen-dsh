@@ -26,7 +26,9 @@ import {MobileCanvas,WorkspaceSearch,WorkspaceSource,WorkspaceThemes} from './Mo
 import './workspace.css';
 import '../../plugins/workbench/src/theme-passages.css';
 import './night.css';
-const workspaceSections=[['notes','记录','Records'],['reading','读书','Reading'],['collections','收藏','Collections'],['write','创作','Writing'],['themes','主题','Topics'],['review','回顾','Review'],['global','全局搜索','Global search']];
+import './phone-reading.css';
+import {PhoneGestures,topDialog} from './PhoneGestures.jsx';
+const workspaceSections=[['notes','记录','Records'],['reading','读书','Reading'],['collections','收藏','Collections'],['write','创作','Writing'],['themes','主题','Topics'],['review','回顾','Review']];
 
 const fresh = () => ({requestId: crypto.randomUUID(), title: '', markdown: '', kind: 'journal', origin:'personal', localGeneration: 0});
 const localDay=()=>{const date=new Date();return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;};
@@ -50,13 +52,11 @@ function App() {
   const [libraryId, setLibraryId] = useState(''), [libraryContext,setLibraryContext]=useState(null), [libraries,setLibraries]=useState([]), [modelConfig, setModelConfig] = useState({configured:false});
   const [canvas,setCanvas]=useState(null),[source,setSource]=useState(null),[openArticle,setOpenArticle]=useState(null);
   const role=libraryContext?.role||'standalone';
-  const [phoneTopics,setPhoneTopics]=useState(null);
-  const localTopics=role==='standalone'||phoneTopics===libraryId;
-  const workspaceRpc=useMemo(()=>workspaceAdapter(call,{libraryId,role,localTopics}),[libraryId,role,localTopics]);
+  const workspaceRpc=useMemo(()=>workspaceAdapter(call,{libraryId,role}),[libraryId,role]);
   const [libraryConnection,setLibraryConnection]=useState(null);
   useEffect(()=>{
     if(!ready||!libraryId)return;
-    let disposed=false,busy=false,timer,previousChanges;
+    let disposed=false,busy=false,timer,previousChanges,previousTopics;
     setLibraryConnection(null);
     const refresh=async()=>{
       if(disposed||busy||document.visibilityState==='hidden')return;
@@ -68,6 +68,8 @@ function App() {
           const changes=JSON.stringify([snapshot.recordChanges,snapshot.explorationCursor]);
           if(previousChanges!==undefined&&changes!==previousChanges)window.dispatchEvent(new Event('shiwen-library-updated'));
           previousChanges=changes;
+          if(previousTopics!==undefined&&previousTopics!==snapshot.topicChanges)window.dispatchEvent(new Event('shiwen-themes-updated'));
+          previousTopics=snapshot.topicChanges;
         }
       }catch{if(!disposed)setLibraryConnection(null);}
       finally{busy=false;if(!disposed)timer=setTimeout(refresh,5000);}
@@ -79,6 +81,7 @@ function App() {
   const [pageState, setPageState] = useState({dirty:false,busy:false});
   const [agentSending, setAgentSending] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const tabHistory=useRef([]), tabTransition=useRef(0);
   const childNavigation=useRef(null),backRunning=useRef(false);
   const [childDepth,setChildDepth]=useState(false);
   const onNavigation=useCallback(value=>{childNavigation.current=value;setChildDepth(Boolean(value.depth));},[]);
@@ -182,13 +185,17 @@ function App() {
     } catch (e) { setUncertain(true); setMessage(`${t('保存结果待核对，文字仍在编辑区。请点击再次核对：','The save needs verification. Your text remains in the editor. Check again: ')}${e.message}`); }
     finally {setSaving(false);}
   };
-  const switchTab = async target => {
+  const switchTab = async (target,goingBack=false) => {
     if (target === tab) return true;
     if(uncertain||pendingMutationRef.current){setMessage(t('当前记录提交结果尚未确认，请先留在本资料库核对。','The previous save is not verified. Stay in this library and check it first.'));return;}
     if (pageState.busy) { setMessage(t('当前操作尚未完成，请等待保存或同步结束后再离开。','The current operation is still running. Wait for it to finish before leaving.')); return; }
     if (pageState.dirty && !window.confirm(t('离开将丢弃当前页面尚未保存的编辑。确定离开吗？','Leaving will discard unsaved edits on this page. Continue?'))) return;
-    setPageState({dirty:false,busy:false});
+    const transition=++tabTransition.current;
     if (ready) {clearTimeout(timer.current); try {await persist(draftRef.current);} catch {return;}}
+    if(transition!==tabTransition.current)return;
+    setPageState({dirty:false,busy:false});
+    if(goingBack)tabHistory.current.pop();
+    else tabHistory.current.push(tab);
     childNavigation.current=null;setChildDepth(false);setTab(target); setReading(null); setEditor(false);return true;
   };
   const read = async id => {try {setReading(await call('recordRead', {libraryId,id}));} catch(e) {setMessage(e.message);}};
@@ -201,10 +208,15 @@ function App() {
     catch(e){setMessage(`${t('切换资料库失败：','Could not switch library: ')}${String(e.message||e)}`);}
   };
   useEffect(()=>{
-    window.__shiwenBack=()=>{
+    window.__shiwenBack=origin=>{
       if(window.__shiwenModalBack){window.__shiwenModalBack();return true;}
-      const modal=[...document.querySelectorAll('dialog[open]')].filter(d=>d.matches('.mw-source,.sw-canvas-reader,.sw-idea-canvas')).at(-1);
-      if(modal){modal.dispatchEvent(new Event('cancel',{cancelable:true}));return true;}
+      const modal=topDialog();
+      if(modal){
+        if(modal.dispatchEvent(new Event('cancel',{cancelable:true}))&&modal.open)modal.close();
+        return true;
+      }
+      const sheetClose=document.querySelector('.session-sheet [data-sheet-close]');
+      if(sheetClose){sheetClose.click();return true;}
       if(backRunning.current)return true;
       if(!ready&&!libraryOpen)return false;
       backRunning.current=true;
@@ -214,6 +226,8 @@ function App() {
         if(saving||agentSending||uncertain||pendingMutationRef.current||pageState.busy){setMessage(t('当前操作尚未完成，请先核对。','Finish or verify the current operation first.'));return;}
         if(editor){clearTimeout(timer.current);await persist(draftRef.current);setEditor(false);return;}
         if(childNavigation.current?.depth){await childNavigation.current.back();return;}
+        if(tabHistory.current.length){await switchTab(tabHistory.current.at(-1),true);return;}
+        if(origin==='edge')return;
         if(pageState.dirty&&!window.confirm(t('放弃尚未保存的修改？','Discard unsaved changes?')))return;
         if(ready){clearTimeout(timer.current);await persist(draftRef.current);}
         await leaveApp();
@@ -232,14 +246,15 @@ function App() {
     ['offline','no-network','identity-mismatch','service-error'].includes(connectionState)?'offline':'neutral';
 
   const inWorkspace=workspaceSections.some(([id])=>id===tab);
-  const workspace={connectionState,serverId:selectedLibrary?.serverId??selectedLibrary?.identity?.serverId,epoch:selectedLibrary?.epoch??selectedLibrary?.identity?.epoch,rpc:workspaceRpc,libraryId,role,localTopics,chooseLocalTopics:value=>setPhoneTopics(value?libraryId:null),online:role!=='standalone'&&connectionState==='online',
+  const workspace={connectionState,serverId:selectedLibrary?.serverId??selectedLibrary?.identity?.serverId,epoch:selectedLibrary?.epoch??selectedLibrary?.identity?.epoch,rpc:workspaceRpc,libraryId,role,online:role!=='standalone'&&connectionState==='online',
     source:(id,match)=>setSource({id,match}),explore:setCanvas,
     onArticle:async id=>{if(await switchTab('write')){setSource(null);setCanvas(null);setOpenArticle(id);}}};
   return <div className="app">
+    <PhoneGestures/>
     <header className="shell-header"><div className="brand"><img src="./shiwen-mark.png" alt=""/><strong>{tab==='chat'?t('皮皮','Pipi'):({home:t('首页','Home'),notes:t('记录','Records'),collections:t('收藏','Collections'),global:t('全局搜索','Global search'),themes:t('主题','Topics'),reading:t('读书笔记','Reading notes'),write:t('创作','Writing'),review:t('回顾','Review'),sync:t('同步','Sync'),services:t('服务','Server'),model:t('模型','Model'),settings:t('设置','Settings')}[tab])}</strong><small className="app-version">{appVersion}</small></div><button className="library-trigger" type="button" aria-haspopup="dialog" aria-expanded={libraryOpen} onClick={()=>setLibraryOpen(true)} disabled={!ready||agentSending||saving||pageState.busy||childDepth}><span className="library-trigger-content"><span className="library-trigger-name">{selectedLibrary?.name||t('选择资料库','Choose library')}</span>{ready&&<span className={`library-connection is-${connectionTone}`} role="status"><i aria-hidden="true"/>{connectionLabel}</span>}</span><span className="library-trigger-chevron" aria-hidden="true">⌄</span></button></header>
     {libraryOpen && <div className="sheet-backdrop" onClick={()=>setLibraryOpen(false)}><section className="library-sheet" role="dialog" aria-modal="true" aria-label={t('切换资料库','Switch library')} onClick={e=>e.stopPropagation()}><div className="sheet-heading"><h2>{t('切换资料库','Switch library')}</h2><button type="button" onClick={()=>setLibraryOpen(false)} aria-label={t('关闭','Close')}>×</button></div><div className="sheet-list">{libraries.map(item=><button type="button" key={item.libraryId} className="sheet-library" aria-current={item.libraryId===libraryId?'true':undefined} onClick={async()=>{await changeLibrary(item.libraryId);setLibraryOpen(false);}}><span><strong>{item.name}</strong><small>{libraryLabel(item.role||'standalone')} · {libraryLabel(item.integrity)}</small></span>{item.libraryId===libraryId&&<span aria-hidden="true">✓</span>}</button>)}</div><button type="button" className="sheet-manage" onClick={()=>{setLibraryOpen(false);switchTab('settings');}}>{t('管理资料库和服务','Manage libraries and servers')}　›</button></section></div>}
     {!isNative && <p className="notice">{t('浏览器布局预览 · 保存需要 Android 原生资料库','Browser layout preview · saving requires the native Android library')}</p>}
-    <main className={tab === 'chat' && !reading && !editor ? 'chat-main' : undefined}>
+    <main className={tab === 'chat' && !reading && !editor ? 'chat-main' : ['notes','collections','write'].includes(tab)?'record-main':undefined}>
       {inWorkspace&&!childDepth&&!reading&&<div className="mw-sections" role="group" aria-label={t('资料分类','Library sections')}>{workspaceSections.map(([id,label,en])=><button key={id} aria-pressed={tab===id} onClick={()=>switchTab(id)}>{t(label,en)}</button>)}</div>}
       {reading ? <article className="reading"><button className="text" onClick={() => setReading(null)}>‹ {t('返回','Back')}</button><h1>{reading.title}</h1><p className="secondary">{originLabel(reading.origin)} · {reading.contentDay||reading.createdAt?.slice(0, 10)||t('日期待确认','Date unconfirmed')}</p><MarkdownView markdown={reading.markdown} libraryId={libraryId} recordId={reading.id} attachmentDescriptors={reading.attachmentDescriptors}/></article> : tab === 'chat' ? <>
         {editor ? <><button className="text" onClick={() => setEditor(false)}>‹ {t('返回助手','Back to assistant')}</button><h1>{t('直接记录','Quick note')}</h1><p className="secondary">{t('保存到手机资料库，无需模型或电脑服务。','Save to the phone library without a model or desktop service.')}</p></> : <ChatPanel key={libraryId} libraryId={libraryId} ready={ready} config={modelConfig} onRead={read} onSending={setAgentSending} onOpenSettings={() => switchTab('settings')} onOpenModel={() => switchTab('model')} onDirect={async (text, options = {}) => {
@@ -253,7 +268,7 @@ function App() {
         }}/>}
         {!editor&&(draft.markdown||draft.title||uncertain)&&<button className="chip" onClick={()=>setEditor(true)}>{uncertain?t('核对未完成的记录','Verify unfinished note'):t('继续未完成的记录','Continue unfinished note')}</button>}
       </> : tab==='home' ? (ready&&<MobileRecommendations key={libraryId+role} workspace={workspace} opening={opening} onTheme={async id=>{
-        if(await switchTab('themes')){setPhoneTopics(null);requestTheme(id,libraryId,{selectPanel:()=>{}});}
+        if(await switchTab('themes')){requestTheme(id,libraryId,{selectPanel:()=>{}});}
       }}/>) : tab === 'reading' ? <ReadingNotesPanel libraryId={libraryId} workspace={workspace} onPageStateChange={onReadingPageStateChange}/> : tab==='themes'?<WorkspaceThemes key={libraryId} workspace={workspace} onNavigation={onNavigation} detailOpen={childDepth}/>:tab==='review'?<ReviewPanel key={libraryId} libraryId={libraryId} workspace={workspace}/>:tab==='global'?<WorkspaceSearch key={libraryId} workspace={workspace}/>:['notes','collections','write'].includes(tab)?<RecordPanel key={libraryId+':'+tab} libraryId={libraryId} libraries={libraries} workspace={workspace}
         mode={tab==='write'?'articles':tab==='collections'?'collections':'records'} arrivalId={tab==='write'?openArticle:null} onArrived={()=>setOpenArticle(null)}
         onNavigation={onNavigation} viewState={listViews.current[libraryId+':'+({notes:'materials',write:'articles',collections:'collections'}[tab])]}
@@ -268,7 +283,7 @@ function App() {
       {journalNotice&&<MessageDialog message={t('同一天已有日记时，内容会追加到当日日记。','If a journal already exists for this day, this text will be appended.')} onClose={()=>setJournalNotice(false)}/>}
       <div><select aria-label={t('记录类型','Note type')} value={draft.kind} onChange={e => edit({kind: e.target.value})} disabled={saving || uncertain || !ready}><option value="journal">{t('日记','Journal')}</option><option value="idea">{t('想法','Idea')}</option><option value="freewrite">{t('自由书写','Freewriting')}</option><option value="reading_note">{t('读书笔记','Reading note')}</option><option value="web">{t('网页','Web')}</option><option value="ai">{t('AI 讨论','AI discussion')}</option><option value="reference">{t('参考资料','Reference')}</option></select><button className="primary" disabled={!ready || saving || !draft.markdown.trim()} onClick={save}>{saving ? t('核对并保存…','Verifying and saving…') : uncertain ? t('再次核对','Check again') : t('直接记录','Save note')}</button></div>
     </section>}
-    <nav hidden={Boolean(reading || editor || childDepth)} aria-label={t('主导航','Main navigation')}>{[['home','首页','Home'],['chat','对话','Chat'],['notes','资料库','Library'],['model','模型','Model'],['settings','设置','Settings']].map(([key,label,en]) => <button key={key} aria-current={(key==='notes'?inWorkspace:tab===key)?'page':undefined} disabled={saving || agentSending} onClick={() => switchTab(key)}><PhoneIcon name={key}/><span>{t(label,en)}</span></button>)}</nav>
+    <nav hidden={Boolean(reading || editor || childDepth)} aria-label={t('主导航','Main navigation')}>{[['home','首页','Home'],['chat','对话','Chat'],['notes','资料库','Library'],['global','搜索','Search'],['model','模型','Model'],['settings','设置','Settings']].map(([key,label,en]) => <button key={key} aria-current={(key==='notes'?inWorkspace:tab===key)?'page':undefined} disabled={saving || agentSending} onClick={() => switchTab(key)}><PhoneIcon name={key}/><span>{t(label,en)}</span></button>)}</nav>
   </div>;
 }
 applyWallpaper();

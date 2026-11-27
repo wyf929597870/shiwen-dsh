@@ -33,8 +33,8 @@
 .sw-canvas-card small,.sw-canvas-reader article>small { font-size:12px;opacity:.78 }
 .sw-idea-canvas button.sw-canvas-content { display:block;width:100%;padding:5px 0 7px;background:none;border:0;text-align:start;box-shadow:none;color:inherit }
 .sw-canvas-content strong,.sw-canvas-content span { display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;white-space:normal }
-.sw-canvas-content strong { -webkit-line-clamp:2;font-size:15px;line-height:1.4 }
-.sw-canvas-content span { -webkit-line-clamp:3;margin-top:4px;font-size:13px;font-weight:400;line-height:1.5 }
+.sw-canvas-content strong { -webkit-line-clamp:5;font-size:15px;font-weight:550;line-height:1.55 }
+.sw-canvas-content .sw-canvas-source-title { -webkit-line-clamp:1;margin-top:7px;font-size:12px;font-weight:400;line-height:1.5;opacity:.76 }
 .sw-canvas-card footer { display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid var(--canvas-line);padding-top:4px }
 .sw-canvas-card footer button { background:transparent;border:0;color:inherit;font-size:12px;padding:4px 0 }
 .sw-canvas-card footer button:hover { text-decoration:underline }

@@ -22,7 +22,7 @@ class ExplorationWebViewTest {
         try{
             val repo=manager.create("独立库后台整理验收")
             val pool=PhoneExploration(repo)
-            val parent=repo.create(freshId(),obj("kind" to "idea","markdown" to "今晚我读了几页。","origin" to "personal"),0)
+            val parent=repo.create(freshId(),obj("kind" to "idea","markdown" to "今晚我读了几页。","origin" to "personal","contentDay" to "2026-11-01"),0)
             repo.annotationCreate(parent.id,parent.versionId,null,"阅读批注","## 待探索\n- 明天要继续读吗？",freshId())
             val job=pool.execute("shiwen_exploration_import",obj("mode" to "history","requestId" to freshId())).getString("jobId")
             manager.select(previous)
@@ -34,6 +34,21 @@ class ExplorationWebViewTest {
             val question=pool.rows("exploration_questions").single()
             check(question.getString("original")=="明天要继续读吗？" && question.getString("status")=="pending")
             check(pool.detail(question.getString("id")).getJSONArray("sources").getJSONObject(0).getString("recordId")==parent.id)
+            val q=question.getString("id")
+            pool.execute("shiwen_exploration_review",obj("questionId" to q,"expectedRevision" to question.getInt("revision"),
+                "requestId" to freshId(),"action" to "rewrite","text" to "阅读被打断后怎么办？"))
+            val newer=repo.create(freshId(),obj("kind" to "journal","contentDay" to "2026-11-02","origin" to "personal",
+                "markdown" to "阅读被打断时，我记下了页码。"),0)
+            val followup=pool.execute("shiwen_exploration_import",obj("mode" to "incremental","requestId" to freshId())).getString("jobId")
+            PhoneDiscoveryWorker.enqueue(context,repo.libraryId)
+            val end=System.nanoTime()+60_000_000_000
+            while(pool.get("jobs",followup)?.optString("status")!="ready"){
+                check(System.nanoTime()<end){pool.get("jobs",followup).toString()};Thread.sleep(150)
+            }
+            val detail=pool.detail(q)
+            check(detail.getJSONArray("clues").objects().single().getString("recordId")==newer.id)
+            check(detail.getJSONArray("responses").length()==0)
+
         } finally {manager.select(previous);manager.close()}
     }
 

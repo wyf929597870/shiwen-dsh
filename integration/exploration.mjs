@@ -37,8 +37,14 @@ export const explorationTools={
   shiwen_exploration_read:tool('read','Read a question and its currently valid evidence.',{...library,questionId:id.optional(),reviewItemId:id.optional()}),
   shiwen_exploration_review:tool('update','Apply a user decision to a versioned question.',{
     ...write,questionId:id.optional(),expectedRevision:revision.optional(),reviewItemId:id.optional(),
-    expectedReviewRevision:revision.optional(),mappings:z.array(mappedSource).min(1).max(32).optional(),targetQuestionId:id.optional(),expectedTargetRevision:revision.optional(),decisionId:id.optional(),evidenceFingerprint:id.optional(),action:z.enum(['merge','undo_merge','keep_separate','resolve_source','accept','rewrite','observe','skip','restore','answered','continue','confirm_personal_context']),
+    expectedReviewRevision:revision.optional(),mappings:z.array(mappedSource).min(1).max(32).optional(),targetQuestionId:id.optional(),expectedTargetRevision:revision.optional(),decisionId:id.optional(),evidenceFingerprint:id.optional(),action:z.enum(['merge','undo_merge','keep_separate','resolve_source','accept','rewrite','observe','skip','restore','answered','continue','confirm_personal_context','dismiss_clue']),
     text:z.string().trim().min(1).max(2000).optional(),recordId:id.optional(),sourceRevision:revision.optional()
+  }),
+  shiwen_exploration_step:tool('update','Add a follow-up, judgment, trial or result, choose a branch or pause it.',{
+    ...versioned,action:z.enum(['add','select','pause']),stepId:id,accept:z.literal(true).optional(),
+    kind:z.enum(['ask','judgment','trial','result']).optional(),text:z.string().trim().min(1).max(10000).optional(),
+    parentId:id.optional(),responseId:id.optional(),responseRevision:revision.optional(),quote:z.string().min(1).max(16000).optional(),
+    observation:z.string().trim().min(1).max(2000).optional(),reviewDay:z.iso.date().optional(),takeaway:z.string().trim().min(1).max(2000).optional()
   }),
   shiwen_exploration_place:tool('update','Pin, replace or unpin a question for one day or week.',{
     ...versioned,action:z.enum(['pin','replace','unpin']),period:z.enum(['day','week']),periodKey:z.iso.date(),
@@ -58,3 +64,13 @@ reviewTool.schema=reviewTool.schema.refine(a=>a.action==='resolve_source'
   {message:'The decision requires the matching target and expected revision'});
 
 reviewTool.schema=reviewTool.schema.refine(a=>!['merge','undo_merge','keep_separate'].includes(a.action)||(a.targetQuestionId&&a.expectedTargetRevision&&(a.action!=='undo_merge'||a.decisionId)&&(a.action!=='keep_separate'||a.evidenceFingerprint)),{message:'Provide both question versions and the decision or match evidence'});
+
+reviewTool.schema=reviewTool.schema.refine(a=>a.action!=='dismiss_clue'||Boolean(a.recordId&&a.sourceRevision),{message:'Provide the suggested record and revision'});
+
+const stepTool=explorationTools.shiwen_exploration_step;
+stepTool.schema=stepTool.schema.refine(a=>{
+  if(a.action!=='add')return ![a.kind,a.text,a.parentId,a.responseId,a.responseRevision,a.quote,a.observation,a.reviewDay,a.takeaway,a.accept].some(v=>v!==undefined);
+  return a.kind&&a.text&&Boolean(a.responseId)===Boolean(a.responseRevision)&&!(a.responseId&&a.parentId)
+    &&(!a.quote||a.responseId)&&(!a.reviewDay&&!a.observation||a.kind==='trial')
+    &&(!a.takeaway||a.kind==='result')&&(a.kind!=='result'||a.parentId);
+},{message:'Provide the origin and fields for this exploration step'});

@@ -6,7 +6,7 @@ import {useI18n} from './i18n.js';
 const EMPTY_LIST = Object.freeze([]);
 const MAX_PAGE_IMAGE_BYTES = 16 * 1024 * 1024;
 
-export function MarkdownView({markdown = '', libraryId, recordId, branchId, attachmentDescriptors = EMPTY_LIST, branchAttachments = EMPTY_LIST}) {
+export function MarkdownView({markdown = '', displayedTitle, libraryId, recordId, branchId, attachmentDescriptors = EMPTY_LIST, branchAttachments = EMPTY_LIST}) {
   const root = useRef(null);
   const {language,t} = useI18n();
   const rendered = renderMarkdownHtml(markdown,language);
@@ -15,6 +15,8 @@ export function MarkdownView({markdown = '', libraryId, recordId, branchId, atta
     const container = root.current;
     if (!container) return;
     container.innerHTML = rendered;
+    const first=container.firstElementChild;
+    if(displayedTitle&&first?.matches('h1,h2')&&!first.querySelector('a,button,img,[role="img"]')&&first.textContent.trim()===displayedTitle.trim())first.remove();
     let active = true;
     let viewer;
     const allowZoom = image => {
@@ -126,7 +128,7 @@ export function MarkdownView({markdown = '', libraryId, recordId, branchId, atta
     };
     void loadImages();
     return () => { active = false;if(viewer){viewer.close();viewer.remove();viewer=null;}loadedImages.forEach(item=>{item.image.src='';}); };
-  }, [rendered, markdown, libraryId, recordId, branchId, descriptorKey, language]);
+  }, [rendered,displayedTitle, markdown, libraryId, recordId, branchId, descriptorKey, language]);
   // The effect owns this subtree: React must not reapply the original HTML
   // and resurrect loading placeholders after native images are inserted.
   return <div ref={root} className="markdown-view"/>;

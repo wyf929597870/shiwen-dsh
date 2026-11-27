@@ -127,13 +127,16 @@ class PhoneDiscoveryWorker(context:Context, params:WorkerParameters): Worker(con
                 if(task.getString("mode")=="incremental")pool.put("progress",obj("cursor" to seq),"cursor")
                 progress.put("scanned",progress.getInt("scanned")+1)
             }
-            if(current() && (entries.isFailure || pool.config().getInt("revision")!=settings.getInt("revision"))){
+            val valid=current()
+            val sameSettings=pool.config().getInt("revision")==settings.getInt("revision")
+            if(valid && sameSettings && ann==null && record!=null && task.getString("mode")=="incremental")pool.discoverFollowups(record)
+            if(valid && (entries.isFailure || !sameSettings)){
                 pool.put("retry-"+id,task,seq.toString())
                 progress.put("retry",pool.rows("retry-"+id).size)
                 pool.put("jobs",job.put("status",if(task.getBoolean("retried"))"failed" else "pending"),id)
                 return@Callable if(task.getBoolean("retried"))"retry" else "next"
             }
-            if(current() && parent!=null && record!=null){
+            if(valid && parent!=null && record!=null){
                 val items=entries.getOrThrow()
                 val keys=items.associateWith { explorationHash(JSONArray(listOf(record.id,it.getString("type"),it.getString("text")))) }
                 val actor="library:"+record.id

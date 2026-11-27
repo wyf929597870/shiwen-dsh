@@ -19,7 +19,7 @@ test('分组关系、双向去重及删除恢复',t=>{
 });
 test('备份迁移与目标库身份碰撞保护',t=>{
  const {s}=make(t),{s:target,path}=make(t),a=s.save({kind:'idea',body:'甲'}),b=s.save({kind:'idea',body:'乙'}),lib=s.themeContext().libraryId,targetId=target.themeContext().libraryId;s.recordRelationAdd({id:a.id,relatedId:b.id,expectedLibraryId:lib});
- const raw=s.exportBackup(),backup=JSON.parse(raw);assert.equal(backup.payload.schema,19);target.restoreBackup(raw);assert.deepEqual(target.recordNeighborhood({id:a.id}).related.map(x=>x.id),[b.id]);
+ const raw=s.exportBackup(),backup=JSON.parse(raw);assert.equal(backup.payload.schema,21);target.restoreBackup(raw);assert.deepEqual(target.recordNeighborhood({id:a.id}).related.map(x=>x.id),[b.id]);
  const collision=JSON.parse(raw);collision.payload.tables.record_relations[0].library_id=targetId;collision.payload.tables.record_relations.push({...collision.payload.tables.record_relations[0],blocked:1});target.restoreBackup(sign(collision));assert.deepEqual(target.recordNeighborhood({id:a.id}).related,[]);let stored=JSON.parse(target.exportBackup()).payload.tables.record_relations;assert.equal(stored.length,1);assert.equal(stored[0].library_id,targetId);assert.equal(stored[0].blocked,1);target.restoreBackup(target.exportBackup());assert.deepEqual(target.recordNeighborhood({id:a.id}).related,[]);
  const old=JSON.parse(raw);old.payload.schema=16;delete old.payload.tables.record_relations;target.restoreBackup(sign(old));assert.deepEqual(target.recordNeighborhood({id:a.id}).related,[]);
  const invalid=JSON.parse(raw);invalid.payload.tables.record_relations[0].right_id=invalid.payload.tables.record_relations[0].left_id;assert.throws(()=>target.restoreBackup(sign(invalid)),/关系无效/);assert.deepEqual(target.recordNeighborhood({id:a.id}).related,[]);

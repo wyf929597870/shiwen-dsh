@@ -21,6 +21,8 @@ export interface Methods {
   annotationDelete: {args:{id:string;revision:number;requestId:string};result:MobileRecord};
   annotationRestore: {args:{id:string;revision:number;requestId:string};result:MobileRecord};
   reviewPreview: {args:{period:'1'|'7'|'14'|'30'|'month';month?:string};result:{personalOriginalCharacters:number;observedEdits:{added:number;removed:number;net:number};start:string;end:string;records:Array<{id:string;title:string;kind:MobileRecordKind;contentDay:string;characters:number;goalMarkdown?:string}>;daily:Array<{day:string;personalOriginalCharacters:number;personalOriginalRecords:number}>}};
+  phoneSemanticStatus: {args:{libraryId:string;start?:boolean;retry?:boolean};result:{libraryScope:string;state:string;canSearchSemantic:boolean;completed:number;total:number;message?:string}};
+  phoneSemanticSearch: {args:{libraryId:string;query:string;offset?:number;limit?:number};result:{libraryScope:string;total:number;items:object[];nextOffset:number|null}};
   workspaceSearch: {args:{libraryId:string;query:string;related?:boolean;offset?:number;limit?:number};result:{libraryScope:string;total:number;items:object[];nextOffset:number|null}};
   workspaceThemes: {args:{libraryId:string;method:string;args:Record<string,unknown>};result:{result:unknown}};
   explorationCall: {args:{libraryId:string;method:string;args:Record<string,unknown>};result:{result:unknown}};

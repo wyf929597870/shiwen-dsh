@@ -40,7 +40,7 @@ export const discoveryDDL=`
  CREATE TABLE IF NOT EXISTS exploration_legacy(card TEXT PRIMARY KEY,result TEXT NOT NULL);
  INSERT OR IGNORE INTO exploration_config SELECT 1,1,0,1,COALESCE(MAX(seq),0),0 FROM sync_changes;`;
 const ruleVersion=1,leaseDuration=120000,pageSize=40;
-export function createDiscovery({db,api,lib,putSuggestion}){
+export function createDiscovery({db,api,lib,putSuggestion,discoverFollowups}){
  const get=(sql,...args)=>db.prepare(sql).get(...args),all=(sql,...args)=>db.prepare(sql).all(...args);
  const run=(sql,...args)=>db.prepare(sql).run(...args);
  const tx=fn=>db.transaction(fn)();
@@ -123,7 +123,10 @@ export function createDiscovery({db,api,lib,putSuggestion}){
    if(!permitted(job.actor)){state='retry';error='整理权限已撤销';}
    else if(!current||input(work)?.signature!==current.signature){state='stale';}
    else if(config().revision!==model.revision){state='retry';error='整理设置已变化';}
-   else if(fn)fn();
+   else {
+    if(!current.ann&&job.mode==='incremental')discoverFollowups(current.parent);
+    if(fn)fn();
+   }
    run('UPDATE exploration_work SET state=?,lease=NULL,expires=?,result=?,error=? WHERE job=? AND record=? AND revision=?',
     state,state==='retry'?now+60000:0,JSON.stringify(results),error,job.id,work.record,work.revision);
   });

@@ -16,7 +16,10 @@ internal class LibraryClientArchive(context: Context) {
         val drafts = RecordEditorDraftStore(app)
         val result = try { JSONObject().put("version", 1).put("editorDrafts", drafts.archive(repo.libraryId)) }
             finally { drafts.close() }
-        result.put("workspaceThemes", JSONArray(repo.dao.workspaceThemes().map(::JSONObject)))
+        val documents = TopicDocuments(repo.dao)
+        result.put("workspaceThemes", repo.db.runInTransaction(java.util.concurrent.Callable {
+            JSONArray(documents.ids("workspace-theme:").map { documents.read("workspace-theme:$it")!! })
+        }))
         if(repo.registryItem().role=="standalone"){
             val entries=repo.dao.explorationScope("standalone").filter {it.kind in portableExploration}
             if(entries.isNotEmpty())result.put("exploration",JSONArray(entries.map {obj("kind" to it.kind,"key" to JSONArray(it.key),"data" to JSONObject(it.data))}))
@@ -56,7 +59,9 @@ internal class LibraryClientArchive(context: Context) {
             archive.optJSONArray("workspaceThemes")?.let { themes ->
                 for (i in 0 until themes.length()) {
                     val theme = themes.getJSONObject(i)
-                    repo.dao.putMeta(LibraryMeta("workspace-theme:" + theme.getString("id"), theme.toString()))
+                    val id = theme.getString("id")
+                    TopicDocuments(repo.dao).write("workspace-theme:$id",theme)
+                    if (repo.registryItem().role!="standalone") repo.dao.putMeta(LibraryMeta("topic-dirty:$id",theme.optString("updated",java.time.Instant.EPOCH.toString())))
                 }
             }
             repo.dao.putMeta(LibraryMeta("restored-editor-archive-digest", digest))
@@ -75,7 +80,7 @@ internal class LibraryClientArchive(context: Context) {
         .joinToString("") { "%02x".format(it) }
     companion object {
         private val portableExploration=setOf("exploration_questions","exploration_discoveries","exploration_evidence","exploration_reviews",
-            "exploration_aliases","exploration_pairs","exploration_decisions","exploration_periods","exploration_responses","settings","legacy")
+            "exploration_aliases","exploration_pairs","exploration_decisions","exploration_periods","exploration_responses","exploration_clues","exploration_steps","settings","legacy")
         fun validate(archive: JSONObject) {
             for(entry in archive.optJSONArray("exploration")?.objects().orEmpty()){
                 require(entry.getString("kind") in portableExploration && entry.getJSONArray("key").length() in 1..3)
@@ -89,7 +94,7 @@ internal class LibraryClientArchive(context: Context) {
                     val theme = themes.getJSONObject(i)
                     require(ids.add(UUID.fromString(theme.getString("id")).toString()) && theme.getInt("revision") > 0 &&
                         theme.getString("title").length in 1..200 && theme.getString("summary").length <= 10000 &&
-                        theme.has("members") && theme.toString().toByteArray().size <= 2_000_000) { "INVALID_WORKSPACE_THEME" }
+                        theme.getJSONArray("members").length() <= 10000) { "INVALID_WORKSPACE_THEME" }
                     for (j in 0 until theme.getJSONArray("members").length()) {
                         val member = theme.getJSONArray("members").getJSONObject(j)
                         require(member.getString("field") in setOf("excerpt","body","reflection") && member.getString("sourceRecordId").isNotBlank() &&

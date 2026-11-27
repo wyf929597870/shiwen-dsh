@@ -333,6 +333,7 @@ class LibraryProbePlugin : Plugin() {
             if(row.role!="standalone"){
                 val pool=io.github.wyf929597870.shiwen.library.PhoneExploration(repository)
                 put("recordChanges",repository.dao.discoveryCut())
+                put("topicChanges",repository.dao.meta("topic-changes") ?: "")
                 put("explorationCursor",pool.get("sync","cursor",area=pool.local)?.optLong("cursor")?:0)
             }
         }
@@ -342,7 +343,7 @@ class LibraryProbePlugin : Plugin() {
         val rows = libraryManager.all().map { row -> JSObject().put("libraryId", row.libraryId).put("name", row.name)
             .put("role", row.role).put("integrity", row.integrity).put("serverId", row.serverId ?: JSONObject.NULL)
             .put("epoch", row.epoch ?: JSONObject.NULL).put("lastSyncedAt", row.lastSyncedAt ?: JSONObject.NULL)
-            .put("pendingCount", libraryManager.openLibrary(row.libraryId).dao.pendingOutbox(100_000).size)
+            .put("pendingCount", libraryManager.openLibrary(row.libraryId).dao.let { it.pendingOutbox(100_000).size + if (row.role=="standalone") 0 else it.pendingTopics() })
             .put("activeId", activeId == row.libraryId) }
         JSObject().put("items", JSArray(rows)).put("activeId", activeId)
     }
@@ -582,12 +583,25 @@ class LibraryProbePlugin : Plugin() {
         JSObject(io.github.wyf929597870.shiwen.library.LibraryReview(repository)
             .preview(call.getString("period") ?: "7", call.getString("month")).toString())
     }
+    @PluginMethod fun phoneSemanticStatus(call: PluginCall) = run(call, network = true) {
+        JSObject(repository.semanticSearch.status(call.getBoolean("start") == true, call.getBoolean("retry") == true).toString())
+    }
+    @PluginMethod fun phoneSemanticSearch(call: PluginCall) = run(call, network = true) {
+        JSObject(repository.semanticSearch.search(call.data).toString())
+    }
     @PluginMethod fun workspaceSearch(call: PluginCall) = run(call, network = true) {
         JSObject(io.github.wyf929597870.shiwen.library.WorkspaceSearch(repository).search(call.data).toString())
     }
     @PluginMethod fun workspaceThemes(call: PluginCall) = run(call) {
         val themes = io.github.wyf929597870.shiwen.library.WorkspaceThemes(repository)
-        JSObject().put("result", themes.perform(call.data))
+        val result = themes.perform(call.data)
+        if (call.getString("method") in setOf("themeSave","themeDelete","themeMemberAdd","themeMemberRemove")) {
+            val row = repository.registryItem()
+            if (row.role=="coordinated" && row.integrity=="complete" && row.autoSync &&
+                LibrarySyncWorkPolicy.wifiGate(row.syncConditionsJson,LibrarySyncScheduler.onWifi(context))==LibrarySyncWorkPolicy.WifiGate.READY)
+                runCatching { syncCoordinator.syncNow(row.libraryId,"auto") }
+        }
+        JSObject().put("result",result)
     }
     @PluginMethod fun explorationCall(call:PluginCall)=run(call){
         val method=call.getString("method")?:error("MISSING_METHOD")
@@ -601,7 +615,7 @@ class LibraryProbePlugin : Plugin() {
         val result=pool.execute(method,call.getObject("args")?:JSObject())
         if(!pool.bound && method=="shiwen_exploration_import")
             io.github.wyf929597870.shiwen.library.PhoneDiscoveryWorker.enqueue(context,repository.libraryId)
-        if(pool.bound && (method=="explorationConflictResolve" || method in setOf("shiwen_exploration_review","shiwen_exploration_respond","shiwen_exploration_place","shiwen_exploration_suggest")))
+        if(pool.bound && (method=="explorationConflictResolve" || method in setOf("shiwen_exploration_step","shiwen_exploration_review","shiwen_exploration_respond","shiwen_exploration_place","shiwen_exploration_suggest")))
             runCatching { syncCoordinator.syncNow(repository.libraryId,"auto") }
         JSObject().put("result",result)
     }

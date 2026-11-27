@@ -1,3 +1,4 @@
+import {usePullRefresh} from './ListInteractions.jsx';
 import MarkdownIt from 'markdown-it';
 import {decodeReadingNote} from '../../library/legacy/reading-note.mjs';
 import React,{useCallback,useEffect,useLayoutEffect,useRef,useState} from 'react';
@@ -33,7 +34,8 @@ function ThemesPageInner({rpc:baseRpc,t,onOpenSource,draftKey,scope,onNavigation
  const [list,setList]=useState([]),[id,setId]=useState(()=>savedDraft.current?.id||''),[theme,setTheme]=useState(null),[title,setTitle]=useState(()=>savedDraft.current?.title||''),[summary,setSummary]=useState(()=>savedDraft.current?.summary||''),[dirty,setDirty]=useState(()=>Boolean(savedDraft.current)),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[loading,setLoading]=useState(false),[retry,setRetry]=useState(0),[context,setContext]=useState(null);
  const serial=useRef(0),contextSerial=useRef(0),preserveDraft=useRef(false);
  const refresh=()=>rpc('themeList').then(setList).catch(e=>setError(e.message));
- useEffect(()=>{refresh();const reload=()=>refresh();window.addEventListener('shiwen-themes-updated',reload);return()=>window.removeEventListener('shiwen-themes-updated',reload);},[rpc]);
+ const detailCanReload=useRef(false);detailCanReload.current=Boolean(id&&!dirty&&!busy);
+ useEffect(()=>{refresh();const reload=()=>{refresh();if(detailCanReload.current)setRetry(n=>n+1);};window.addEventListener('shiwen-themes-updated',reload);return()=>window.removeEventListener('shiwen-themes-updated',reload);},[rpc]);
  useEffect(()=>{const token=++serial.current;if(!id){setTheme(null);setLoading(false);return;}setLoading(true);setError('');setContext(null);rpc('themeRead',{id}).then(value=>{if(token===serial.current){const draft=savedDraft.current?.id===id?savedDraft.current:null;if(preserveDraft.current){preserveDraft.current=false;setTheme(value);setNotice(t('已读取最新版本。保存会用当前输入覆盖最新的标题和说明，请先核对。','Latest version loaded. Saving will replace its title and description with your edits; review them first.'));}else{setTheme(draft?{...value,revision:draft.revision}:value);setTitle(draft?.title??value.title);setSummary(draft?.summary??value.summary);setDirty(Boolean(draft));savedDraft.current=null;}}}).catch(e=>{if(token===serial.current){setTheme(null);setError(e.message);}}).finally(()=>{if(token===serial.current)setLoading(false);});},[id,rpc,retry]);
  const leave=()=>!busy&&(!dirty||window.confirm(t('放弃未保存的主题修改？','Discard unsaved theme changes?')));
  const discardDraft=()=>{savedDraft.current=null;try{localStorage.removeItem(draftKey);}catch{}setDirty(false);};
@@ -46,7 +48,11 @@ function ThemesPageInner({rpc:baseRpc,t,onOpenSource,draftKey,scope,onNavigation
    return ()=>media.removeEventListener('change',update);
  },[]);
  const singlePane=Boolean(onNavigation)||narrow;
+ const [editing,setEditing]=useState(()=>Boolean(savedDraft.current));
+ const [actionId,setActionId]=useState('');
+ const showEditor=!singlePane||editing||dirty;
  const detailOpen=singlePane&&Boolean(id||dirty);
+ const refreshRef=usePullRefresh(refresh,Boolean(onNavigation)&&!detailOpen);
  useLayoutEffect(()=>{
    if(!singlePane&&detailPane.current)detailPane.current.scrollTop=0;
  },[id,singlePane]);
@@ -56,7 +62,7 @@ function ThemesPageInner({rpc:baseRpc,t,onOpenSource,draftKey,scope,onNavigation
  }
  function backToList(){
    if(!leave())return;
-   discardDraft();setId('');setTheme(null);setTitle('');setSummary('');setError('');setNotice('');setContext(null);
+   discardDraft();setEditing(false);setActionId('');setId('');setTheme(null);setTitle('');setSummary('');setError('');setNotice('');setContext(null);
  }
  useLayoutEffect(()=>{onNavigation?.({depth:detailOpen,back:backToList});});
  useLayoutEffect(()=>{
@@ -72,15 +78,19 @@ function ThemesPageInner({rpc:baseRpc,t,onOpenSource,draftKey,scope,onNavigation
      return ()=>clearTimeout(restore);
    }
  },[singlePane,detailOpen]);
- const choose=(next,button)=>{if(next!==id&&leave()){rememberList(button);discardDraft();setId(next);}};
+ const choose=(next,button,edit=false)=>{
+   if(next!==id&&leave()){
+     rememberList(button);discardDraft();setActionId('');setEditing(edit);setId(next);
+   }
+ };
  function newTheme(event){
    if(!leave())return;
-   rememberList(event.currentTarget);discardDraft();setId('');setTheme(null);setTitle('');setSummary('');setDirty(true);setError('');setNotice('');
+   rememberList(event.currentTarget);discardDraft();setEditing(true);setActionId('');setId('');setTheme(null);setTitle('');setSummary('');setDirty(true);setError('');setNotice('');
  }
  useEffect(()=>{const receive=()=>{if(!pendingTheme)return;const request=pendingTheme;pendingTheme=null;if(request.libraryId!==scope){setError(t('资料库已切换，请重新打开原文','Library changed; reopen the source'));return;}choose(request.id);};themeListeners.add(receive);receive();return()=>{themeListeners.delete(receive);};},[id,dirty,busy,scope]);
  useEffect(()=>{if(!dirty)return;try{localStorage.setItem(draftKey,JSON.stringify({id,title,summary,revision:theme?.revision}));}catch{setError(t('无法保存本机主题草稿','Could not preserve the local theme draft'));}},[dirty,id,title,summary,theme?.revision]);
  useEffect(()=>{const warn=e=>{if(dirty||busy){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[dirty,busy]);
- async function save(){if(busy||!title.trim()||(id&&!theme))return;setBusy(true);setError('');try{const value=await rpc('themeSave',{...(theme?{id:theme.id,revision:theme.revision}:{}),title:title.trim(),summary});discardDraft();setNotice('');await refresh();if(theme){setTheme({...theme,...value});}else setId(value.id);}catch(e){setError(e.message);}finally{setBusy(false);}}
+ async function save(){if(busy||!title.trim()||(id&&!theme))return;setBusy(true);setError('');try{const value=await rpc('themeSave',{...(theme?{id:theme.id,revision:theme.revision}:{}),title:title.trim(),summary});discardDraft();setNotice('');await refresh();if(theme){setTheme({...theme,...value});}else setId(value.id);setEditing(false);}catch(e){setError(e.message);}finally{setBusy(false);}}
  async function removeTheme(){if(!theme||busy||!window.confirm(t('删除这个主题及其片段关联？原始记录会保留。','Delete this theme and its links? Original records remain.')))return;setBusy(true);setError('');try{await rpc('themeDelete',{id:theme.id,revision:theme.revision});discardDraft();setId('');setTheme(null);await refresh();}catch(e){setError(e.message);}finally{setBusy(false);}}
  async function removeMember(member){if(!theme||busy||!leave())return;setBusy(true);setError('');try{const value=await rpc('themeMemberRemove',{themeId:theme.id,revision:theme.revision,memberId:member.id});setTheme(value);setTitle(value.title);setSummary(value.summary);discardDraft();await refresh();}catch(e){setError(e.message);}finally{setBusy(false);}}
  async function showContext(member){if(['deleted','library_mismatch'].includes(member.location?.status))return;const token=serial.current,contextToken=++contextSerial.current;setContext({id:member.id,loading:true});try{const record=await rpc('readMarkdown',{id:member.sourceRecordId});if(token===serial.current&&contextToken===contextSerial.current)setContext({id:member.id,record});}catch(e){if(token===serial.current&&contextToken===contextSerial.current)setContext({id:member.id,error:e.message});}}
@@ -93,11 +103,105 @@ function ThemesPageInner({rpc:baseRpc,t,onOpenSource,draftKey,scope,onNavigation
   onOpenSource(member.sourceRecordId,{kind:member.currentKind||member.sourceKind,libraryId:scope,match,unlocated:!match});
  }
  const status={current:t('原文可定位','Located'),moved:t('原文位置已变化','Moved'),ambiguous:t('原文位置不唯一','Ambiguous'),changed:t('原文已变化','Changed'),deleted:t('原文已删除','Deleted'),library_mismatch:t('原文来自其他资料库','Different library')};
- return <main ref={page} className="sw-view sw-themes" data-single-pane={singlePane||undefined}>{detailOpen?<button type="button" className="sw-theme-back" ref={backButton} disabled={busy} onClick={backToList}>‹ {t('返回主题列表','Back to themes')}</button>:<header className="sw-head"><div><h1>{t('主题','Themes')}</h1><p className="sw-sub">{t('把不同记录中的片段放在一起。','Bring passages from different records together.')}</p></div><button className="sw-primary" onClick={newTheme}>{t('新建主题','New theme')}</button></header>}{error&&<p role="alert" className="sw-error">{error} <button onClick={()=>{refresh();if(id){preserveDraft.current=dirty;setRetry(v=>v+1);}}}>{dirty?t('读取最新版本并保留修改','Reload latest and keep edits'):t('重试读取','Retry loading')}</button></p>}{notice&&<p role="status">{notice}</p>}<div className="sw-columns"><aside hidden={detailOpen} className="sw-list" aria-label={t('主题列表','Themes')}>{list.map(row=><button className="sw-theme-list-item" key={row.id} aria-current={row.id===id?'true':undefined} onClick={event=>choose(row.id,event.currentTarget)}><strong>{row.title}</strong><small>{row.memberCount} {t('个片段','passages')}</small></button>)}{!list.length&&<p>{t('还没有主题','No themes yet')}</p>}</aside><section ref={detailPane} hidden={singlePane&&!detailOpen} className="sw-detail">{loading?<p role="status">{t('正在读取…','Loading…')}</p>:(!theme&&!dirty)?<p>{t('选择或新建主题','Choose or create a theme')}</p>:<><label>{t('主题标题','Theme title')}<input aria-label={t('主题标题','Theme title')} value={title} maxLength={200} disabled={busy} onChange={e=>{setTitle(e.target.value);setDirty(true);}}/></label><label>{t('说明','Description')}<textarea aria-label={t('说明','Description')} value={summary} maxLength={10000} disabled={busy} onChange={e=>{setSummary(e.target.value);setDirty(true);}}/></label><div className="sw-theme-actions"><button className="sw-primary" disabled={busy||!dirty||!title.trim()||(Boolean(id)&&!theme)} onClick={save}>{t('保存主题','Save theme')}</button>{theme&&<button className="sw-danger" disabled={busy} onClick={removeTheme}>{t('删除主题','Delete theme')}</button>}</div>{theme&&<section className="sw-theme-passages"><h2>{t('主题片段','Passages')} · {theme.members.length}</h2>{!theme.members.length&&<p>{t('还没有片段，可从素材或读书笔记加入。','Add passages from materials or reading notes.')}</p>}<PassageGrid members={theme.members}>{theme.members.map(member=>(
-  <ThemePassageCard key={member.id} member={member} t={t} status={status[member.location?.status]||member.location?.status}
-   busy={busy} context={context?.id===member.id?context:null} showContext={showContext}
-   openSource={openMember} removeMember={removeMember}/>
- ))}</PassageGrid></section>}</>}</section></div></main>;
+ return <main ref={page} className="sw-view sw-themes" data-single-pane={singlePane||undefined}>
+  {detailOpen
+   ? <button type="button" className="sw-theme-back" ref={backButton} disabled={busy} onClick={backToList}>‹ {t('返回主题列表','Back to themes')}</button>
+   : !onNavigation&&<header className="sw-head">
+      <div><h1>{t('主题','Themes')}</h1><p className="sw-sub">{t('把不同记录中的片段放在一起。','Bring passages from different records together.')}</p></div>
+      <button className="sw-primary" onClick={newTheme}>{t('新建主题','New theme')}</button>
+     </header>}
+  {error&&<p role="alert" className="sw-error">{error} <button onClick={()=>{
+    refresh();if(id){preserveDraft.current=dirty;setRetry(v=>v+1);}
+   }}>{dirty?t('读取最新版本并保留修改','Reload latest and keep edits'):t('重试读取','Retry loading')}</button></p>}
+  {notice&&<p role="status">{notice}</p>}
+  <div className="sw-columns">
+   <aside ref={refreshRef} hidden={detailOpen} className="sw-list" aria-label={t('主题列表','Themes')}>
+    {onNavigation&&<button type="button" className="sw-primary phone-create-fab" onClick={newTheme}>＋ {t('新建主题','New theme')}</button>}
+    {list.map(row=><ThemeListItem key={row.id} row={row} t={t} current={row.id===id}
+      singlePane={singlePane} showAction={actionId===row.id} setActionId={setActionId} choose={choose}/>)}
+    {!list.length&&<p>{t('还没有主题','No themes yet')}</p>}
+   </aside>
+   <section ref={detailPane} hidden={singlePane&&!detailOpen} className="sw-detail">
+    {loading?<p role="status">{t('正在读取…','Loading…')}</p>:(!theme&&!dirty)?<p>{t('选择或新建主题','Choose or create a theme')}</p>:<>
+     {showEditor?<>
+      <label>{t('主题标题','Theme title')}
+       <input aria-label={t('主题标题','Theme title')} value={title} maxLength={200} disabled={busy} onChange={e=>{setTitle(e.target.value);setDirty(true);}}/>
+      </label>
+      <label>{t('说明','Description')}
+       <textarea aria-label={t('说明','Description')} value={summary} maxLength={10000} disabled={busy} onChange={e=>{setSummary(e.target.value);setDirty(true);}}/>
+      </label>
+      <div className="sw-theme-actions">
+       <button className="sw-primary" disabled={busy||!dirty||!title.trim()||(Boolean(id)&&!theme)} onClick={save}>{t('保存主题','Save theme')}</button>
+       {theme&&<button className="sw-danger" disabled={busy} onClick={removeTheme}>{t('删除主题','Delete theme')}</button>}
+      </div>
+     </>:<div className="sw-theme-intro">
+      <h1>{theme.title}</h1>
+      {theme.summary&&<ThemeSummary key={theme.id} summary={theme.summary} t={t}/>}
+     </div>}
+     {theme&&(!singlePane||!showEditor)&&<section className="sw-theme-passages">
+      <h2>{t('主题片段','Passages')} · {theme.members.length}</h2>
+      {!theme.members.length&&<p>{t('还没有片段，可从素材或读书笔记加入。','Add passages from materials or reading notes.')}</p>}
+      <PassageGrid members={theme.members}>{theme.members.map(member=>(
+       <ThemePassageCard key={member.id} member={member} t={t} status={status[member.location?.status]||member.location?.status}
+        busy={busy} context={context?.id===member.id?context:null} showContext={showContext}
+        openSource={openMember} removeMember={removeMember}/>
+      ))}</PassageGrid>
+     </section>}
+    </>}
+   </section>
+  </div>
+ </main>;
+}
+
+function ThemeListItem({row,t,current,singlePane,showAction,setActionId,choose}){
+ const button=useRef(null),press=useRef(null),held=useRef(false);
+ function cancelPress(){clearTimeout(press.current?.timer);press.current=null;}
+ useEffect(()=>cancelPress,[singlePane]);
+ function reveal(){cancelPress();held.current=true;setActionId(row.id);}
+ function start(event){
+   cancelPress();held.current=false;
+   if(!singlePane||!event.isPrimary||event.button!==0||event.pointerType==='mouse')return;
+   press.current={x:event.clientX,y:event.clientY,timer:setTimeout(reveal,500)};
+ }
+ function move(event){
+   const point=press.current;
+   if(point&&Math.hypot(point.x-event.clientX,point.y-event.clientY)>8)cancelPress();
+ }
+ return <div className="sw-theme-list-line" onBlur={event=>{
+   if(showAction&&!event.currentTarget.contains(event.relatedTarget))setActionId('');
+ }} onKeyDown={event=>{
+   if(event.key==='Escape'&&showAction){setActionId('');button.current.focus();}
+ }}>
+   <button type="button" ref={button} className="sw-theme-list-item" aria-current={current?'true':undefined}
+    aria-keyshortcuts={singlePane?'Shift+F10':undefined}
+    onPointerDown={start} onPointerMove={move} onPointerCancel={cancelPress} onPointerUp={cancelPress} onPointerLeave={cancelPress}
+    onContextMenu={event=>{if(singlePane){event.preventDefault();reveal();}}}
+    onKeyDown={event=>{
+      if(singlePane&&(event.key==='ContextMenu'||(event.shiftKey&&event.key==='F10'))){event.preventDefault();reveal();}
+    }}
+    onClick={event=>{
+      if(singlePane&&held.current&&event.detail!==0){held.current=false;return;}
+      choose(row.id,button.current);
+    }}>
+     <strong>{row.title}</strong><small>{row.memberCount} {t('个片段','passages')}</small>
+   </button>
+   {singlePane&&showAction&&<button type="button" className="sw-theme-list-edit"
+    onClick={()=>choose(row.id,button.current,true)}>{t('编辑','Edit')}</button>}
+ </div>;
+}
+
+function ThemeSummary({summary,t}){
+ const text=useRef(null),[long,setLong]=useState(false),[expanded,setExpanded]=useState(false);
+ useLayoutEffect(()=>{
+   const node=text.current;
+   function measure(){setLong(node.scrollHeight>parseFloat(getComputedStyle(node).lineHeight)*3+1);}
+   measure();const observer=new ResizeObserver(measure);observer.observe(node);
+   return ()=>observer.disconnect();
+ },[summary]);
+ return <><p ref={text} className="sw-theme-summary" data-expanded={expanded||undefined}>{summary}</p>
+   {long&&<button type="button" className="sw-theme-summary-toggle" aria-expanded={expanded} onClick={()=>setExpanded(v=>!v)}>
+     {expanded?t('收起说明','Collapse description'):t('展开说明','Expand description')}
+   </button>}</>;
 }
 
 // Span a fine grid by each card's measured height. DOM and keyboard order stay
@@ -131,18 +235,20 @@ function ThemePassageCard({member,t,status,busy,context,showContext,openSource,r
  const long=preview.length<quote.length;
  const unavailable=['deleted','library_mismatch'].includes(member.location?.status);
  return <article className="sw-theme-member" data-field={member.field} data-long={long||undefined}>
-  <header className="sw-theme-card-kind">
-   <span>{kindLabel(member.currentKind||member.sourceKind,t)} · {fieldLabel(member.field,t)}</span>
-   <small>{status}</small>
-  </header>
   <blockquote dangerouslySetInnerHTML={{__html:excerptMarkup.renderInline(long&&!expanded?preview.trimEnd()+'…':quote)}}/>
   {long&&<button type="button" className="sw-theme-quote-toggle" aria-expanded={expanded} onClick={()=>setExpanded(v=>!v)}>{expanded?t('收起片段','Collapse passage'):t('展开片段','Expand passage')}</button>}
-  <strong className="sw-theme-card-source">{member.currentTitle||member.sourceTitle||t('未命名','Untitled')}</strong>
-  <footer className="sw-theme-card-actions">
+  {context&&<div className="sw-theme-context">{context.loading?t('正在读取…','Loading…'):context.error?<span role="alert">{context.error} <button onClick={()=>showContext(member)}>{t('重试','Retry')}</button></span>:(()=>{const loc=member.location,source=member.field==='excerpt'?decodeReadingNote(context.record.annotation)?.excerpts?.[loc?.excerptIndex??member.excerptIndex]?.text:context.record.markdown;const located=typeof source==='string'&&Number.isInteger(loc?.start)&&source.slice(loc.start,loc.end)===member.quote;return <><strong>{context.record.title}</strong><p>{located?t('定位结果见下方上下文，打开原文可阅读全文。','The passage is located below; open the source to read it in full.'):t('原文已变化或无法定位，请对照下方当前内容与片段快照。','The source changed or could not be located; compare the current content with the snapshot.')}</p><pre>{typeof source!=='string'?t('当前内容不可用','Current content unavailable'):located?<>{source.slice(Math.max(0,loc.start-150),loc.start)}<mark>{source.slice(loc.start,loc.end)}</mark>{source.slice(loc.end,Math.min(source.length,loc.end+150))}</>:source}</pre></>;})()}</div>}
+  <footer className="sw-theme-card-footer">
+   <div className="sw-theme-card-source">{member.currentTitle||member.sourceTitle||t('未命名','Untitled')}</div>
+   <div className="sw-theme-card-kind">
+    <span>{kindLabel(member.currentKind||member.sourceKind,t)} · {fieldLabel(member.field,t)}</span>
+    <small>{status}</small>
+   </div>
+   <div className="sw-theme-card-actions">
    <button type="button" disabled={busy||unavailable} onClick={()=>showContext(member)}>{t('查看上下文','View context')}</button>
    <button type="button" disabled={busy||unavailable} onClick={()=>openSource(member)}>{t('打开原文','Open source')}</button>
    <button type="button" className="sw-danger" disabled={busy} onClick={()=>removeMember(member)}>{t('移除','Remove')}</button>
+   </div>
   </footer>
-  {context&&<div className="sw-theme-context">{context.loading?t('正在读取…','Loading…'):context.error?<span role="alert">{context.error} <button onClick={()=>showContext(member)}>{t('重试','Retry')}</button></span>:(()=>{const loc=member.location,source=member.field==='excerpt'?decodeReadingNote(context.record.annotation)?.excerpts?.[loc?.excerptIndex??member.excerptIndex]?.text:context.record.markdown;const located=typeof source==='string'&&Number.isInteger(loc?.start)&&source.slice(loc.start,loc.end)===member.quote;return <><strong>{context.record.title}</strong><p>{located?t('定位结果见下方上下文，打开原文可阅读全文。','The passage is located below; open the source to read it in full.'):t('原文已变化或无法定位，请对照下方当前内容与片段快照。','The source changed or could not be located; compare the current content with the snapshot.')}</p><pre>{typeof source!=='string'?t('当前内容不可用','Current content unavailable'):located?<>{source.slice(Math.max(0,loc.start-150),loc.start)}<mark>{source.slice(loc.start,loc.end)}</mark>{source.slice(loc.end,Math.min(source.length,loc.end+150))}</>:source}</pre></>;})()}</div>}
  </article>;
 }

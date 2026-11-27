@@ -2,15 +2,15 @@
 
 拾文 Android 是独立的本地资料库客户端。界面使用 React + Capacitor，资料、草稿、任务与同步状态保存在 Kotlin/Room 中，手机不需要运行 Node 服务。早期真机验收范围见 [验证记录](../docs/android/validation-2026-11-07.md)。
 
-下载 [Android 0.1.58 正式签名 APK](https://github.com/wyf929597870/shiwen-dsh/releases/download/android-v0.1.58/shiwen-android-0.1.58.apk)，无需自行构建。最低 Android 9，应用 ID 为 `io.github.wyf929597870.shiwen`。升级直接覆盖安装，避免卸载造成未同步资料丢失。
+下载 [Android 0.1.66 正式签名 APK](https://github.com/wyf929597870/shiwen-dsh/releases/download/android-v0.1.66/shiwen-android-0.1.66.apk)，无需自行构建。最低 Android 9，应用 ID 为 `io.github.wyf929597870.shiwen`。升级直接覆盖安装，避免卸载造成未同步资料丢失。
 
-需要与电脑同步时，请配套升级拾文服务，例如 Linux 0.1.58。电脑和手机需要网络互通，离线修改会保存在手机。
+需要与电脑同步时，请配套升级拾文服务，例如 Linux 0.1.66。电脑和手机需要网络互通，离线修改会保存在手机。
 
 ## 日常使用
 
 本节描述当前源码；已发布 APK 的具体功能以对应版本说明为准。
 
-底部导航提供对话、资料库、模型和设置。进入「资料库」后可以切换到记录、读书、收藏、创作、主题、回顾或全局搜索。手机可以离线查原文、展开相关文字、选择片段生成文章大纲。连接同库电脑后，还可按意思搜索并使用电脑主题。手机主题保存在当前手机资料库。
+底部导航提供对话、资料库、模型和设置。进入「资料库」后可以切换到记录、读书、收藏、创作、主题、回顾或全局搜索。手机可以离线查原文、展开相关文字、选择片段生成文章大纲。连接同库电脑后，还可按意思搜索。主题和摘录保存在手机上，两端都支持主题同步时会随资料库双向同步，离线时也可以查看和编辑。
 
 - **手机 AI**：在设置中填写兼容 OpenAI Chat Completions 的 HTTPS 服务地址、模型和 Key。模型设置留在原生层，使用 Android Keystore 保护，不返回网页、不参加资料同步。保存配置不调用模型；明确发送才发起请求。
 - **远端 DSH**：选择已登录节点后使用该服务上的会话、Agent、工作区、Skills 与工具，审批、问题和取消均对应真实服务待办。手机不会把远端命令或 MCP 凭据当本机权限执行。
@@ -52,7 +52,7 @@ npm --prefix android run android:debug
 
 设置 `ANDROID_HOME` 或在未跟踪的 `android/native/local.properties` 中填写 `sdk.dir`。`sync` 将当前本地网页装入 APK，配置不使用远端 `server.url`。
 
-产物为 `debug/android/shiwen-android-0.1.58-debug.apk`。在已经使用调试包的手机上用 `adb install -r` 覆盖更新，保持原应用 ID 与签名，不要先卸载。正式签名、CI 和升级说明见 [构建与签名](../docs/android/build-and-signing.md)。
+产物为 `debug/android/shiwen-android-0.1.66-debug.apk`。在已经使用调试包的手机上用 `adb install -r` 覆盖更新，保持原应用 ID 与签名，不要先卸载。正式签名、CI 和升级说明见 [构建与签名](../docs/android/build-and-signing.md)。
 
 ## 验证
 
@@ -72,3 +72,5 @@ ADB=/path/to/adb node scripts/check-android-sync-host.mjs
 真实 Host 测试启动独立临时服务，通过 USB 端口转发连接；不读取个人服务、不调用付费模型，也不替代 Wi-Fi 验证。普通仪器测试使用随机命名资料库；`LibraryScaleTest` 需显式传入 `runScale=true`。
 
 浏览器预览只能验证布局和交互，不能代替原生保存与系统文件入口。JVM/Node 测试、原生仪器测试、真实服务链路和最终人工交互各自的证据见验证记录。详细边界保留在 [Android 实施计划](../docs/android/README.md)。
+
+全局搜索的「按意思」使用随 APK 提供的 BGE Base zh v1.5（model_quantized.onnx）。首次进入时，手机按当前资料库建立本地索引，可以先搜索已经处理的记录。退出应用后，已完成的记录会保留，下次进入会继续。资料修改、同步和移入回收站后，搜索会核对当前版本。构建时从固定版本下载并核验模型和词表，手机离线即可使用。

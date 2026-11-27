@@ -8,19 +8,18 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {workspaceAdapter} from '../android/web/workspace-adapter.mjs';
 
-test('synced topics require matching local and server source text, with the server revision on write',async()=>{
-  let remoteText='电脑修改',writes=[];
-  const call=async(method,args)=>{
+test('paired phone reads and edits the same local topics while disconnected',async()=>{
+  const calls=[];
+  const rpc=workspaceAdapter(async(method,args)=>{
+    assert.equal(method,'workspaceThemes');
     assert.equal(args.libraryId,'bound');
-    if(method==='recordRead')return {id:'source',kind:'idea',markdown:'手机修改',revision:4};
-    assert.equal(method,'workspaceRemote');
-    if(args.method==='readMarkdown')return {result:{id:'source',sourceLibraryId:'bound',kind:'idea',revision:17,markdown:remoteText}};
-    writes.push(args);return {result:{revision:2}};
-  };
-  const rpc=workspaceAdapter(call,{libraryId:'bound',role:'replica'});
-  const add=()=>rpc('themeMemberAdd',{themeId:'theme',sourceRecordId:'source',sourceRevision:4,field:'body',expectedLibraryId:'bound'});
-  await assert.rejects(add,/同步/);assert.equal(writes.length,0);
-  remoteText='手机修改';await add();assert.equal(writes[0].args.sourceRevision,17);
+    calls.push(args.method);
+    return {result:{revision:2}};
+  },{libraryId:'bound',role:'replica'});
+  await rpc('themeList');
+  await rpc('themeRead',{id:'theme'});
+  await rpc('themeMemberAdd',{themeId:'theme',sourceRecordId:'source',sourceRevision:4,field:'body',expectedLibraryId:'bound'});
+  assert.deepEqual(calls,['themeList','themeRead','themeMemberAdd']);
   await assert.rejects(()=>rpc('themeDelete',{expectedLibraryId:'elsewhere'}),/切换/);
 });
 
@@ -51,35 +50,22 @@ test('phone workspace navigates collections and highlights, adds a passage to a 
   if(process.env.SHIWEN_WORKSPACE_PREVIEW){await check('reading');await check('canvas','dark');}
 });
 
-test('the phone uses the PC semantic index and reads the same topic membership',{skip:!process.env.SHIWEN_TEST_MODEL_DIR},async t=>{
-  const {createStore}=await import('../plugins/library/legacy/store.mjs');
-  const {createContentSearch}=await import('../plugins/library/src/search/service.mjs');
-  const {createModel}=await import('../plugins/library/src/search/model.mjs');
-  const {apply}=await import('../plugins/workbench/src/index.mjs');
-  const dir=await mkdtemp(join(tmpdir(),'phone-pc-search-'));
-  const library=createStore(join(dir,'library.sqlite'));library.paths={root:dir,library:dir};
-  const model=createModel({directory:process.env.SHIWEN_TEST_MODEL_DIR});
-  library.contentSearch=createContentSearch({library,modelFactory:()=>model});
-  t.after(async()=>{await library.contentSearch.close();library.close();await rm(dir,{recursive:true,force:true});});
-  const record=library.save({kind:'idea',title:'每周回看',body:'每周回看日记，让我发现自己反复担心的事情。'});
-  const related=library.save({kind:'freewrite',title:'重复的心事',body:'重读旧日记，我发现相同的烦恼已经出现了许多次。'});
-  const libraryId=library.themeContext().libraryId;
-  const peer={id:'owner'};let route;
-  apply({shiwenLibrary:library,effect:fn=>fn(),connection:{browserPeer:peer,admit:()=>({peer}),fetch:{register:config=>{route=config;}}}});
-  const rpc=workspaceAdapter(async(method,request)=>{
-    assert.equal(request.libraryId,libraryId);
-    if(method==='recordRead')return {...record,markdown:'每周回看日记，让我发现自己反复担心的事情。'};
-    assert.equal(method,'workspaceRemote');
-    const result=await route.fetch(new Request('http://localhost/api/shiwen',{method:'POST',body:JSON.stringify({method:request.method,args:request.args})}));
-    const data=await result.json();assert.equal(result.status,200,data.error);return data;
-  },{libraryId,role:'replica'});
-  await library.contentSearch.enable();
-  for(let i=0;i<160&&!library.contentSearch.status().canSearchSemantic;i++)await new Promise(r=>setTimeout(r,30));
-  assert.equal((await rpc('serverSearchStatus')).canSearchSemantic,true);
-  const found=await rpc('contentSearch',{scope:'ideaCanvas',mode:'semantic',query:'回看日记，找出反复出现的担忧',offset:0,limit:5});
-  assert.equal(found.libraryScope,libraryId);assert.ok(found.items.some(x=>x.recordId===related.id));
-  const topic=await rpc('themeSave',{title:'手机与电脑',summary:'',expectedLibraryId:libraryId});
-  await rpc('themeMemberAdd',{themeId:topic.id,revision:topic.revision,sourceRecordId:record.id,sourceRevision:record.revision,field:'body',expectedLibraryId:libraryId});
-  assert.equal(library.themeRead({id:topic.id}).members[0].sourceRecordId,record.id);
-  assert.equal((await rpc('themeList'))[0].memberCount,1);
+test('phone meaning search uses the active local index in standalone and paired libraries',async()=>{
+  for(const role of ['standalone','coordinated']){
+    const calls=[];
+    const rpc=workspaceAdapter(async(method,args)=>{
+      calls.push(method);
+      assert.equal(args.libraryId,'local');
+      if(method==='phoneSemanticStatus')return {canSearchSemantic:true,state:'ready',libraryScope:'local'};
+      if(method==='phoneSemanticSearch')return {items:[{recordId:'found'}],libraryScope:'local'};
+      if(method==='workspaceSearch')return {items:[],libraryScope:'local'};
+      throw Error('Unexpected call '+method);
+    },{libraryId:'local',role});
+    await rpc('contentSearchEnable');
+    assert.ok((await rpc('contentSearchStatus')).canSearchSemantic);
+    for(const scope of ['ideaCanvas','global'])
+      assert.equal((await rpc('contentSearch',{scope,mode:'semantic',query:'以前对拖延的看法'})).items[0].recordId,'found');
+    await rpc('contentSearch',{mode:'exact',query:'拖延'});
+    assert.deepEqual(calls,['phoneSemanticStatus','phoneSemanticStatus','phoneSemanticSearch','phoneSemanticSearch','workspaceSearch']);
+  }
 });

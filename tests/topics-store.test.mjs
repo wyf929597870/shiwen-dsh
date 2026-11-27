@@ -22,13 +22,13 @@ test('主题片段校验、定位、并发与删除恢复',t=>{
 });
 test('完整备份主题校验、原库重映射和旧备份兼容',t=>{
  const {store:s}=isolated(t),{store:dest,path}=isolated(t),r=s.save({kind:'idea',body:'备份原文'}),topic=s.themeSave({title:'备份主题',summary:''});s.themeMemberAdd({themeId:topic.id,revision:1,sourceRecordId:r.id,sourceRevision:r.revision,field:'body'});
- const raw=s.exportBackup(),backup=JSON.parse(raw),targetId=JSON.parse(dest.exportBackup()).payload.libraryId;assert.equal(backup.payload.schema,19);assert.throws(()=>s.restoreBackup(raw,{requireEmpty:true}),/已有内容/);
+ const raw=s.exportBackup(),backup=JSON.parse(raw),targetId=JSON.parse(dest.exportBackup()).payload.libraryId;assert.equal(backup.payload.schema,21);assert.throws(()=>s.restoreBackup(raw,{requireEmpty:true}),/已有内容/);
  dest.restoreBackup(raw);assert.equal(dest.themeRead({id:topic.id}).members[0].location.status,'current');assert.notEqual(dest.themeRead({id:topic.id}).members[0].sourceLibraryId,backup.payload.libraryId);
  const invalid=JSON.parse(raw);invalid.payload.tables.theme_members[0].theme_id='missing';assert.throws(()=>dest.restoreBackup(sign(invalid)),/主题成员/);assert.equal(dest.themeRead({id:topic.id}).members.length,1);
  const other=JSON.parse(raw);other.payload.tables.theme_members[0].source_library_id='another-library';dest.restoreBackup(sign(other));assert.equal(dest.themeRead({id:topic.id}).members[0].location.status,'library_mismatch');
  const collision=JSON.parse(raw);collision.payload.tables.theme_members[0].source_library_id=targetId;dest.restoreBackup(sign(collision));assert.equal(dest.themeRead({id:topic.id}).members[0].sourceLibraryId,targetId);assert.equal(dest.themeRead({id:topic.id}).members[0].location.status,'library_mismatch');assert.deepEqual(dest.recordThemes({id:r.id}),[]);const again=dest.exportBackup();dest.restoreBackup(again);assert.equal(dest.themeRead({id:topic.id}).members[0].location.status,'library_mismatch');
  const old=JSON.parse(raw);old.payload.schema=15;delete old.payload.libraryId;delete old.payload.tables.themes;delete old.payload.tables.theme_members;dest.restoreBackup(sign(old));assert.deepEqual(dest.themeList(),[]);
- const future=JSON.parse(raw);future.payload.schema=20;assert.throws(()=>dest.restoreBackup(sign(future)),/备份格式/);
+ const future=JSON.parse(raw);future.payload.schema=22;assert.throws(()=>dest.restoreBackup(sign(future)),/备份格式/);
  const db=new Database(path);assert.equal(db.prepare("PRAGMA foreign_key_list(theme_members)").all().some(x=>x.table==='records'),false);db.close();
 });
 test('主题 RPC 限制 owner 并可读写',async t=>{

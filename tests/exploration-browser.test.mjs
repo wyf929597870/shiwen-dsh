@@ -10,7 +10,7 @@ import {promisify} from 'node:util';
 import {createStore} from '../plugins/library/legacy/store.mjs';
 import {apply} from '../plugins/workbench/src/index.mjs';
 
-test('桌面真实页面从原始池收下、离开后写回应、略过并撤卡',{skip:!process.env.SHIWEN_TEST_CHROME},async t=>{
+test('桌面从回应追问、从首页接续判断和行动、记结果后仍可略过撤卡',{skip:!process.env.SHIWEN_TEST_CHROME},async t=>{
  const dir=await mkdtemp(join(tmpdir(),'shiwen-explore-browser-'));
  const store=createStore(join(dir,'library.sqlite'));t.after(async()=>{store.close();await rm(dir,{recursive:true,force:true});});
  const r=store.save({kind:'idea',body:'我翻到昨天那一页，又读了一段。'});
@@ -33,6 +33,13 @@ test('桌面真实页面从原始池收下、离开后写回应、略过并撤�
    const parts=[];for await(const part of req)parts.push(part);
    const body=Buffer.concat(parts);calls.push(JSON.parse(body).method);
    const response=await route.fetch(new Request('http://localhost/api/shiwen',{method:'POST',body}));
+   const {method,args}=JSON.parse(body);
+   if(method==='shiwen_exploration_respond' && args?.body){
+    store.save({kind:'idea',body:'阅读被打断时，我试着夹了一枚书签。'});
+    store.save({kind:'freewrite',body:'被打断的阅读要怎样恢复呢？'});
+    const {jobId}=store.exploration.call('shiwen_exploration_import',{expectedLibraryId,requestId:'check-followups',mode:'incremental'});
+    while(store.exploration.discovery.result(jobId,'desktop').status==='pending')await new Promise(resolve=>setTimeout(resolve,5));
+   }
    res.writeHead(response.status,{'Content-Type':'application/json'});res.end(await response.text());
   }else if(req.url==='/app.js'){res.setHeader('Content-Type','text/javascript');res.end(app.contents);}
   else res.end('<!doctype html><meta charset="utf-8"><div id="root"></div><pre id="result"></pre><script src="/app.js"></script>');
@@ -42,7 +49,7 @@ test('桌面真实页面从原始池收下、离开后写回应、略过并撤�
   '--user-data-dir='+join(dir,'chrome'),'--virtual-time-budget=25000','--dump-dom','http://127.0.0.1:'+server.address().port],{timeout:45000,maxBuffer:3000000});
  assert.equal(stdout.match(/<pre id="result">([^<]*)<\/pre>/)?.[1],'passed',stdout.slice(-4500));
  const q=store.externalCall(agent,'shiwen_exploration_read',{expectedLibraryId,questionId:suggested.items[0].questionId});
- assert.equal(q.status,'skipped');assert.equal(store.get(q.responses[0].recordId).body,'我把书留在刚才那一页。');
+ assert.equal(q.status,'skipped');assert.deepEqual(q.steps.map(s=>s.kind),['ask','judgment','trial','result']);assert.equal(q.nextStep.parentId,q.steps[2].id);assert.equal(q.responses.length,2);assert.ok(q.responses.some(r=>r.preview==='我把书留在刚才那一页。'));
  const read=id=>store.externalCall(agent,'shiwen_exploration_read',{expectedLibraryId,questionId:id});
  assert.equal(read(more.items[0].questionId).responses[0].recordId,later.id);
  assert.equal(read(more.items[1].questionId).status,'skipped');

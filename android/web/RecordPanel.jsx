@@ -1,8 +1,9 @@
+import {MoreRows,usePullRefresh} from '../../plugins/workbench/src/ListInteractions.jsx';
 import {MobileExplorationEntry} from './MobileRecommendations.jsx';
 import {PhoneIcon} from './PhoneIcon.jsx';
 import {MessageDialog} from './MessageDialog.jsx';
 import {ReadingNoteSources} from '../../plugins/workbench/src/reading/ReadingNotesPage.jsx';
-import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {call} from '../bridge/library.mjs';
 import {sectionKinds} from '../../plugins/library/legacy/record-sections.mjs';
 import {ArticleReferences} from '../../plugins/workbench/src/ArticleReferences.jsx';
@@ -53,7 +54,7 @@ export function RecordPanel({libraryId, libraries=[], workspace, arrivalId, onAr
   const bodyRef=useRef(null);
   const slot=articles?'articles':collection?'collections':'materials',draftKey=`${libraryId}:${slot}`;
   const [rows,setRows] = useState([]), [cursor,setCursor] = useState(null), [more,setMore] = useState(false), [total,setTotal] = useState(null);
-  const cursorRef=useRef(null);
+  const cursorRef=useRef(null), listRead=useRef(0), appending=useRef(false);
   const [query,setQuery] = useState(viewState.query||''), [kind,setKind] = useState(viewState.kind||''), [showDeleted,setShowDeleted] = useState(Boolean(viewState.showDeleted));
   const [loadedPages,setLoadedPages] = useState(1), restorePages=useRef(Math.max(1,Number(viewState.loadedPages||1))), restoreScroll=useRef(Number(viewState.scrollTop||0));
   const viewStateRef=useRef(null);
@@ -79,10 +80,22 @@ export function RecordPanel({libraryId, libraries=[], workspace, arrivalId, onAr
   const dirty = Boolean(editing && selected && form && JSON.stringify(form)!==JSON.stringify(selected) || creating && form && JSON.stringify(form)!==JSON.stringify({...newMaterial(),kind:initialKind}));
   // A durable pending draft can be revisited; only an in-flight operation blocks navigation.
   useEffect(()=>onPageStateChange({dirty:(dirty&&!pendingDurable)||annotationState.dirty,busy:busy||annotationState.busy||!draftReady||((uncertain||Boolean(pendingAction))&&!pendingDurable)}),[dirty,busy,uncertain,pendingAction,draftReady,pendingDurable,annotationState,onPageStateChange]);
+  const listPosition=useRef(restoreScroll.current),wasDetail=useRef(false);
+  useLayoutEffect(()=>{
+    const main=document.querySelector('.app > main');
+    if(!main)return;
+    if(detailOpen)main.scrollTop=0;
+    else if(wasDetail.current)main.scrollTop=listPosition.current;
+    wasDetail.current=detailOpen;
+    if(detailOpen)return;
+    const remember=()=>{listPosition.current=main.scrollTop;};
+    main.addEventListener('scroll',remember,{passive:true});
+    return ()=>main.removeEventListener('scroll',remember);
+  },[detailOpen]);
   viewStateRef.current={query,kind,showDeleted,loadedPages};
   useEffect(()=>{
     const main=document.querySelector('.app > main');
-    return()=>{if(main)onViewStateChange({...viewStateRef.current,scrollTop:main.scrollTop||0});};
+    return()=>{if(main)onViewStateChange({...viewStateRef.current,scrollTop:listPosition.current});};
   },[onViewStateChange]);
   useEffect(()=>{
     let active=true;
@@ -123,15 +136,36 @@ export function RecordPanel({libraryId, libraries=[], workspace, arrivalId, onAr
   },[draftKey,libraryId,slot]);
 
   const load = useCallback(async (reset=true) => {
-    if (!libraryId) return;
+    if (!libraryId||!reset&&(appending.current||cursorRef.current==null)) return;
+    const sequence=++listRead.current;appending.current=true;
     setLoading(true); setError('');
     try {
       const page=await call('recordList',{libraryId,query:query.trim()||undefined,kind:articles?'article':kind||undefined,section:grouped?(collection?'collections':'library'):undefined,cursor:reset?undefined:cursorRef.current,limit:30,deleted:showDeleted||undefined});
+      if(sequence!==listRead.current)return;
       setRows(old=>reset?page.items:[...old,...page.items]); cursorRef.current=page.nextCursor??null;setCursor(cursorRef.current); setMore(cursorRef.current!=null); setTotal(page.total??null);setLoadedPages(reset?1:old=>old+1);
-    } catch(e) {setError(String(e.message||e));}
-    finally {setLoading(false);}
+    } catch(e) {if(sequence===listRead.current)setError(String(e.message||e));}
+    finally {if(sequence===listRead.current){appending.current=false;setLoading(false);}}
   },[libraryId,query,kind,articles,showDeleted,collection,grouped]);
-  useEffect(()=>{const t=setTimeout(async()=>{await load(true);const pages=restorePages.current;restorePages.current=1;for(let i=1;i<pages&&cursorRef.current;i++)await load(false);const top=restoreScroll.current;restoreScroll.current=0;if(top>0)requestAnimationFrame(()=>{const main=document.querySelector('.app > main');if(main)main.scrollTop=top;});},180);return()=>clearTimeout(t);},[load]);
+  const refreshRef=usePullRefresh(()=>load(true),!detailOpen&&!loading);
+  useEffect(()=>{
+    let active=true;
+    setMore(false);
+    cursorRef.current=null;
+    const timer=setTimeout(async()=>{
+      await load(true);
+      if(!active)return;
+      const pages=restorePages.current;
+      restorePages.current=1;
+      for(let i=1;active&&i<pages&&cursorRef.current!=null;i++)await load(false);
+      const top=restoreScroll.current;
+      restoreScroll.current=0;
+      if(top>0)requestAnimationFrame(()=>{
+        const main=document.querySelector('.app > main');
+        if(active&&main)main.scrollTop=top;
+      });
+    },180);
+    return ()=>{active=false;listRead.current++;clearTimeout(timer);};
+  },[load]);
   const loadSources=useCallback(async(cursor=null,query='')=>{
     const generation=++sourceGeneration.current;
     setSourceLoading(true);setSourceError('');setSourceRetry(cursor);if(!cursor){setSources([]);setSourceCursor(null);}
@@ -330,27 +364,24 @@ export function RecordPanel({libraryId, libraries=[], workspace, arrivalId, onAr
     requestAnimationFrame(()=>{input?.focus();const cursor=start+insertion.length;input?.setSelectionRange(cursor,cursor);});
   });
   const readingArticle=selected?.kind==='article';
-  const ReadingTools=readingArticle?'details':React.Fragment;
   const readingInfo=selected&&<>
     <p className="secondary record-date">{t('内容日期')}：{dateText(selected.contentDay,t)} · {t('记录于')} {dateText(selected.createdAt,t)}{selected.updatedAt&&` · ${t('更新于')} ${dateText(selected.updatedAt,t)}`}</p>
           {selected.url&&<p className="record-source"><span>{t('来源链接')}</span>{safeHttp(selected.url)?<a href={safeHttp(selected.url)} target="_blank" rel="noreferrer">{selected.url}</a>:<span>{selected.url}</span>}</p>}
-          {selected.dateBasis&&<p className="record-source"><span>{t('日期说明')}</span>{selected.dateBasis}</p>}{(selected.kind==='reading_note'||isReadingNoteMetadata(selected.annotation))?<ReadingNoteSources annotation={selected.annotation} t={t}/>:selected.annotation&&<p className="record-source"><span>{t('备注')}</span>{selected.annotation}</p>}
-    {workspace&&!selected.deleted&&<MobileExplorationEntry workspace={workspace} record={selected}/>}
-    {workspace&&!selected.deleted&&selected.kind!=='reading_note'&&<MaterialActions record={selected} workspace={workspace} bodyRef={bodyRef}/>}
+          {selected.dateBasis&&<p className="record-source"><span>{t('日期说明')}</span>{selected.dateBasis}</p>}{selected.kind!=='reading_note'&&!isReadingNoteMetadata(selected.annotation)&&selected.annotation&&<p className="record-source"><span>{t('备注')}</span>{selected.annotation}</p>}
   </>;
-  return <section className="record-page" aria-label={t(articles?'创作':collection?'收藏':grouped?'记录':'素材')}>
+  return <section ref={refreshRef} className="record-page" aria-label={t(articles?'创作':collection?'收藏':grouped?'记录':'素材')}>
     {!detailOpen&&<>
     {workspace&&!articles&&<MobileExplorationEntry workspace={workspace}/>}
     {onBack&&<button className="text record-back-list" onClick={onBack}>‹ {t('返回')}</button>}
     {legacyAnnotationIds.map(id=><button key={id} className="chip" disabled={busy||!draftReady||Boolean(pendingMutation)||Boolean(pendingAction)} onClick={()=>read(id)}>{t('继续旧标注草稿','Continue old annotation draft')} · {id}</button>)}
     <div className="record-search"><div className="record-search-row"><input type="search" value={query} placeholder={t('搜索标题和正文')} onChange={e=>setQuery(e.target.value)} aria-label={t('搜索标题和正文')}/>{!articles&&<button type="button" className="record-filter-toggle" aria-label={t('按类型筛选','Filter by type')} aria-expanded={showKindFilter} aria-controls="record-kind-filter" onClick={()=>setShowKindFilter(value=>!value)}><PhoneIcon name="filter" size={18}/>{kind&&<i aria-hidden="true"/>}</button>}</div>{!articles&&showKindFilter&&<select id="record-kind-filter" value={kind} onChange={e=>{setKind(e.target.value);setShowKindFilter(false);}} aria-label={t('按类型筛选')}><option value="">{t('全部类型')}</option>{(grouped?visibleKinds:[...kinds,'article']).map(item=><option key={item} value={item}>{kindName(item,t)}</option>)}</select>}</div>
-    {!legacyOnly&&<button className="primary record-create-fab" disabled={busy||!draftReady} onClick={startNew}>＋ {t(articles?'新建文章':collection?'新建收藏':'新建记录',collection?'New collection':undefined)}</button>}</>}
+    {!legacyOnly&&<button className="primary phone-create-fab" disabled={busy||!draftReady} onClick={startNew}>＋ {t(articles?'新建文章':collection?'新建收藏':'新建记录',collection?'New collection':undefined)}</button>}</>}
     <div className={`record-layout${detailOpen?' record-detail-open':''}${!detailOpen?' record-list-only':''}`}>
       {!detailOpen&&<div className="record-list" aria-label={t(articles?'文章项目':'素材列表')}>
         {loading&&<p className="secondary">{t('更新中','Loading')}…</p>}
         {rows.map(row=><button key={row.id} className="record-list-row" aria-current={selected?.id===row.id?'true':undefined} onClick={()=>read(row.id)}><strong>{row.title||t('未命名')}</strong><span>{dateText(row.contentDay,t)}</span>{row.syncState&&row.syncState!=='synced'&&<small>{t(row.syncState==='conflict'?'有冲突':row.syncState==='pending'?'待同步':'本机资料')}</small>}</button>)}
         {!rows.length&&!loading&&<p className="empty-state">{query?t('没有匹配的记录。'):t('这里还没有内容。')}</p>}
-        {more&&<button className="chip record-more" disabled={loading} onClick={()=>load(false)}>{t('加载更多','Load more')}</button>}
+        {more&&<MoreRows cursor={cursor} className="chip record-more" disabled={loading} onClick={()=>load(false)}>{t('加载更多','Load more')}</MoreRows>}
       </div>}
       <div className={"record-detail"+(!editing&&selected?" record-reading":"")}>
         {editing&&form ? <>
@@ -362,25 +393,31 @@ export function RecordPanel({libraryId, libraries=[], workspace, arrivalId, onAr
           {creating&&form.kind==='journal'&&<p className="record-journal-note">{t('同一天已有日记时，内容会追加到当日日记。','If a journal already exists for this day, this text will be appended.')}</p>}
           <details className="record-metadata"><summary>{t('记录信息','Details')}</summary>
           {!articles&&<div className="record-form-grid"><label>{t('内容来源')}<select value={form.origin||'personal'} disabled={busy||uncertain||!creating} onChange={e=>setField('origin',e.target.value)}><option value="personal">{t('自己书写')}</option><option value="external">{t('外部资料')}</option><option value="ai">{t('AI 内容')}</option><option value="translation">{t('译文')}</option><option value="unknown">{t('来源待确认')}</option></select></label></div>}
-          {articles&&<><div className="record-form-grid"><label>{t('文章状态')}<select value={form.stage||'draft'} disabled={busy||uncertain} onChange={e=>setField('stage',e.target.value)}><option value="idea">{t('想法')}</option><option value="draft">{t('草稿')}</option><option value="revision">{t('修改中')}</option><option value="final">{t('已定稿')}</option></select></label></div><details className="source-picker" onToggle={e=>{if(e.currentTarget.open)loadSources(null,sourceQuery);}}><summary>{t('引用素材','Referenced materials')} · {(form.sourceIds||[]).length}</summary><input type="search" aria-label={t('搜索素材','Search materials')} placeholder={t('搜索素材','Search materials')} value={sourceQuery} onChange={e=>{const value=e.target.value;setSourceQuery(value);loadSources(null,value);}}/>{references.error&&<p role="alert">{t('素材标题读取失败','Could not load material titles')} <button type="button" onClick={references.retry}>{t('重试','Retry')}</button></p>}<div className="source-results">{(form.sourceIds||[]).filter(id=>!sources.some(source=>source.id===id)).map(id=><label key={id}><input type="checkbox" checked disabled={busy||uncertain} onChange={()=>setField('sourceIds',form.sourceIds.filter(item=>item!==id))}/>{references.recordsById.get(id)?.title?.trim()||(references.loading?t('正在读取标题…','Loading title…'):references.recordsById.has(id)?t('未命名素材','Untitled material'):t('素材暂不可用','Material unavailable'))}</label>)}{sources.map(source=><label key={source.id}><input type="checkbox" disabled={busy||uncertain} checked={(form.sourceIds||[]).includes(source.id)} onChange={e=>setField('sourceIds',e.target.checked?[...(form.sourceIds||[]),source.id]:(form.sourceIds||[]).filter(id=>id!==source.id))}/>{source.title?.trim()||t('未命名素材','Untitled material')}</label>)}{sourceLoading&&<p>{t('正在读取素材…','Loading materials…')}</p>}{sourceError&&<p className="error">{t('读取素材失败','Could not load materials')}: {sourceError} <button type="button" onClick={()=>loadSources(sourceRetry,sourceQuery)}>{t('重试','Retry')}</button></p>}{!sources.length&&!sourceLoading&&!sourceError&&<p className="secondary">{t('暂无可关联素材。','No materials to link.')}</p>}</div>{sourceCursor&&!sourceError&&<button type="button" className="chip" disabled={sourceLoading} onClick={()=>loadSources(sourceCursor,sourceQuery)}>{t('加载更多','Load more')}</button>}</details><details className="publication-check"><summary>{t('发布前检查')} · {checks.filter(x=>!x.ok).length} {t('项待处理')}</summary>{checks.map(check=><p key={check.label} className={check.ok?'check-ok':'check-pending'}>{check.ok?'✓':'○'}　{check.label}</p>)}<p className="secondary">{t('仅检查常见格式，仍需作者人工复核。','Checks common patterns only; review the article yourself.')}</p></details></>}
+          {articles&&<><div className="record-form-grid"><label>{t('文章状态')}<select value={form.stage||'draft'} disabled={busy||uncertain} onChange={e=>setField('stage',e.target.value)}><option value="idea">{t('想法')}</option><option value="draft">{t('草稿')}</option><option value="revision">{t('修改中')}</option><option value="final">{t('已定稿')}</option></select></label></div><details className="source-picker" onToggle={e=>{if(e.currentTarget.open)loadSources(null,sourceQuery);}}><summary>{t('引用素材','Referenced materials')} · {(form.sourceIds||[]).length}</summary><input type="search" aria-label={t('搜索素材','Search materials')} placeholder={t('搜索素材','Search materials')} value={sourceQuery} onChange={e=>{const value=e.target.value;setSourceQuery(value);loadSources(null,value);}}/>{references.error&&<p role="alert">{t('素材标题读取失败','Could not load material titles')} <button type="button" onClick={references.retry}>{t('重试','Retry')}</button></p>}<div className="source-results">{(form.sourceIds||[]).filter(id=>!sources.some(source=>source.id===id)).map(id=><label key={id}><input type="checkbox" checked disabled={busy||uncertain} onChange={()=>setField('sourceIds',form.sourceIds.filter(item=>item!==id))}/>{references.recordsById.get(id)?.title?.trim()||(references.loading?t('正在读取标题…','Loading title…'):references.recordsById.has(id)?t('未命名素材','Untitled material'):t('素材暂不可用','Material unavailable'))}</label>)}{sources.map(source=><label key={source.id}><input type="checkbox" disabled={busy||uncertain} checked={(form.sourceIds||[]).includes(source.id)} onChange={e=>setField('sourceIds',e.target.checked?[...(form.sourceIds||[]),source.id]:(form.sourceIds||[]).filter(id=>id!==source.id))}/>{source.title?.trim()||t('未命名素材','Untitled material')}</label>)}{sourceLoading&&<p>{t('正在读取素材…','Loading materials…')}</p>}{sourceError&&<p className="error">{t('读取素材失败','Could not load materials')}: {sourceError} <button type="button" onClick={()=>loadSources(sourceRetry,sourceQuery)}>{t('重试','Retry')}</button></p>}{!sources.length&&!sourceLoading&&!sourceError&&<p className="secondary">{t('暂无可关联素材。','No materials to link.')}</p>}</div>{sourceCursor&&!sourceError&&<MoreRows cursor={sourceCursor} type="button" className="chip" disabled={sourceLoading} onClick={()=>loadSources(sourceCursor,sourceQuery)}>{t('加载更多','Load more')}</MoreRows>}</details><details className="publication-check"><summary>{t('发布前检查')} · {checks.filter(x=>!x.ok).length} {t('项待处理')}</summary>{checks.map(check=><p key={check.label} className={check.ok?'check-ok':'check-pending'}>{check.ok?'✓':'○'}　{check.label}</p>)}<p className="secondary">{t('仅检查常见格式，仍需作者人工复核。','Checks common patterns only; review the article yourself.')}</p></details></>}
           <label>{t('内容日期')}<input type="date" value={form.contentDay||''} disabled={busy||uncertain} onChange={e=>setField('contentDay',e.target.value||null)}/></label>
           <label>{t('来源说明')}<input value={form.dateBasis||''} maxLength={200} disabled={busy||uncertain} onChange={e=>setField('dateBasis',e.target.value)}/></label>
           <label>{t('来源链接')}<input type="url" value={form.url||''} maxLength={2048} disabled={busy||uncertain} onChange={e=>setField('url',e.target.value)}/></label>
           {form.kind!=='reading_note'&&!isReadingNoteMetadata(form.annotation)&&<label>{t('备注')}<textarea value={form.annotation||''} maxLength={10000} disabled={busy||uncertain} onChange={e=>setField('annotation',e.target.value)}/></label>}
           </details>
         </> : selected ? <>
-          <div className="record-detail-head" role="toolbar" aria-label={t('记录操作','Record actions')}><div><button className="chip" disabled={busy||annotationState.busy} onClick={leaveDetail}>‹ {t('返回列表','Back to list')}</button>{readingArticle?<span className="state-pill">{t(({idea:'想法',draft:'草稿',revision:'修改中',final:'已定稿'})[selected.stage]||'草稿')}</span>:<><span className="state-pill">{kindName(selected.kind,t)}</span><span className="state-pill">{originName(selected.origin,t)}</span></>}</div><div>{pendingAction?.type==='delete'?<button className="chip danger" disabled={busy} onClick={remove}>{t('再次核对删除')}</button>:pendingAction?.type==='restore'?<button className="chip" disabled={busy} onClick={restore}>{t('再次核对恢复')}</button>:selected.deleted?<button className="chip" disabled={busy} onClick={restore}>{t('恢复')}</button>:<><button className="chip" disabled={busy||annotationState.dirty||annotationState.busy} onClick={()=>startEdit(selected)}>{t('编辑')}</button></>}</div></div>
+          <div className="record-detail-head" role="toolbar" aria-label={t('记录操作','Record actions')}><div><button className="chip" disabled={busy||annotationState.busy} onClick={leaveDetail}>‹ {t('返回列表','Back to list')}</button></div><div>{pendingAction?.type==='delete'?<button className="chip danger" disabled={busy} onClick={remove}>{t('再次核对删除')}</button>:pendingAction?.type==='restore'?<button className="chip" disabled={busy} onClick={restore}>{t('再次核对恢复')}</button>:selected.deleted?<button className="chip" disabled={busy} onClick={restore}>{t('恢复')}</button>:<><button className="chip" disabled={busy||annotationState.dirty||annotationState.busy} onClick={()=>startEdit(selected)}>{t('编辑')}</button></>}</div></div>
           <h2>{selected.title||t('未命名')}</h2>
-          {!readingArticle&&readingInfo}
           {selected.deleted&&<p className="conflict-callout">{t('此记录在回收站中，恢复后会回到当前资料库。')}</p>}
-          <div ref={bodyRef}>{legacyAnnotationDraft?<AnnotationPanel key={`${libraryId}:${selected.id}`} libraryId={libraryId} original={selected} attachments={attachments} t={t} onStateChange={setAnnotationState}/>:<MarkdownView markdown={selected.markdown} libraryId={libraryId} recordId={selected.id} attachmentDescriptors={attachments}/>}</div>
+          {(selected.kind==='reading_note'||isReadingNoteMetadata(selected.annotation))&&<ReadingNoteSources annotation={selected.annotation} t={t}/>}
+          <div ref={bodyRef}>{legacyAnnotationDraft?<AnnotationPanel key={`${libraryId}:${selected.id}`} libraryId={libraryId} original={selected} attachments={attachments} t={t} onStateChange={setAnnotationState}/>:<MarkdownView displayedTitle={selected.title} markdown={selected.markdown} libraryId={libraryId} recordId={selected.id} attachmentDescriptors={attachments}/>}</div>
           <ArticleReferences ids={selected.sourceIds} {...references} t={t} onOpen={row=>workspace?workspace.source(row.id):read(row.id)}/>
-          <ReadingTools key={selected.id} {...(readingArticle?{className:'sw-article-tools'}:{})}>
-          {readingArticle&&<><summary>{t('文章工具','Article tools')}</summary>{readingInfo}</>}
+          {workspace&&!selected.deleted&&<>
+            <MobileExplorationEntry workspace={workspace} record={selected}/>
+            {selected.kind!=='reading_note'&&<MaterialActions record={selected} workspace={workspace} bodyRef={bodyRef}/>}
+          </>}
+          <details key={selected.id} className="sw-article-tools">
+          <summary>{readingArticle?t('文章工具','Article tools'):t('记录信息与来源','Record details and sources')}</summary>
+          <div className="record-facts">{readingArticle?<span className="state-pill">{t(({idea:'想法',draft:'草稿',revision:'修改中',final:'已定稿'})[selected.stage]||'草稿')}</span>:<><span className="state-pill">{kindName(selected.kind,t)}</span><span className="state-pill">{originName(selected.origin,t)}</span></>}</div>
+          {readingInfo}
           {selected.sources?.length>0&&<details className="source-picker"><summary>{t('正文来源')} · {selected.sources.length}</summary>{selected.sources.map((segment,index)=><div className="source-segment" key={`${index}-${segment.sourceRef||''}`}><strong>{originName(segment.origin,t)}</strong>{!readingArticle&&segment.sourceRef&&<span>{segment.sourceRef}</span>}<p>{segment.text?.length>220?`${segment.text.slice(0,220)}…`:segment.text}</p></div>)}</details>}
           {attachments.length>0&&<details className="source-picker"><summary>{t('原件与附件')} · {attachments.length}</summary>{attachments.map(file=><div className="attachment-row" key={file.id}><div><strong>{file.name}</strong><span>{byteText(file.byteLength)} · {file.available===false?t('尚未下载'):t('已保存在资料库')}</span></div><div className="node-actions">{file.available!==false&&<><button className="chip" disabled={busy} onClick={()=>openAttachment(file)}>{t('打开','Open')}</button></>}</div></div>)}</details>}
 
-          </ReadingTools>
+          </details>
         </> : <div className="record-empty"><span>◇</span><p>{t('选择一条记录查看正文和来源。')}</p></div>}
       </div>
     </div>

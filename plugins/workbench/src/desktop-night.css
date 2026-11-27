@@ -124,6 +124,17 @@ body {
   .sw-welcome-cards p { color: #ccdae6; margin: 0 0 22px; }
   .sw-welcome-cards button { margin-top: auto; background: #232e3a; border: 1px solid #506074; padding: 7px 14px; color: #f4f8fc; }
   .sw-welcome-cards button:hover, .sw-welcome-create:hover { filter: brightness(1.15); }
+  /* Float the home header controls so recent items can start at the top. */
+  [data-phase='hero']:has(.shiwen-hero) header[data-window-drag]:has(> [data-conversation-header-leading]) {
+    position: absolute;
+    inset: 0 0 auto;
+    z-index: 1;
+    pointer-events: none;
+    -webkit-app-region: no-drag;
+  }
+  [data-phase='hero']:has(.shiwen-hero) :is([data-conversation-header-leading], [data-conversation-header-corner]) > * {
+    pointer-events: auto;
+  }
   [class*='_composerHero']:has(.shiwen-hero) { max-width: 850px; margin-inline: auto; padding: clamp(18px,4vh,44px) clamp(18px,3vw,40px) 28px; }
   .shiwen-hero { align-items: center; justify-content: center; text-align: center; color: var(--dsw-alias-label-primary); }
   .shiwen-hero img { width: 38px; height: 38px; }

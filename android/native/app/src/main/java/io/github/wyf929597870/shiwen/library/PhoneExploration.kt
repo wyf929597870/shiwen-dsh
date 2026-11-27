@@ -32,6 +32,7 @@ internal class PhoneExploration(val repo: LibraryRepository) {
     val scope = if (bound) "$binding/view" else "standalone"
     val local = "$binding/local"
     val base = "$binding/base"
+    private val steps = ExplorationSteps(this)
     val dao = repo.dao
     fun rows(kind: String, area: String = scope) = dao.explorationList(area,kind).map { JSONObject(it.data) }
     fun get(kind: String, vararg key: String, area: String = scope): JSONObject? =
@@ -55,14 +56,14 @@ internal class PhoneExploration(val repo: LibraryRepository) {
     private fun question(id: String) = get("exploration_questions",id) ?: error("QUESTION_MISSING")
     private fun period(p: String,key: String) = get("exploration_periods",p,key) ?: obj("period" to p,"period_key" to key,
         "revision" to 0,"batch" to 0,"pins" to "[]","auto" to "[]")
-    private fun evidenceRevision(record:LibraryRecord):Long =
+    internal fun evidenceRevision(record:LibraryRecord):Long =
         if(bound && record.syncState=="synced")record.serverRevision?:record.revision else record.revision
 
     private fun evidenceRevision(record:ExplorationRecordState):Long =
         if(bound && record.syncState=="synced")record.serverRevision?:record.revision else record.revision
 
     // Evidence and response compound keys start with the quoted original question ID.
-    private fun entries(kind:String,id:String):List<JSONObject>{
+    internal fun entries(kind:String,id:String):List<JSONObject>{
         val family=listOf(id)+rows("exploration_aliases").map {it.getString("child")}.filter {canonical(it)==id}
         return family.flatMap { member->
             val prefix=JSONArray(listOf(member)).toString().dropLast(1)
@@ -104,23 +105,73 @@ internal class PhoneExploration(val repo: LibraryRepository) {
                 "recordIds" to p.arrayValue("records"),"evidenceFingerprint" to p.getString("basis"))
         }
     }
+    private fun responsesFor(id:String):List<JSONObject> {
+        return entries("exploration_responses",id).mapNotNull { e ->
+            val record=dao.explorationRecordState(e.getString("record"))?:return@mapNotNull null
+            val revision=evidenceRevision(record)
+            if(record.deleted || !live(obj("recordId" to record.id,"revision" to revision)) && record.syncState=="synced")return@mapNotNull null
+            val passage=e.stringValue("passage")?.let(::JSONObject)?.takeIf {it.getLong("revision")==revision}
+            val preview=passage?.optString("quote") ?: dao.explorationResponseSpans(record.id)?.let {spans->
+                JSONArray(spans).objects().firstOrNull {it.optString("origin")=="personal" && it.optString("text").isNotBlank()}?.getString("text")?.trim()
+            }
+            obj("recordId" to record.id,"revision" to revision,"kind" to record.kind,"title" to record.title,
+                "created" to record.createdAt,"linkedAt" to e.optLong("linked_at"),"contentDay" to record.contentDay,"preview" to preview.orEmpty().take(180)).apply {
+                if(passage!=null)put("passage",passage)
+            }
+        }.sortedWith(compareByDescending<JSONObject> {it.optLong("linkedAt")}.thenByDescending {it.stringValue("contentDay").orEmpty()}
+            .thenByDescending {it.getString("created")}.thenBy {it.getString("recordId")}).distinctBy {it.getString("recordId")}
+    }
+
+    private fun pendingClues(id: String, wording: String): List<JSONObject> {
+        val excluded=(entries("exploration_responses",id)+entries("exploration_evidence",id)).map {it.getString("record")}.toSet()
+        return entries("exploration_clues",id).filter {it.optInt("dismissed")==0 && it.getString("wording")==wording && it.getString("record") !in excluded}
+            .map {JSONObject(it.getString("passage"))}.filter(::live)
+            .distinctBy {it.getString("recordId")}.sortedWith(compareByDescending<JSONObject> {it.optString("contentDay")}
+                .thenByDescending {it.optString("created")}.thenBy {it.getString("recordId")}).take(3)
+    }
+
+    fun discoverFollowups(record: LibraryRecord) {
+        val day=record.contentDay ?: return
+        val passages=FollowupPassages.extract(record)
+        if(passages.isEmpty())return
+        data class Match(val score:Int,val id:String,val wording:String,val locator:JSONObject)
+        val matches=rows("exploration_questions").filter {it.optString("status")=="accepted"}.mapNotNull {q->
+            val id=q.getString("id")
+            val wording=q.stringValue("wording")?:q.getString("original")
+            val evidence=sources(id)
+            if(evidence.any {it.getString("recordId")==record.id} ||
+                evidence.none {val date=it.stringValue("contentDay");date!=null && (date<day || date==day && (dao.explorationRecordState(it.getString("recordId"))?.createdAt ?: record.createdAt)<record.createdAt)} ||
+                entries("exploration_responses",id).any {it.getString("record")==record.id})return@mapNotNull null
+            val context=evidence.filter {it.optBoolean("personal")}.joinToString(" ") {it.optString("quote")} + " " + responsesFor(id).firstOrNull()?.optString("preview").orEmpty()
+            FollowupPassages.match(passages,wording,context)?.let {(score,locator)->Match(score,id,wording,locator)}
+        }.sortedWith(compareByDescending<Match> {it.score}.thenBy {it.id}).take(3)
+        for(m in matches){
+            if(get("exploration_clues",m.id,record.id)?.optInt("dismissed")==1)continue
+            val passage=source(record,m.locator).put("created",record.createdAt)
+            if(passage.optString("scope")!="passage"||!passage.optBoolean("personal"))continue
+            put("exploration_clues",obj("question" to m.id,"record" to record.id,"revision" to evidenceRevision(record),
+                "wording" to m.wording,"dismissed" to 0,"passage" to passage.toString()),m.id,record.id)
+        }
+    }
+
     fun detail(raw: String): JSONObject {
         val id=canonical(raw);val q=question(id)
         val placements=JSONObject()
         for((p,k) in dates()) { val state=period(p,k);placements.put(p,obj("key" to k,"revision" to state.getInt("revision"),"pinned" to state.arrayValue("pins").strings().contains(id))) }
-        val responses=entries("exploration_responses",id).mapNotNull { e ->
-            dao.explorationRecordState(e.getString("record"))?.takeUnless { it.deleted }?.let { obj("recordId" to it.id,"revision" to evidenceRevision(it),"title" to it.title,"kind" to it.kind).apply {
-                e.stringValue("passage")?.let(::JSONObject)?.takeIf {p->p.getLong("revision")==evidenceRevision(it)}?.let {p->put("passage",p)}
-            } }
-        }.distinctBy { it.getString("recordId") }
+        val responses=responsesFor(id)
         val merged=rows("exploration_aliases").filter { it.getString("parent")==id }.map { a ->
             val child=question(a.getString("child"));obj("decisionId" to a.getString("decision"),"questionId" to child.getString("id"),
                 "revision" to child.getInt("revision"),"text" to child.getString("original"))
         }
+        val evidence=sources(id)
+        val clues=if(q.getString("status")=="accepted" && evidence.isNotEmpty())pendingClues(id,q.stringValue("wording")?:q.getString("original")) else emptyList()
         return obj("questionId" to id,"libraryId" to repo.libraryId,"revision" to q.getInt("revision"),"type" to q.getString("type"),
             "originalText" to q.getString("original"),"text" to (q.stringValue("wording")?:q.getString("original")),"status" to q.getString("status"),
-            "sources" to JSONArray(sources(id)),"responses" to JSONArray(responses),"placements" to placements,
-            "possibleDuplicates" to JSONArray(matches(id)),"mergedQuestions" to JSONArray(merged))
+            "sources" to JSONArray(evidence),"clues" to JSONArray(clues),"responses" to JSONArray(responses),"placements" to placements,
+            "possibleDuplicates" to JSONArray(matches(id)),"mergedQuestions" to JSONArray(merged)).apply {
+            val progress=steps.project(id,responses)
+            for(key in progress.keys())put(key,progress.get(key))
+        }
     }
     private fun card(id: String): JSONObject = detail(id).apply {
         val src=getJSONArray("sources");put("cardId",id);put("cardRevision",getInt("revision"));put("question",getString("text"));put("scene",getString("type"))
@@ -131,13 +182,15 @@ internal class PhoneExploration(val repo: LibraryRepository) {
     private fun page(items: List<JSONObject>,cursor: Int) = obj("items" to JSONArray(items.drop(cursor).take(20)),"nextCursor" to (cursor+20).takeIf { it<items.size })
     private fun feed(a: JSONObject): JSONObject {
         val dates=dates()
+        val (chosen,later)=steps.choices(dates.getValue("day"))
+        val due=chosen.filter {valid(it,true)}
         fun visible(p: String): List<String> {
             val state=period(p,dates.getValue(p))
-            return (state.arrayValue("pins").strings().filter { valid(it,true) } +
-                state.arrayValue("auto").strings().filter { valid(it,false) && config().optBoolean("enabled") }).distinct()
+            return (state.arrayValue("pins").strings().filter { valid(it,true) } + due +
+                state.arrayValue("auto").strings().filter { it !in later && valid(it,false) && config().optBoolean("enabled") }).distinct()
         }
         val day=visible("day").take(2)
-        val history=if(config().optBoolean("enabled"))period("week",dates.getValue("week")).arrayValue("seen").strings().filter {valid(it,false)} else emptyList()
+        val history=if(config().optBoolean("enabled"))period("week",dates.getValue("week")).arrayValue("seen").strings().filter {it !in later && valid(it,false)} else emptyList()
         val week=(visible("week")+history).distinct()
         val items=when(a.optString("view","week")){"week"->week;"daily"->day;else->emptyList()}
         return page(items.map { card(it).put("alsoToday",it in day) },a.optInt("cursor"))
@@ -158,6 +211,15 @@ internal class PhoneExploration(val repo: LibraryRepository) {
         val status=when(action){
             "accept","continue","rewrite"->"accepted";"observe"->"observing";"answered"->"answered";"skip"->"skipped"
             "restore"->{check(old=="skipped");q.optString("previous_status","pending")}
+            "dismiss_clue"->{
+                val record=a.getString("recordId")
+                val revision=a.getLong("sourceRevision")
+                check(pendingClues(id,q.stringValue("wording")?:q.getString("original")).any {it.getString("recordId")==record && it.getLong("revision")==revision}){"SOURCE_CHANGED"}
+                for(clue in entries("exploration_clues",id).filter {it.getString("record")==record && it.getLong("revision")==revision}){
+                    put("exploration_clues",clue.put("dismissed",1),clue.getString("question"),record)
+                }
+                old
+            }
             "confirm_personal_context"->{
                 val entry=dao.explorationList(scope,"exploration_evidence").firstOrNull {
                     val e=JSONObject(it.data);val s=JSONObject(e.getString("source"))
@@ -346,6 +408,7 @@ internal class PhoneExploration(val repo: LibraryRepository) {
         if(bound || !config().optBoolean("enabled"))return 0
         var changed=0
         val candidates=rows("exploration_questions").sortedByDescending {it.optString("type")=="follow_up"}.map { it.getString("id") }.filter { valid(it,false) }
+        val withClues=candidates.filter {id->val q=question(id);pendingClues(id,q.stringValue("wording")?:q.getString("original")).isNotEmpty()}.toSet()
         val periods=dates()
         val weekly=period("week",periods.getValue("week"))
         val filling=(weekly.arrayValue("pins").strings().filter {valid(it,true)}+weekly.arrayValue("auto").strings().filter {valid(it,false)}).distinct().size<7
@@ -357,7 +420,7 @@ internal class PhoneExploration(val repo: LibraryRepository) {
             val capacity=(if(p=="day")2 else 10)-pins.size
             val keep=prior.filter { it !in pins&&valid(it,false) }.take(capacity).toMutableList()
             val seen=state.arrayValue("seen").strings()
-            val extra=(candidates-pins.toSet()-keep.toSet()).sortedBy {seen.indexOf(it)}
+            val extra=(candidates-pins.toSet()-keep.toSet()).sortedWith(compareByDescending<String> {it in withClues}.thenBy {seen.indexOf(it)})
             val limit=if(filling && p=="week")minOf(capacity,7-pins.size) else capacity
             if(!filling && keep.size>=limit && keep.isNotEmpty() && extra.isNotEmpty())keep.removeAt(0)
             val added=extra.take(minOf(if(filling)limit else 1,maxOf(0,limit-keep.size)))
@@ -394,7 +457,7 @@ internal class PhoneExploration(val repo: LibraryRepository) {
         val result=apply(method,a)
         if(id!=null){
             put("receipts",obj("fingerprint" to fp,"result" to result),id,area=local)
-            if(bound&&method in setOf("shiwen_exploration_suggest","shiwen_exploration_review","shiwen_exploration_place","shiwen_exploration_respond")&&result.optString("status")!="full"){
+            if(bound&&method in setOf("shiwen_exploration_step","shiwen_exploration_suggest","shiwen_exploration_review","shiwen_exploration_place","shiwen_exploration_respond")&&result.optString("status")!="full"){
                 val args=JSONObject(a.toString()).put("expectedLibraryId",repo.libraryId);val dependency=if(method=="shiwen_exploration_respond")args.getString("responseRecordId") else null
                 if(args.has("body")){args.remove("body");args.put("sourceRevision",repo.read(checkNotNull(dependency)).revision)}
                 if(method=="shiwen_exploration_suggest"){
@@ -455,13 +518,18 @@ internal class PhoneExploration(val repo: LibraryRepository) {
                     (!a.has("type")||q.getString("type")==a.getString("type"))&&(!a.has("recordId")||sources(q.getString("id"),false).any { it.getString("recordId")==a.getString("recordId") }) }.map { detail(it.getString("id")) },a.optInt("cursor"))
             }
             "shiwen_exploration_suggest"->obj("requestId" to a.getString("requestId"),"items" to JSONArray(a.getJSONArray("suggestions").objects().map { suggestion(it,if(bound)"bound:"+binding else "phone:"+repo.deviceId) }))
+            "shiwen_exploration_step"->{
+                val q=checked(a);steps.change(q,a)
+                if(q.getString("status")=="pending")q.put("status","accepted").put("previous_status","pending")
+                bump(q);detail(q.getString("id"))
+            }
             "shiwen_exploration_review"->review(a)
             "shiwen_exploration_place"->place(a)
             "shiwen_exploration_respond"->{
                 val q=checked(a);val response=a.getString("responseRecordId")
                 if(a.has("body")){
                     check(dao.record(response)==null)
-                    repo.create(a.getString("requestId"),obj("id" to response,"kind" to "freewrite","origin" to "personal","markdown" to a.getString("body")),0)
+                    repo.create(a.getString("requestId"),obj("id" to response,"kind" to "freewrite","origin" to "personal","markdown" to a.getString("body"),"contentDay" to dates().getValue("day"),"dateBasis" to "用户在手机记录"),0)
                     if(bound)put("bodyOwner",obj("binding" to binding,"recordId" to response,"version" to repo.read(response).versionId),response,area="exploration-body-owners")
                 }else{
                     val r=repo.read(response);check(!r.deleted&&r.origin=="personal"&&evidenceRevision(r)==a.getLong("sourceRevision")){"SOURCE_CHANGED"}
@@ -473,7 +541,7 @@ internal class PhoneExploration(val repo: LibraryRepository) {
                 }
                 val id=q.getString("id")
                 if(rows("exploration_responses").none {it.getString("record")==response&&canonical(it.getString("question"))==id}){
-                    put("exploration_responses",obj("question" to id,"record" to response,"passage" to passage?.toString()),id,response);bump(q)
+                    put("exploration_responses",obj("question" to id,"record" to response,"linked_at" to System.currentTimeMillis(),"passage" to passage?.toString()),id,response);bump(q)
                 }
                 detail(id)
             }

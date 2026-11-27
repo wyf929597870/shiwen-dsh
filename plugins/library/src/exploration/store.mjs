@@ -1,4 +1,8 @@
 import {createExplorationSync} from './sync.mjs';
+import {explorationSteps,stepsDDL} from './steps.mjs';
+import {followupPassages,matchFollowup} from './followups.mjs';
+import {markdownSegments} from '../../legacy/markdown.mjs';
+import {dateKey} from '../../legacy/content.mjs';
 import {createDiscovery,discoveryTables,discoveryDDL} from './discovery.mjs';
 import {duplicateDecisions,duplicateTables,duplicatesDDL,similarQuestions} from './duplicates.mjs';
 import {randomUUID} from 'node:crypto';
@@ -7,7 +11,7 @@ import {hash,fail} from '../assist/evidence.mjs';
 import {eligibleForHome,locateSource,nextStatus,normalizedQuestion,periodKeys} from './rules.mjs';
 
 export const explorationTables=['exploration_questions','exploration_evidence','exploration_discoveries','exploration_reviews',
-  'exploration_responses','exploration_periods','exploration_events','exploration_receipts',...duplicateTables,...discoveryTables];
+  'exploration_responses','exploration_periods','exploration_events','exploration_receipts',...duplicateTables,...discoveryTables,'exploration_clues','exploration_steps'];
 const parse=JSON.parse;
 const json=JSON.stringify;
 const schema=`
@@ -27,6 +31,10 @@ const schema=`
     candidates TEXT NOT NULL,revision INTEGER NOT NULL,resolution TEXT,UNIQUE(actor,item));
   CREATE TABLE IF NOT EXISTS exploration_responses(
     question TEXT NOT NULL REFERENCES exploration_questions(id),record TEXT NOT NULL,PRIMARY KEY(question,record));
+  CREATE TABLE IF NOT EXISTS exploration_clues(
+    question TEXT NOT NULL REFERENCES exploration_questions(id),record TEXT NOT NULL,revision INTEGER NOT NULL,
+    wording TEXT NOT NULL,passage TEXT NOT NULL,dismissed INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(question,record));
+  CREATE INDEX IF NOT EXISTS exploration_clue_record ON exploration_clues(record);
   CREATE TABLE IF NOT EXISTS exploration_periods(
     period TEXT NOT NULL,period_key TEXT NOT NULL,pins TEXT NOT NULL,auto TEXT NOT NULL,
     revision INTEGER NOT NULL,batch INTEGER NOT NULL,PRIMARY KEY(period,period_key));
@@ -50,9 +58,13 @@ export function createExplorationStore(db,api){
   db.transaction(()=>{
     const version=db.prepare("SELECT value FROM meta WHERE key='exploration_schema'").get()?.value;
     if(version&&version!=='1')throw Error('探索池数据版本不受支持');
-    db.exec(schema+duplicatesDDL+discoveryDDL);
+    db.exec(schema+duplicatesDDL+discoveryDDL+stepsDDL);
     if(!db.prepare('PRAGMA table_info(exploration_responses)').all().some(c=>c.name==='passage')){
       db.exec("ALTER TABLE exploration_responses ADD COLUMN passage TEXT");
+      for(const action of ['INSERT','UPDATE','DELETE'])db.exec('DROP TRIGGER IF EXISTS stream_exploration_responses_'+action);
+    }
+    if(!db.prepare('PRAGMA table_info(exploration_responses)').all().some(c=>c.name==='linked_at')){
+      db.exec('ALTER TABLE exploration_responses ADD COLUMN linked_at INTEGER NOT NULL DEFAULT 0');
       for(const action of ['INSERT','UPDATE','DELETE'])db.exec('DROP TRIGGER IF EXISTS stream_exploration_responses_'+action);
     }
     if(!db.prepare('PRAGMA table_info(exploration_periods)').all().some(c=>c.name==='seen')){
@@ -72,6 +84,7 @@ export function createExplorationStore(db,api){
   const keys=(now=new Date())=>periodKeys(now,timezone());
   const checkLibrary=id=>{if(id!==lib())fail('library_changed','资料库已切换，请重新读取');};
   const duplicates=duplicateDecisions({get,all,run,row,event,keys,periodState,savePeriod});
+  const steps=explorationSteps({get,all,run,api,members:duplicates.members,canonical:duplicates.canonical});
   function checkQuestion(args){
     const q=row(args.questionId);
     if(!q)fail('question_missing','问题不存在');
@@ -118,21 +131,71 @@ export function createExplorationStore(db,api){
       period,key,json(p.pins),json(p.auto),p.revision,p.batch,json([...seen,...added]));
     event('period',key,{period,revision:p.revision,batch:p.batch});
   }
+  function responsesFor(family){
+    const responseRows=all(`SELECT r.id AS recordId,r.revision,r.title,r.kind,r.created,e.passage,e.linked_at AS linkedAt,
+      CASE WHEN i.record IS NOT NULL THEN i.day WHEN d.record IS NOT NULL THEN d.day ELSE '' END AS day,
+      (SELECT substr(trim(json_extract(value,'$.text')),1,180) FROM sync_record_sources ss,json_each(ss.sources)
+        WHERE ss.record_id=r.id AND json_extract(value,'$.origin')='personal' AND trim(json_extract(value,'$.text'))<>'' LIMIT 1) AS preview
+      FROM exploration_responses e JOIN records r ON r.id=e.record LEFT JOIN imports i ON i.record=r.id
+      LEFT JOIN record_dates d ON d.record=r.id WHERE e.question IN (SELECT value FROM json_each(?)) AND r.deleted=0`,family);
+    const ordered=responseRows.map(({passage,day,preview,...r})=>{
+      const citation=passage?parse(passage):null;
+      const valid=citation?.revision===r.revision;
+      if(!valid && preview==null){
+        const old=get('SELECT doc,origin FROM records WHERE id=?',r.recordId);
+        preview=markdownSegments(parse(old.doc),old.origin).find(s=>s.origin==='personal'&&s.text.trim())?.text.trim().slice(0,180);
+      }
+      return {...r,contentDay:day===''?dateKey(r.created):day,preview:valid?citation.quote.slice(0,180):preview??'',
+        ...(valid?{passage:citation}:{})};
+    }).sort((a,b)=>b.linkedAt-a.linkedAt||(b.contentDay??'').localeCompare(a.contentDay??'')||b.created.localeCompare(a.created)||a.recordId.localeCompare(b.recordId));
+    const distinct=new Map();
+    for(const response of ordered)if(!distinct.has(response.recordId))distinct.set(response.recordId,response);
+    return [...distinct.values()];
+  }
   function detail(q){
     if(!q)fail('question_missing','问题不存在');
     q=row(duplicates.canonical(q.id));
     const dates=keys(),sources=sourcesFor(q.id);
-    const responseRows=all(`SELECT r.id AS recordId,r.revision,r.title,r.kind,e.passage FROM exploration_responses e
-      JOIN records r ON r.id=e.record WHERE question IN (SELECT value FROM json_each(?)) AND r.deleted=0 ORDER BY e.rowid`,json(duplicates.members(q.id)));
-    const responses=[...new Map(responseRows.map(({passage,...r})=>{
-      const citation=passage?parse(passage):null;
-      return [r.recordId,{...r,...(citation?.revision===r.revision?{passage:citation}:{})}];
-    })).values()];
+    const family=json(duplicates.members(q.id));
+    const responses=responsesFor(family);
+    const clues=q.status==='accepted'&&sources.length?pendingClues(q,family):[];
     return {libraryId:lib(),questionId:q.id,type:q.type,originalText:q.original,text:q.wording??q.original,
-      status:q.status,revision:q.revision,sources,responses,possibleDuplicates:duplicates.matches(q.id),mergedQuestions:duplicates.parents(q.id),placements:Object.fromEntries(Object.entries(dates).map(([period,key])=>{
+      status:q.status,revision:q.revision,sources,responses,clues,...steps.read(family,responses),possibleDuplicates:duplicates.matches(q.id),mergedQuestions:duplicates.parents(q.id),placements:Object.fromEntries(Object.entries(dates).map(([period,key])=>{
         const p=periodState(period,key);
         return [period,{key,revision:p.revision,pinned:p.pins.includes(q.id)}];
       }))};
+  }
+  function pendingClues(q,family=json(duplicates.members(q.id))){
+    return all(`SELECT c.passage FROM exploration_clues c JOIN records r ON r.id=c.record
+      WHERE c.question IN (SELECT value FROM json_each(?)) AND c.dismissed=0 AND c.wording=?
+      AND r.deleted=0 AND r.revision=c.revision AND NOT EXISTS (SELECT 1 FROM exploration_responses e
+        WHERE e.question IN (SELECT value FROM json_each(?)) AND e.record=c.record)
+      AND NOT EXISTS (SELECT 1 FROM exploration_evidence e WHERE e.question IN (SELECT value FROM json_each(?)) AND e.record=c.record)
+      ORDER BY json_extract(c.passage,'$.contentDay') DESC,r.created DESC,r.id LIMIT 3`,
+      family,q.wording??q.original,family,family).map(c=>parse(c.passage));
+  }
+  function discoverFollowups(record){
+    const passages=followupPassages(record);
+    if(!passages.length||!record.contentDay)return;
+    const matches=[];
+    for(const q of all("SELECT * FROM exploration_questions WHERE status='accepted' ORDER BY id")){
+      const wording=q.wording??q.original,sources=sourcesFor(q.id);
+      if(!sources.length||sources.some(s=>s.recordId===record.id)||!sources.some(s=>s.contentDay && (s.contentDay<record.contentDay ||
+        s.contentDay===record.contentDay && get('SELECT created FROM records WHERE id=?',s.recordId).created<record.created)))continue;
+      const family=json(duplicates.members(q.id));
+      if(get('SELECT 1 FROM exploration_responses WHERE question IN (SELECT value FROM json_each(?)) AND record=?',family,record.id))continue;
+      const context=[responsesFor(family)[0]?.preview,...sources.filter(s=>s.personal).map(s=>s.quote)].filter(Boolean).join(' ');
+      const match=matchFollowup(passages,wording,context);
+      if(match)matches.push({...match,q,wording});
+    }
+    for(const {q,wording,locator} of matches.sort((a,b)=>b.score-a.score).slice(0,3)){
+      const passage={...locateSource(record,locator),created:record.created};
+      if(!passage.personal||passage.scope!=='passage')continue;
+      run(`INSERT INTO exploration_clues(question,record,revision,wording,passage) VALUES(?,?,?,?,?)
+        ON CONFLICT(question,record) DO UPDATE SET revision=excluded.revision,wording=excluded.wording,passage=excluded.passage
+        WHERE dismissed=0 AND (revision<>excluded.revision OR wording<>excluded.wording OR passage<>excluded.passage)`,
+        q.id,record.id,record.revision,wording,json(passage));
+    }
   }
   function pendingReview(actor,item,reason,candidates){
     const old=get('SELECT * FROM exploration_reviews WHERE actor=? AND item=?',actor,item.externalItemId);
@@ -262,7 +325,11 @@ export function createExplorationStore(db,api){
       return {...detail(row(result.canonicalId)),...result};
     }
     const q=checkQuestion(a);
-    if(a.action==='confirm_personal_context'){
+    if(a.action==='dismiss_clue'){
+      const family=json(duplicates.members(q.id));
+      if(!pendingClues(q,family).some(p=>p.recordId===a.recordId&&p.revision===a.sourceRevision))fail('source_changed','这条后续线索已变化');
+      run('UPDATE exploration_clues SET dismissed=1 WHERE question IN (SELECT value FROM json_each(?)) AND record=? AND revision=?',family,a.recordId,a.sourceRevision);
+    }else if(a.action==='confirm_personal_context'){
       const valid=sourcesFor(q.id).find(s=>s.recordId===a.recordId&&s.revision===a.sourceRevision&&s.scope==='record'&&s.hasPersonal);
       if(!valid)fail('source_changed','未找到这个版本的个人感想');
       run('UPDATE exploration_evidence SET confirmed=1 WHERE question IN (SELECT value FROM json_each(?)) AND anchor=?',json(duplicates.members(q.id)),anchor(valid));
@@ -320,7 +387,7 @@ export function createExplorationStore(db,api){
       if(passage.scope!=='passage'||!passage.personal)fail('source_changed','请选择能定位的个人原句');
     }
     const already=all('SELECT 1 FROM exploration_responses WHERE question IN (SELECT value FROM json_each(?)) AND record=? LIMIT 1',json(duplicates.members(q.id)),record.id).length;
-    if(!already&&run('INSERT INTO exploration_responses(question,record,passage) VALUES(?,?,?)',q.id,record.id,passage?json(passage):null).changes){
+    if(!already&&run('INSERT INTO exploration_responses(question,record,passage,linked_at) VALUES(?,?,?,?)',q.id,record.id,passage?json(passage):null,Date.now()).changes){
       run('UPDATE exploration_questions SET revision=revision+1 WHERE id=?',q.id);
       event('response',q.id,{recordId:record.id});
     }
@@ -340,6 +407,13 @@ export function createExplorationStore(db,api){
         case 'shiwen_exploration_settings':return discovery.configure(a);
         case 'shiwen_exploration_import':return discovery.start(a.mode,actor);
         case 'shiwen_exploration_suggest':return {requestId:a.requestId,items:a.suggestions.map(item=>putSuggestion(actor,item))};
+        case 'shiwen_exploration_step':{
+          const q=checkQuestion(a);
+          steps.change(q,a);
+          if(q.status==='pending')run("UPDATE exploration_questions SET status='accepted',previous_status='pending' WHERE id=?",q.id);
+          run('UPDATE exploration_questions SET revision=revision+1 WHERE id=?',q.id);
+          return detail(row(q.id));
+        }
         case 'shiwen_exploration_review':return a.action==='resolve_source'?resolveSource(a,actor):review(a,actor);
         case 'shiwen_exploration_place':return place(a,actor);
         case 'shiwen_exploration_respond':return respond(a);
@@ -347,13 +421,14 @@ export function createExplorationStore(db,api){
       }
     });
   }
-  const discovery=createDiscovery({db,api,lib,putSuggestion});
+  const discovery=createDiscovery({db,api,lib,putSuggestion,discoverFollowups});
   function valid(ids,manual=false){
     return ids.filter(id=>eligibleForHome(row(id)?.status,sourcesFor(id),manual));
   }
   function arrange(actor,a,enabled){
     return receipt(actor,'shiwen_recommendation_refresh',a,()=>{
       const candidates=enabled?valid(all("SELECT id FROM exploration_questions WHERE status='accepted' ORDER BY (type='follow_up') DESC,rowid").map(q=>q.id)):[];
+      const withClues=new Set(candidates.filter(id=>pendingClues(row(id)).length));
       let changed=0;
       const dates=keys(),week=periodState('week',dates.week);
       const fillingWeek=valid(week.auto).length+valid(week.pins,true).length<7;
@@ -365,7 +440,7 @@ export function createExplorationStore(db,api){
         const retained=valid(p.auto).filter(id=>!pins.includes(id));
         const capacity=limits[period]-pins.length;
         const order=new Map(p.seen.map((id,n)=>[id,n]));
-        const others=candidates.filter(id=>!pins.includes(id)&&!retained.includes(id)).sort((a,b)=>(order.get(a)??-1)-(order.get(b)??-1));
+        const others=candidates.filter(id=>!pins.includes(id)&&!retained.includes(id)).sort((a,b)=>Number(withClues.has(b))-Number(withClues.has(a))||(order.get(a)??-1)-(order.get(b)??-1));
         const initial=period==='week'?Math.min(7-pins.length,capacity):capacity;
         const slots=fillingWeek?Math.max(0,initial-retained.length):Math.min(1,capacity-retained.length);
         const add=others.slice(0,Math.min(Math.max(0,slots),budget));
@@ -391,11 +466,14 @@ export function createExplorationStore(db,api){
   }
   function feed(a,enabled){
     const now=new Date(),{day,week}=keys(now);
+    const {due,later}=steps.choices(day);
+    const resume=valid(due,true);
     function ids(period,key){
       const p=periodState(period,key);
-      return [...new Set([...valid(p.pins,true),...(enabled?valid(p.auto):[])])];
+      const automatic=enabled?valid(p.auto).filter(id=>!later.has(id)):[];
+      return [...new Set([...valid(p.pins,true),...resume,...automatic])];
     }
-    const daily=ids('day',day).slice(0,2),weekly=[...new Set([...ids('week',week),...(enabled?valid(periodState('week',week).seen):[])])];
+    const daily=ids('day',day).slice(0,2),weekly=[...new Set([...ids('week',week),...(enabled?valid(periodState('week',week).seen).filter(id=>!later.has(id)):[])])];
     const from=a.cursor??0,selected=a.view==='daily'?daily:weekly;
     const items=selected.slice(from,from+20).map(id=>({...card(id),alsoToday:daily.includes(id)}));
     // Day boundaries can fall at a different UTC offset after a DST change.

@@ -21,6 +21,7 @@ internal class ExplorationSync(private val repo:LibraryRepository,private val se
             return false
         }
         check(result.optString("capability")=="explorationSync.v1")
+        pool.put("sync",obj("enabled" to result.optBoolean("steps")),"stepCapability",area=local)
         coverage=result.getString("coverage")
         pool.put("sync",(pool.get("sync","status",area=local)?:obj()).put("state","online").put("coverage",coverage),"status",area=local)
         return true
@@ -144,6 +145,7 @@ internal class ExplorationSync(private val repo:LibraryRepository,private val se
         if(state=="conflict")return
         val operation=intent.getJSONObject("operation")
         val input=operation.getJSONObject("args")
+        if(operation.getString("method")=="shiwen_exploration_step" && pool.get("sync","stepCapability",area=local)?.optBoolean("enabled")!=true)return
         if(state=="pending"){
             for (field in listOf("questionId", "targetQuestionId")) {
                 val question = input.stringValue(field) ?: continue

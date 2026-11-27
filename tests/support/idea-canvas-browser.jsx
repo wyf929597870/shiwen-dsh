@@ -25,11 +25,13 @@ async function verify(){
   (await until(()=>pick(document,'在画布中展开'))).click();
   const canvas=await until(()=>document.querySelector('.sw-idea-canvas[open]'));
   const first=await until(()=>canvas.querySelector('.sw-canvas-children .sw-canvas-card'));
-  const titles=()=>[...canvas.querySelectorAll('.sw-canvas-content strong')].map(el=>el.textContent);
+  const titles=()=>[...canvas.querySelectorAll('.sw-canvas-content .sw-canvas-source-title')].map(el=>el.textContent);
   if(titles().filter(x=>x==='每周回看').length!==1||titles().includes('春天播种'))throw Error('重复起点或出现无关结果');
   pick(first,'查看原文').click();
   const mark=await until(()=>canvas.querySelector('.sw-canvas-reader mark'));
   if(!mark.textContent.trim()||!canvas.querySelector('.sw-canvas-reader .sw-markdown'))throw Error('原文或命中缺失');
+  const content=first.querySelector('.sw-canvas-content');
+  if(content.firstElementChild.textContent!==mark.textContent||content.lastElementChild.textContent!==canvas.querySelector('.sw-canvas-reader h2').textContent)throw Error('卡片应先显示命中原文，再显示来源标题');
   pick(canvas,'返回画布').click();
   pick(first,'继续展开').click();
   const deeper=await until(()=>first.nextElementSibling?.querySelector('.sw-canvas-card'));
@@ -64,8 +66,8 @@ async function verify(){
   await until(()=>!seed.hidden&&check(seed).checked);
   pick(first,'移除').click();
   await until(()=>first.hidden&&!check(first).checked);
-  const removedTitle=first.querySelector('strong').textContent;
-  const childTitle=deeper.querySelector('strong').textContent;
+  const removedTitle=first.querySelector('.sw-canvas-source-title').textContent;
+  const childTitle=deeper.querySelector('.sw-canvas-source-title').textContent;
   pick(canvas,'生成文章大纲').click();
   await until(()=>canvas.querySelector('[role="alert"]')?.textContent.includes('test lost response'));
   pick(canvas,'生成文章大纲').click();
@@ -84,7 +86,7 @@ async function verify(){
   (await until(()=>document.querySelector('.sw-list:not([inert]) .sw-row[title="日记的另一种读法"]'))).click();
   if(document.querySelector('.sw-row[title="每周回看"]'))throw Error('收藏混入个人记录');
   (await until(()=>pick(document,'在画布中展开'))).click();
-  await until(()=>document.querySelector('.sw-canvas-seed strong')?.textContent==='日记的另一种读法');
+  await until(()=>document.querySelector('.sw-canvas-seed .sw-canvas-source-title')?.textContent==='日记的另一种读法');
   pick(document,'返回收藏').click();
   show('shiwen-global');
   const input=await until(()=>document.querySelector('input[aria-label="全局搜索"]'));
@@ -94,7 +96,7 @@ async function verify(){
   await until(()=>document.querySelector('.rn-detail-excerpt')?.textContent==='番红花开在秋天。');
   if(document.querySelector('.rn-detail-thought'))throw Error('纯书摘存在空感想区');
   (await until(()=>pick(document,'在画布中展开'))).click();
-  await until(()=>document.querySelector('.sw-canvas-seed .sw-canvas-content span')?.textContent==='番红花开在秋天。');
+  await until(()=>document.querySelector('.sw-canvas-seed .sw-canvas-content strong')?.textContent==='番红花开在秋天。');
 
 
 }

@@ -21,7 +21,7 @@ function Modal({className,label,onClose,children}){
   }}>{children}</dialog>;
 }
 
-function SourceReader({item,rpc,t,MarkdownContent,onClose,sourceLibraryId,backLabel,onRemove}){
+function SourceReader({item,rpc,t,MarkdownContent,onClose,sourceLibraryId,backLabel,onRemove,passageFirst}){
   const [result,setResult]=useState(null),[error,setError]=useState(''),[attempt,retry]=useState(0);
   useEffect(()=>{
     let active=true;
@@ -44,10 +44,11 @@ function SourceReader({item,rpc,t,MarkdownContent,onClose,sourceLibraryId,backLa
       <button type="button" autoFocus onClick={onClose}>{backLabel}</button>
     </div></header>
     {error?<p role="alert">{error} <button onClick={()=>retry(n=>n+1)}>{t('重试','Retry')}</button></p>:!record?<p role="status">{t('正在读取原文…','Loading source…')}</p>:<article>
+      {passageFirst&&result.match&&<MatchContext record={record} match={result.match} t={t}/>}
       <small>{[kindLabel(record.kind,t),record.contentDay].filter(Boolean).join(' · ')}</small>
       <h2>{record.title||t('未命名','Untitled')}</h2>
       {result.changed&&<p role="status">{t('原文已变化，以下为当前版本。','The source has changed. Showing the current version.')}</p>}
-      {result.match&&<MatchContext record={record} match={result.match} t={t}/>}
+      {!passageFirst&&result.match&&<MatchContext record={record} match={result.match} t={t}/>}
       <MarkdownContent body={record.markdown} record={record}/>
       {record.kind==='reading_note'&&<ReadingNoteSources annotation={record.annotation} t={t}/>}
     </article>}
@@ -100,7 +101,12 @@ function Branch({item,known,root=false,ready,libraryScope,rpc,t,onRead}){
     }
   },[expanded,children,textTree]);
   if(isRemoved&&!children?.length)return null;
-  const title=item.title||t('未命名','Untitled');
+  const title=item.title?.trim()||t('未命名','Untitled');
+  const passage=text.trim()||title;
+  const cardContent=<>
+    <strong>{passage}</strong>
+    {item.title?.trim()&&passage!==title&&<span className="sw-canvas-source-title" title={title}>{title}</span>}
+  </>;
   const status=expanded&&ready&&(error?<p role="alert">{error} <button onClick={()=>setAttempt(n=>n+1)}>{t('重试','Retry')}</button></p>:
         children===null?<p role="status">{t('正在找相近内容…','Finding related content…')}</p>:children.length===0?<p role="status">{t('没有找到更多相近内容','No further related content')}</p>:null);
   const branches=children?.map(child=><Branch key={child.recordId} item={child} known={known} ready={ready} libraryScope={libraryScope} rpc={rpc} t={t} onRead={onRead}/>);
@@ -113,7 +119,7 @@ function Branch({item,known,root=false,ready,libraryScope,rpc,t,onRead}){
         </button>
         <button type="button" className="mw-tree-source" onClick={()=>onRead(item)}>
           {root&&<small>{t('起点','Starting idea')}</small>}
-          <strong>{title}</strong>{text&&text!==title&&<span>{text}</span>}
+          {cardContent}
         </button>
         <label className="mw-tree-check"><input type="checkbox" aria-label={t('纳入大纲','Include in outline')+' · '+title}
           checked={selected.has(item.recordId)} onChange={()=>toggle(item)}/></label>
@@ -130,8 +136,7 @@ function Branch({item,known,root=false,ready,libraryScope,rpc,t,onRead}){
         <button type="button" title={t('从画布移除这张卡片','Remove this card from the canvas')} onClick={()=>remove(item)}>{t('移除','Remove')}</button>
       </div>
       <button type="button" className="sw-canvas-content" onClick={()=>onRead(item)}>
-        <strong>{item.title||t('未命名','Untitled')}</strong>
-        {text&&text!==item.title&&<span>{text}</span>}
+        {cardContent}
       </button>
       <footer><button type="button" onClick={()=>onRead(item)}>{t('查看原文','Read source')}</button>
         <button type="button" disabled={!ready} aria-expanded={expanded} onClick={()=>setExpanded(!expanded)}>{expanded?t('收起','Collapse'):t('继续展开','Expand')}</button>
@@ -240,7 +245,7 @@ export function IdeaCanvas({root,backLabel,libraryScope,search,rpc,t,MarkdownCon
         </div></header>
         <article><h2>{preview.title}</h2><MarkdownContent body={preview.markdown} record={preview}/></article>
       </Modal>}
-      {source&&<SourceReader backLabel={readerBack} onRemove={textTree?()=>{remove(source);setSource(null);}:undefined} sourceLibraryId={root.sourceLibraryId} item={source} rpc={rpc} t={t} MarkdownContent={MarkdownContent} onClose={()=>setSource(null)}/>}
+      {source&&<SourceReader passageFirst={textTree} backLabel={readerBack} onRemove={textTree?()=>{remove(source);setSource(null);}:undefined} sourceLibraryId={root.sourceLibraryId} item={source} rpc={rpc} t={t} MarkdownContent={MarkdownContent} onClose={()=>setSource(null)}/>}
     </>}
     </div>
   </Modal>;

@@ -52,7 +52,7 @@ html[data-theme] .app .reading { background:transparent; }
 .phone-wallpaper input[type=range] { width:100%; min-height:44px; padding:0; accent-color:var(--mint); }
 .phone-wallpaper input[hidden] { display:none; }
 
-.app > nav { grid-template-columns:repeat(5,minmax(0,1fr)); }
+.app > nav { display:grid;grid-template-columns:repeat(6,minmax(0,1fr)); }
 .phone-recommendations { --dsw-font-family:inherit; --sw-scene:none; }
 .phone-recommendations .sw-rec-grid { gap:8px; }
 .phone-recommendations .sw-rec-card { min-width:0; white-space:normal; }

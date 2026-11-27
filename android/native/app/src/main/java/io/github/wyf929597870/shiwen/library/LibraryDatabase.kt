@@ -103,14 +103,18 @@ data class ReferenceTitle(val id: String, val title: String, val deleted: Boolea
 @Entity(tableName = "exploration_objects", primaryKeys = ["scope","kind","key"])
 data class ExplorationObject(val scope: String, val kind: String, val key: String, val data: String)
 
-data class ExplorationRecordState(val id:String,val title:String,val kind:String,val deleted:Boolean,val revision:Long,val serverRevision:Long?,val syncState:String)
+data class ExplorationRecordState(val contentDay:String?,val createdAt:String,val id:String,val title:String,val kind:String,val deleted:Boolean,val revision:Long,val serverRevision:Long?,val syncState:String)
 
 @Entity(tableName="exploration_changes")
 data class ExplorationChange(@PrimaryKey(autoGenerate=true) val seq:Long=0, val record:String, val revision:Long)
 
+data class SemanticRecordStamp(val id: String, val revision: Long, val updatedAt: String)
+
 @Dao
 interface LibraryDao {
-    @Query("SELECT id,title,kind,deleted,revision,serverRevision,syncState FROM records WHERE id=:id")
+    @Query("SELECT sourcesJson FROM records WHERE id=:id AND deleted=0")
+    fun explorationResponseSpans(id:String):String?
+    @Query("SELECT contentDay,createdAt,id,title,kind,deleted,revision,serverRevision,syncState FROM records WHERE id=:id")
     fun explorationRecordState(id:String):ExplorationRecordState?
     @Query("SELECT * FROM exploration_objects WHERE scope=:scope AND kind=:kind AND `key`>=:begin AND `key`<:end ORDER BY rowid")
     fun explorationQuestionEntries(scope:String,kind:String,begin:String,end:String):List<ExplorationObject>
@@ -131,8 +135,14 @@ interface LibraryDao {
     fun records(query: String, kind: String?, includeDeleted: Boolean, limit: Int, offset: Int, excludeKind: String? = null, section: String? = null): List<LibraryRecord>
     @Query("SELECT * FROM records WHERE id>:after AND deleted=0 AND kind!='ai_annotation' ORDER BY id LIMIT 8")
     fun workspaceBatch(after: String): List<LibraryRecord>
+    @Query("SELECT id, revision, updatedAt FROM records WHERE deleted=0 AND kind!='ai_annotation' ORDER BY updatedAt DESC,id")
+    fun semanticRecordStamps(): List<SemanticRecordStamp>
     @Query("SELECT * FROM records WHERE id>:after AND deleted=0 AND (kind='reading_note' OR (origin='personal' AND kind IN ('idea','journal','freewrite'))) ORDER BY id LIMIT 8")
     fun recommendationBatch(after: String): List<LibraryRecord>
+    @Query("SELECT `key` FROM library_meta WHERE substr(`key`,1,length(:prefix))=:prefix ORDER BY `key`")
+    fun topicKeys(prefix: String): List<String>
+    @Query("SELECT COUNT(*) FROM library_meta l WHERE l.`key` LIKE 'topic-dirty:%' OR (l.`key` LIKE 'workspace-theme:%' AND NOT EXISTS(SELECT 1 FROM library_meta b WHERE b.`key` IN ('topic-base:' || substr(l.`key`,17), 'topic-dirty:' || substr(l.`key`,17))))")
+    fun pendingTopics(): Int
     @Query("SELECT value FROM library_meta WHERE `key` LIKE 'workspace-theme:%' ORDER BY `key`")
     fun workspaceThemes(): List<String>
     @Query("SELECT * FROM library_meta WHERE `key` LIKE 'phone-recommendation:card-%' AND `key`>:after ORDER BY `key` LIMIT 20")
