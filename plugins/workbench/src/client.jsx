@@ -29,6 +29,7 @@ import {HomeOverview} from './HomeOverview.jsx';
 import {MobileNav} from './MobileNav.jsx';
 import {ExternalPanel} from './ExternalPanel.jsx';
 import {ImportSettings} from './ImportSettings.jsx';
+import {DiscoverySettings} from './DiscoverySettings.jsx';
 import {AccessSettings} from './AccessSettings.jsx';
 import MarkdownIt from 'markdown-it';
 import baseCss from './style.css';
@@ -401,6 +402,11 @@ export function apply(ctx){
   return <><ImportSettings rpc={rpc} t={t}/><AccessSettings rpc={rpc} zh={String(language).startsWith('zh')}/></>;
  };
  ctx.slots.inject('settings.section',()=>ctx.slots.register({name:'settings.section',id:'shiwen-data',order:50,label:()=>String(ctx.locale.getSnapshot().active).startsWith('zh')?'拾文资料':'Shiwen data'},DataSettings));
+ const ExplorationSettingsPage=()=>{
+  const language=useSyncExternalStore(callback=>ctx.locale.subscribe(callback),()=>ctx.locale.getSnapshot().active);
+  return <section className="sw-view"><DiscoverySettings rpc={rpc} t={(zh,en)=>String(language).startsWith('zh')?zh:en}/></section>;
+ };
+ ctx.slots.inject('settings.section',()=>ctx.slots.register({name:'settings.section',id:'shiwen-exploration',order:51,label:()=>String(ctx.locale.getSnapshot().active).startsWith('zh')?'待探索':'Exploration'},ExplorationSettingsPage));
  const Connections=()=> <ExternalPanel locale={ctx.locale} rpc={rpc}/>;
  const ConnectionIcon=({size})=> <SidebarIcon section="external" size={size}/>;
  ctx.slots.inject('main',()=>ctx.slots.register({name:'main',key:'shiwen-external'},Connections));

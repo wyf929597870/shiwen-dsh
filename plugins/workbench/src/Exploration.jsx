@@ -142,9 +142,8 @@ export function ExplorationQuestion({initial,rpc,layout,onClose,readOnly=false,r
 }
 
 function DiscoveryControls({rpc,libraryId,onComplete}){
- const [config,setConfig]=useState(null),[job,setJob]=useState(null),[error,setError]=useState('');
- const refresh=()=>rpc('shiwen_exploration_settings',{expectedLibraryId:libraryId});
- useEffect(()=>{let live=true;refresh().then(c=>{if(live){setConfig(c);if(c.jobId)setJob({jobId:c.jobId});}}).catch(e=>{if(live)setError(e.message);});return()=>{live=false;};},[libraryId,rpc]);
+ const [job,setJob]=useState(null),[error,setError]=useState('');
+ useEffect(()=>{let live=true;rpc('shiwen_exploration_settings',{expectedLibraryId:libraryId}).then(c=>{if(live&&c.jobId)setJob({jobId:c.jobId});}).catch(e=>{if(live)setError(e.message);});return()=>{live=false;};},[libraryId,rpc]);
  useEffect(()=>{
   if(!job?.jobId||['ready','failed'].includes(job.status))return;
   let timer,live=true;
@@ -154,12 +153,10 @@ function DiscoveryControls({rpc,libraryId,onComplete}){
   void poll();return()=>{live=false;clearTimeout(timer);};
  },[job?.jobId,job?.status==='ready',job?.status==='failed']);
  async function start(mode){try{const j=await rpc('shiwen_exploration_import',{expectedLibraryId:libraryId,requestId:crypto.randomUUID(),mode});setJob(j);}catch(e){setError(e.message);}}
- async function setting(key){try{setConfig(await rpc('shiwen_exploration_settings',{expectedLibraryId:libraryId,requestId:crypto.randomUUID(),expectedRevision:config.revision,[key]:!config[key]}));}catch(e){setError(e.message);}}
- return <details><summary>整理与发现</summary><div className="sw-rec-actions"><button onClick={()=>start('history')}>整理历史批注</button><button onClick={()=>start('incremental')}>现在整理</button></div>
- {config&&<><label><input type="checkbox" checked={config.enabled} onChange={()=>setting('enabled')}/>每日发现</label>
- <label><input type="checkbox" checked={config.model} onChange={()=>setting('model')}/>允许模型分析个人原文</label></>}
+ return <>
+ <details><summary>手动整理</summary><div className="sw-rec-actions"><button onClick={()=>start('history')}>整理历史批注</button><button onClick={()=>start('incremental')}>现在整理</button></div></details>
  {job?.progress&&<p role="status">已扫 {job.progress.scanned} · 已完成 {job.progress.checked} · 新增 {job.progress.created} · 待核对 {job.progress.needs_review} · 待重试 {job.progress.retry}</p>}
- {error&&<p role="alert">{error}</p>}</details>;
+ {error&&<p role="alert">{error}</p>}</>;
 }
 
 function AddQuestion({rpc,libraryId,recordId,revision,selection,onAdded}){
@@ -207,12 +204,12 @@ export function ExplorationEntry({rpc,layout,recordId,revision,sourceLibraryId,c
  return <><button className="sw-pool-entry" onClick={()=>{setSelection(window.getSelection()?.toString()||'');setOpen(true);}}>{label}</button>{open&&<Drawer title="待探索" onClose={()=>setOpen(false)}>
   <h2 ref={refreshRef}>{recordId?'这篇记录的待探索':'待探索'}</h2><div className="sw-rec-actions pool-views">{Object.entries({raw:'原始池（待筛选）',accepted:'探索池（已收下）',skipped:'已略过',...(!recordId?{reviews:'来源待核对'}:{})}).map(([key,title])=>
    <button key={key} aria-pressed={view===key} onClick={()=>setView(key)}>{title}</button>)}</div>
-  <Tools {...(compact?{className:'phone-pool-tools'}:{})}>
-  {compact&&<summary>{type&&view!=='reviews'?(type==='explore'?'待探索':'待跟进')+' · ':''}{recordId?'筛选与提问':'筛选与整理'}</summary>}
+  {!recordId&&page?.libraryId&&<DiscoveryControls rpc={rpc} libraryId={page.libraryId} onComplete={()=>load()}/>}
+  {(recordId||view!=='reviews')&&<Tools {...(compact?{className:'phone-pool-tools'}:{})}>
+  {compact&&<summary>{type&&view!=='reviews'?(type==='explore'?'待探索':'待跟进')+' · ':''}{recordId?'筛选与提问':'筛选类型'}</summary>}
   {recordId&&revision&&page&&<AddQuestion rpc={rpc} libraryId={page.libraryId} recordId={recordId} revision={revision} selection={selection} onAdded={()=>{setView('raw');setTick(t=>t+1);}}/>}
   {view!=='reviews'&&<label>类型<select value={type} onChange={e=>setType(e.target.value)}><option value="">全部</option><option value="explore">待探索</option><option value="follow_up">待跟进</option></select></label>}
-  {!recordId&&page?.libraryId&&<DiscoveryControls rpc={rpc} libraryId={page.libraryId} onComplete={()=>load()}/>}
-  </Tools>
+  </Tools>}
   {error&&<p role="alert">{error}</p>}{page?.items.map(q=>q.reviewItemId?<article key={q.reviewItemId} className="sw-rec-quote"><button onClick={()=>setSelected({...q,libraryId:page.libraryId})}>{q.discovery.text}</button></article>:<article className="sw-rec-quote pool-question" key={q.questionId}><small>{q.possibleDuplicates?.length>0&&'可能重复 · '}{stateLabels[q.status]} · {q.sources[0]?.title||'来源已失效'}</small>
    <button onClick={()=>setSelected(q)}>{q.text}</button></article>)}
   {page&&!page.items.length&&<p>这里暂时没有问题。</p>}{page?.nextCursor!=null&&<MoreRows cursor={page.nextCursor} onClick={()=>load(page.nextCursor)}>加载更多</MoreRows>}

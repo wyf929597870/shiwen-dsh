@@ -1,7 +1,9 @@
 import {WallpaperSettings} from './WallpaperSettings.jsx';
 import {MessageDialog} from './MessageDialog.jsx';
-import React, {useCallback, useEffect, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {call} from '../bridge/library.mjs';
+import {DiscoverySettings} from '../../plugins/workbench/src/DiscoverySettings.jsx';
+import {explorationRpc} from './exploration-rpc.mjs';
 import {LibraryReplicaPanel} from './LibraryReplicaPanel.jsx';
 import {ShareInboxPanel} from './ShareInboxPanel.jsx';
 import {applyAppearance,setLanguage,useI18n} from './i18n.js';
@@ -17,7 +19,15 @@ const nodeStatus=(node,t)=>({online:t('在线','Online'),'login-required':t('在
 const serviceErrorText = (error,t) => ({NODE_MANAGEMENT_API_UNSUPPORTED:t('此服务器的拾文插件版本较旧，请更新服务器端拾文插件后重试。','This server has an older Shiwen plugin. Update it and try again.'),NODE_AUTH_REQUIRED:t('登录状态已失效，请返回设置重新登录。','Sign-in expired. Sign in again in Settings.')}[error?.code] || error?.message || t('请求失败，请检查服务连接后重试。','Request failed. Check the server connection and try again.'));
 
 
-export function SettingsPanel({ready, libraryId, libraries=[], libraryContext, config, onConfig, onPageStateChange, pageState, onNavigation, onNavigate, onLibraryChange, onLibrariesRefresh, initialPage='home'}) {
+function PhoneDiscoverySettings({workspace, t}) {
+  const {libraryId, role, online, connectionState, serverId, epoch} = workspace;
+  const rpc = useMemo(() => explorationRpc(call, {libraryId, role, online, connectionState, serverId, epoch}),
+    [libraryId, role, online, connectionState, serverId, epoch]);
+  return <section className="settings-card"><DiscoverySettings
+    key={JSON.stringify([libraryId,role,online,connectionState,serverId,epoch])} rpc={rpc} libraryId={libraryId} t={t}/></section>;
+}
+
+export function SettingsPanel({ready, libraryId, workspace, libraries=[], libraryContext, config, onConfig, onPageStateChange, pageState, onNavigation, onNavigate, onLibraryChange, onLibrariesRefresh, initialPage='home'}) {
   const {language,t}=useI18n();
   const [nodes, setNodes] = useState([]), [activeId, setActiveId] = useState(null);
   const [discovered,setDiscovered]=useState([]);
@@ -161,6 +171,7 @@ export function SettingsPanel({ready, libraryId, libraries=[], libraryContext, c
       {pageRow(t('服务节点','Server nodes'),`${nodes.length} ${t('个服务','services')}`,'services')}
     </div>
     <h2 className="settings-group-title">{t('应用','App')}</h2><div className="settings-menu">
+      {pageRow(t('待探索','Exploration'),t('每日发现、模型分析','Daily discovery and model analysis'),'exploration')}
       {pageRow(t('外观与语言','Appearance and language'),t('主题、显示语言','Theme and language'),'appearance')}
       {pendingShares!==0&&pageRow(t('处理旧分享','Review old shares'),pendingShares==null?t('查看待处理内容','Check pending items'):`${pendingShares} ${t('项待处理','pending')}`,'inbox')}
     </div>
@@ -169,6 +180,7 @@ export function SettingsPanel({ready, libraryId, libraries=[], libraryContext, c
 
   return <section className="settings-page" aria-label={t('设置','Settings')}>
     {!(settingsPage===initialPage&&initialPage!=='home')&&<button className="text settings-back" onClick={goSettingsHome}>‹ {t('返回设置','Back to Settings')}</button>}
+    {settingsPage==='exploration'&&ready&&workspace&&<PhoneDiscoverySettings workspace={workspace} t={t}/>}
     {settingsPage==='appearance'&&<section className="settings-card"><div className="settings-heading"><div><p className="secondary">{t('应用到拾文的所有页面。','Applies across Shiwen.')}</p></div></div><div className="appearance-grid"><label>{t('主题','Theme')}<select value={theme} disabled={!ready||busy||!appearanceReady} onChange={e=>saveAppearance({theme:e.target.value})}><option value="system">{t('系统','System')}</option><option value="light">{t('浅色','Light')}</option><option value="dark">{t('深色','Dark')}</option></select></label><label>{t('语言','Language')}<select value={language} disabled={!ready||busy||!appearanceReady} onChange={e=>saveAppearance({language:e.target.value})}><option value="zh-CN">{t('中文','Chinese')}</option><option value="en">{t('英文','English')}</option></select></label></div><WallpaperSettings/></section>}
     {settingsPage==='model'&&<><p className="secondary">{t('模型凭据由 Android 原生对话框管理，不会进入网页脚本。','Model credentials are managed in native Android dialogs and never enter the web page.')}</p>
     <section className="settings-card" aria-labelledby="model-settings-title">

@@ -2,17 +2,19 @@
 
 拾文 Android 是独立的本地资料库客户端。界面使用 React + Capacitor，资料、草稿、任务与同步状态保存在 Kotlin/Room 中，手机不需要运行 Node 服务。早期真机验收范围见 [验证记录](../docs/android/validation-2026-11-07.md)。
 
-下载 [Android 0.1.66 正式签名 APK](https://github.com/wyf929597870/shiwen-dsh/releases/download/android-v0.1.66/shiwen-android-0.1.66.apk)，无需自行构建。最低 Android 9，应用 ID 为 `io.github.wyf929597870.shiwen`。升级直接覆盖安装，避免卸载造成未同步资料丢失。
+下载 [Android 0.1.67 正式签名 APK](https://github.com/wyf929597870/shiwen-dsh/releases/download/android-v0.1.67/shiwen-android-0.1.67.apk)，无需自行构建。最低 Android 9，应用 ID 为 `io.github.wyf929597870.shiwen`。升级直接覆盖安装，避免卸载造成未同步资料丢失。
 
-需要与电脑同步时，请配套升级拾文服务，例如 Linux 0.1.66。电脑和手机需要网络互通，离线修改会保存在手机。
+需要与电脑同步时，请配套升级拾文服务，例如 Linux 0.1.67。电脑和手机需要网络互通，离线修改会保存在手机。
 
 ## 日常使用
 
 本节描述当前源码；已发布 APK 的具体功能以对应版本说明为准。
 
-底部导航提供对话、资料库、模型和设置。进入「资料库」后可以切换到记录、读书、收藏、创作、主题、回顾或全局搜索。手机可以离线查原文、展开相关文字、选择片段生成文章大纲。连接同库电脑后，还可按意思搜索。主题和摘录保存在手机上，两端都支持主题同步时会随资料库双向同步，离线时也可以查看和编辑。
+底部导航有首页、对话、资料库、搜索、模型和设置。「资料库」内可以切换记录、读书、收藏、创作、主题和回顾。通过「搜索」可离线查原文，也可用本机语义索引按意思查找已处理的资料。画布支持展开相关文字、选择片段生成文章大纲。
 
-- **手机 AI**：在设置中填写兼容 OpenAI Chat Completions 的 HTTPS 服务地址、模型和 Key。模型设置留在原生层，使用 Android Keystore 保护，不返回网页、不参加资料同步。保存配置不调用模型；明确发送才发起请求。
+从首页或记录列表打开「待探索」可筛选候选问题、收下问题、关联回应，或记录下一步的判断、尝试和结果。单篇资料里的入口只显示以该篇为出处的问题。「设置 → 待探索」管理当前资料库的「每日发现」和「允许模型分析个人原文」；「待探索 → 手动整理」可处理近期改动或历史批注。
+
+- **手机 AI**：在底部「模型」中配置兼容 OpenAI Chat Completions 的 HTTPS 服务地址、模型和 Key。模型设置留在原生层，使用 Android Keystore 保护，不返回网页、不参加资料同步。保存配置不调用模型；明确发送才发起请求。
 - **远端 DSH**：选择已登录节点后使用该服务上的会话、Agent、工作区、Skills 与工具，审批、问题和取消均对应真实服务待办。手机不会把远端命令或 MCP 凭据当本机权限执行。
 - **资料库**：多个资料库各有独立名称、身份和完整性状态。切换资料库不合并数据；跨库复制提供正文复制和包含库内图片的复制两种操作。
 - **服务管理**：设置集中放置命名服务节点、插件、自动化、Agent 与记忆、模型及外部接入。服务器模型 Key 通过原生安全窗口填写；密钥不会进入 JavaScript。
@@ -52,7 +54,7 @@ npm --prefix android run android:debug
 
 设置 `ANDROID_HOME` 或在未跟踪的 `android/native/local.properties` 中填写 `sdk.dir`。`sync` 将当前本地网页装入 APK，配置不使用远端 `server.url`。
 
-产物为 `debug/android/shiwen-android-0.1.66-debug.apk`。在已经使用调试包的手机上用 `adb install -r` 覆盖更新，保持原应用 ID 与签名，不要先卸载。正式签名、CI 和升级说明见 [构建与签名](../docs/android/build-and-signing.md)。
+产物为 `debug/android/shiwen-android-0.1.67-debug.apk`。在已经使用调试包的手机上用 `adb install -r` 覆盖更新，保持原应用 ID 与签名，不要先卸载。正式签名、CI 和升级说明见 [构建与签名](../docs/android/build-and-signing.md)。
 
 ## 验证
 
